@@ -181,7 +181,7 @@ local HELP_RIGHT = {
   { "The Four Hands", "Four Warlords rule the Arena and persist between runs. Each hides strengths and weaknesses that you reveal by fighting, interrogating strays, bribing rats or carrying a Spyglass." },
   { "", "A Warlord who beats you levels up, holds a grudge and trains between runs. A stray who beats you may be promoted into the Hands." },
   { "", "Beat a Warlord and choose: Slay (it may return), Recruit after a flawless 2-0 (it joins your deck, but may betray you), or Brand (a weakness, and a grudge)." },
-  { "Keys", "F11 fullscreen  |  F2 CRT filter  |  F3 sound  |  Esc menu" },
+  { "Keys", "F11 fullscreen  |  F2 CRT (subtle / flat / off)  |  F3 sound  |  Esc menu" },
 }
 
 function M.help()
@@ -212,9 +212,7 @@ function M.pause()
     local y = 290
     if widgets.button("p_resume", 620, y, 360, 60, "Resume", { color = C.red }) then G.closeOverlay() end
     if widgets.button("p_help", 620, y + 76, 360, 60, "How to play") then M.help() end
-    if widgets.button("p_crt", 620, y + 152, 360, 60, "CRT filter: " .. (G.settings.crt and "on" or "off")) then
-      G.settings.crt = not G.settings.crt; G.saveSettings()
-    end
+    if widgets.button("p_crt", 620, y + 152, 360, 60, "CRT: " .. G.crtLabel()) then G.cycleCrt() end
     local sfx = require("src.ui.sfx")
     if widgets.button("p_snd", 620, y + 228, 360, 60, "Sound: " .. (sfx.muted and "off" or "on")) then
       G.settings.muted = sfx.toggleMute(); G.saveSettings()

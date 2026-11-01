@@ -33,7 +33,7 @@ tools/build-love.sh
 | Key | Action |
 | --- | --- |
 | F11 / Alt+Enter | fullscreen |
-| F2 | CRT filter on/off |
+| F2 | CRT: subtle curve / flat / off |
 | F3 | sound on/off |
 | Esc | menu |
 | Space / P | pass (in a duel) |

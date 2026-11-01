@@ -22,9 +22,12 @@ local INFO = {
   warlord = { icon = "crown", title = "Warlord", color = C.red, desc = "One of the Four Hands. They will remember how this goes." },
 }
 
-function S:enter()
+function S:enter(p)
   self.t = 0
   local run = G.save.run
+  if p and p.dealt then
+    require("src.ui.fx").toast("You've been dealt a pride of " .. #run.deck .. " cats. Check your Deck.", "good")
+  end
   if run.phase == "over" then return G.go("summary") end
   if #run.options == 0 then run.options = game.genOptions(G.save) end
   self.anim = {}

@@ -35,13 +35,7 @@ function M.start(dir)
     G.go("title", {}, true)
   end)
   step(1.2, function() shot("01_title") end)
-  step(0.3, function() game.startRun(save); G.go("draft", {}, true) end)
-  step(1.4, function() M.mx, M.my = 800, 420; shot("02_draft") end)
-  step(0.2, function()
-    while save.run.phase == "draft" do game.draftPick(save, save.run.draftOptions[1]) end
-    M.mx, M.my = nil, nil
-    G.go("map", {}, true)
-  end)
+  step(0.3, function() game.startRun(save); G.go("map", { dealt = true }, true) end)
   step(1.2, function() shot("03_map") end)
   step(0.2, function()
     local node

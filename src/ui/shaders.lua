@@ -53,10 +53,12 @@ M.src.crt = [[
 extern vec2 res;
 extern float time;
 extern float strength;
+extern float curvature;
 extern float flash;
 vec2 curve(vec2 uv) {
+  // gentle barrel: curvature 1.0 is a mild tube, 0.0 is flat
   uv = uv * 2.0 - 1.0;
-  vec2 off = abs(uv.yx) / vec2(5.5, 4.5) * strength;
+  vec2 off = abs(uv.yx) * vec2(0.11, 0.14) * curvature;
   uv = uv + uv * off * off;
   return uv * 0.5 + 0.5;
 }
@@ -86,8 +88,8 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
   vec3 mask = vec3(m < 1.0 ? 1.0 : 0.94, (m >= 1.0 && m < 2.0) ? 1.0 : 0.94, m >= 2.0 ? 1.0 : 0.94);
   col *= mix(vec3(1.0), mask, strength);
   vec2 v = cuv * (1.0 - cuv.yx);
-  float vig = pow(clamp(v.x * v.y * 18.0, 0.0, 1.0), 0.22);
-  col *= mix(1.0, vig, strength);
+  float vig = pow(clamp(v.x * v.y * 30.0, 0.0, 1.0), 0.18);
+  col *= mix(1.0, vig, strength * 0.8);
   float n = fract(sin(dot(sc + vec2(time * 37.0, time * 11.0), vec2(12.9898, 78.233))) * 43758.5453);
   col += (n - 0.5) * 0.035 * strength;
   col *= 1.0 + 0.012 * sin(time * 50.0) * strength;

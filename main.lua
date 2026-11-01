@@ -1,5 +1,5 @@
 -- Draft - Four Hands. One Arena.
--- A roguelike deck-drafting cat card battler with a nemesis system. Built with LÖVE 11.
+-- A roguelike cat card battler with a nemesis system. Built with LÖVE 11.
 local fx = require("src.ui.fx")
 local sfx = require("src.ui.sfx")
 local shaders = require("src.ui.shaders")
@@ -11,7 +11,7 @@ local lg = love.graphics
 
 G = {
   save = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, crt = true, time = 0,
-  scenes = {}, trans = nil, settings = { crt = true, music = true },
+  scenes = {}, trans = nil, settings = { crt = true, crtCurve = "subtle", music = true },
 }
 
 local W, H = theme.W, theme.H
@@ -19,7 +19,7 @@ local canvas
 local SAVE_FILE = "save.lua"
 local SETTINGS_FILE = "settings.lua"
 
-local SCENES = { "title", "draft", "map", "encounter", "duel", "reward", "market", "event", "summary" }
+local SCENES = { "title", "map", "encounter", "duel", "reward", "market", "event", "summary" }
 
 function G.persist()
   if G.save then love.filesystem.write(SAVE_FILE, util.serialize(G.save)) end
@@ -35,6 +35,20 @@ local function loadSave()
   local s = util.deserialize(love.filesystem.read(SAVE_FILE))
   if s and s.version == 2 then return s end
   return nil
+end
+
+-- CRT modes: subtle curve -> flat screen -> off
+function G.cycleCrt()
+  local st = G.settings
+  if st.crt and st.crtCurve ~= "flat" then st.crtCurve = "flat"
+  elseif st.crt then st.crt = false
+  else st.crt = true; st.crtCurve = "subtle" end
+  G.saveSettings()
+end
+
+function G.crtLabel()
+  if not G.settings.crt then return "off" end
+  return G.settings.crtCurve == "flat" and "flat" or "subtle curve"
 end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
@@ -185,6 +199,7 @@ function love.draw()
     shaders.crt:send("res", { W, H })
     shaders.crt:send("time", G.time)
     shaders.crt:send("strength", 1)
+    shaders.crt:send("curvature", G.settings.crtCurve == "flat" and 0 or 1)
     shaders.crt:send("flash", fx.flash * 0.25)
     lg.setShader(shaders.crt)
   end
@@ -210,9 +225,8 @@ function love.keypressed(k)
     return
   end
   if k == "f2" then
-    G.settings.crt = not G.settings.crt
-    G.saveSettings()
-    fx.toast("CRT filter " .. (G.settings.crt and "on" or "off"))
+    G.cycleCrt()
+    fx.toast("CRT: " .. G.crtLabel())
     return
   end
   if k == "f3" then

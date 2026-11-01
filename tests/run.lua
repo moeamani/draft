@@ -90,7 +90,6 @@ test("full-run simulation", function()
     local save = game.newSave("Tester", 1000 + r)
     for _ = 1, 3 do
       local run = game.startRun(save)
-      while run.phase == "draft" do game.draftPick(save, run.draftOptions[1]) end
       local guard = 0
       while run.phase == "map" do
         guard = guard + 1
@@ -132,6 +131,21 @@ test("full-run simulation", function()
     end
   end
   print(("sim: %d duels, %.0f%% won, warlords %.0f%%, run victories %d/120"):format(t.duels, 100 * t.wins / t.duels, 100 * t.ww / t.wd, t.victories))
+end)
+
+test("random starter deck is balanced", function()
+  for seed = 1, 50 do
+    local save = game.newSave("Deck", seed)
+    local run = game.startRun(save)
+    local phys, mag, spec, leg = 0, 0, 0, 0
+    for _, c in ipairs(run.deck) do
+      local d = cards.getDef(c)
+      if d.kind == "special" then spec = spec + 1 elseif d.type == "physical" then phys = phys + 1 else mag = mag + 1 end
+      if d.rarity == "legendary" then leg = leg + 1 end
+    end
+    if phys < 4 or mag < 4 or spec > 3 or leg > 1 then error(("bad deck p%d m%d s%d l%d"):format(phys, mag, spec, leg)) end
+    eq(run.phase, "map")
+  end
 end)
 
 test("save roundtrip", function()

@@ -51,7 +51,7 @@ local function startNew()
   local function go()
     game.startRun(G.save)
     G.persist()
-    G.go("draft")
+    G.go("map", { dealt = true })
   end
   if G.save.run then
     overlays.confirm("Abandon this run?", "Your champion flees the Arena. The Four Hands will hear of it.", "Abandon", function()
@@ -85,7 +85,7 @@ function S:draw()
   lg.setColor(1, 1, 1)
   lg.draw(badge, 1490, 110, math.sin(t * 0.9) * 0.08, 0.36, 0.36, badge:getWidth() / 2, badge:getHeight() / 2)
 
-  gfx.textf("A roguelike deck-drafting card battle for medieval cats.\nDraft your pride. Climb the Arena. Make enemies that remember you.", theme.font("serif", 21), 120, 478, 760, "left", C.paper2)
+  gfx.textf("A roguelike card battle for medieval cats.\nGather your pride. Climb the Arena. Make enemies that remember you.", theme.font("serif", 21), 120, 478, 760, "left", C.paper2)
 
   if self.naming then
     gfx.panel(110, 540, 620, 300, { 0.03, 0.07, 0.05, 0.95 }, { border = C.gold, lw = 2 })
@@ -100,7 +100,7 @@ function S:draw()
     local s = G.save
     if s and s.run then
       if widgets.button("t_cont", 120, y, 380, 64, "Continue run", { color = C.red }) then
-        if s.run.phase == "draft" then G.go("draft") elseif s.run.phase == "over" then G.go("summary") else G.go("map") end
+        if s.run.phase == "over" then G.go("summary") else G.go("map") end
       end
       y = y + 80
     end
@@ -117,7 +117,7 @@ function S:draw()
         theme.font("mono", 15), 120, 866, C.muted, { shadow = 0 })
     end
   end
-  gfx.text("F11 fullscreen  |  F2 CRT  |  F3 sound", theme.font("mono", 13), 1570, 872, C.muted, { align = "right", shadow = 0 })
+  gfx.text("F11 fullscreen  |  F2 CRT mode  |  F3 sound", theme.font("mono", 13), 1570, 872, C.muted, { align = "right", shadow = 0 })
 
   for i, v in ipairs(self.views) do if i ~= self.hover then v:draw() end end
   if self.hover then self.views[self.hover]:draw() end
@@ -129,7 +129,7 @@ function S:confirmName()
   G.save = game.newSave(name, os.time())
   game.startRun(G.save)
   G.persist()
-  G.go("draft")
+  G.go("map", { dealt = true })
 end
 
 function S:textinput(t)

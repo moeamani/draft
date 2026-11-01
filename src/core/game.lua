@@ -1,4 +1,4 @@
--- Run and meta-progression: drafting, map, duel setup/resolution, fates, events, the Arena moving on.
+-- Run and meta-progression: starter deck, map, duel setup/resolution, fates, events, the Arena moving on.
 local cards = require("src.core.cards")
 local charms = require("src.core.charms")
 local duel = require("src.core.duel")
@@ -12,7 +12,7 @@ local M = {}
 M.START_LIVES = 9
 M.RINGS = 4
 M.STEPS = 3
-M.DRAFT_PICKS = 10
+M.DRAFT_PICKS = 10 -- random cats dealt into the starting pride
 M.RING_NAMES = { "The Gutter Ring", "The Yard", "The Rooftops", "The Moon Court" }
 
 local function nid(save)
@@ -77,31 +77,47 @@ function M.startRun(save)
   save.runs = save.runs + 1
   local run = {
     rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, ring = 1, step = 0,
-    lives = M.START_LIVES, fish = 20, deck = {}, charms = {}, phase = "draft",
-    draftPicks = 0, draftOptions = {}, options = {}, detour = false, bossIds = {}, uidc = 0,
+    lives = M.START_LIVES, fish = 20, deck = {}, charms = {}, phase = "map",
+    options = {}, detour = false, bossIds = {}, uidc = 0,
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
   for i = 4, 1, -1 do run.bossIds[#run.bossIds + 1] = save.hands[i].id end
-  for _, id in ipairs({ "squire", "squire", "hedgedruid", "sunbeam" }) do M.addCard(run, id) end
-  run.draftOptions = M.rollCards(run.rng, 3, 1)
+  M.dealStarterDeck(run)
   save.run = run
+  run.options = M.genOptions(save)
   return run
 end
 
-function M.draftPick(save, id)
-  local run = save.run
-  M.addCard(run, id)
-  local d = cards.CARDS[id]
-  local sibling = d and (d.ability == "litter" or d.ability == "muster")
-  if sibling then M.addCard(run, id) end
-  run.draftPicks = run.draftPicks + 1
-  if run.draftPicks >= M.DRAFT_PICKS then
-    run.phase = "map"
-    run.options = M.genOptions(save)
-    return true, sibling
+-- A random but playable starting pride: basics plus 10 random cats, at least 4 of each row,
+-- at most 2 specials and at most 1 Legendary. Litter/Call-the-Pride cats arrive in pairs.
+function M.dealStarterDeck(run)
+  for _, id in ipairs({ "squire", "squire", "hedgedruid", "sunbeam" }) do M.addCard(run, id) end
+  local picks, physical, magic, specials, legends = 0, 0, 0, 0, 0
+  local guard = 0
+  while picks < M.DRAFT_PICKS and guard < 500 do
+    guard = guard + 1
+    local id = M.rollCards(run.rng, 1, 1)[1]
+    local d = cards.CARDS[id]
+    local remaining = M.DRAFT_PICKS - picks
+    local ok = true
+    if d.kind == "special" and specials >= 2 then ok = false end
+    if d.rarity == "legendary" and legends >= 1 then ok = false end
+    if d.kind == "unit" then
+      local needP, needM = math.max(0, 4 - physical), math.max(0, 4 - magic)
+      if d.type == "physical" and needM >= remaining then ok = false end
+      if d.type == "magic" and needP >= remaining then ok = false end
+    elseif (4 - physical) + (4 - magic) >= remaining then
+      ok = false
+    end
+    if ok then
+      M.addCard(run, id)
+      if d.ability == "litter" or d.ability == "muster" then M.addCard(run, id) end
+      picks = picks + 1
+      if d.kind == "special" then specials = specials + 1 end
+      if d.rarity == "legendary" then legends = legends + 1 end
+      if d.type == "physical" then physical = physical + 1 elseif d.type == "magic" then magic = magic + 1 end
+    end
   end
-  run.draftOptions = M.rollCards(run.rng, 3, run.draftPicks % 4 == 3 and 2 or 1)
-  return false, sibling
 end
 
 function M.currentBoss(save)

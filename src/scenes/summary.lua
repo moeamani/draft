@@ -74,7 +74,7 @@ function S:drawNews()
   if widgets.button("n_again", 470, 800, 320, 70, "Start a new run", { color = C.red }) then
     game.startRun(save)
     G.persist()
-    G.go("draft")
+    G.go("map", { dealt = true })
   end
   if widgets.button("n_title", 810, 800, 320, 70, "Title") then G.go("title") end
 end
