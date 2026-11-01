@@ -1,49 +1,69 @@
-# Draft — Four Hands. One Arena.
+# Draft: Four Hands. One Arena.
 
-A roguelike deck-drafting card battler about medieval cats. The duels play like Gwent: best of three rounds, with a hand that carries over between rounds. Cats come in coats with type advantages and level up as you play them, Pokémon-style. A nemesis system in the spirit of Shadow of War makes the Arena's Warlords remember you, grow, scheme and come back.
+A roguelike deck-drafting card battler about medieval cats, built in **LÖVE 11 (Lua)**.
 
-![Figma thumbnail](docs/figma-thumbnail.png)
+- Duels play like Gwent: best of three rounds, two rows, and a hand that carries over.
+- Cats have Pokémon-style coats with type advantages, and they level up as you play them.
+- The Four Hands are a Shadow of War-style nemesis council that persists between runs.
+- Everything is shown through a CRT post-process with a dithered pixel-art look.
 
-## Play
+![Duel](docs/screenshots/06_duel_hover.png)
+
+## Run it
+
+1. Install LÖVE 11.4 or newer from https://love2d.org.
+2. From this folder, run:
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173
+love .
 ```
+
+On Windows you can also drag the folder onto `love.exe`, or run:
 
 ```bash
-npm run build    # static site in dist/ (open with any static server)
-npm test         # engine tests + 180-run AI simulation
+"C:\Program Files\LOVE\love.exe" .
 ```
 
-Progress is saved in `localStorage`, so the Four Hands and their memories persist between sessions.
+To package a `.love` file:
 
-## What's in the game
-
-- **Draft** a pride of 10 cats (pick 1 of 3), plus a few basics.
-- **Climb four rings.** Each ring has two stops (Skirmish, the Pit, Mews Market, a Shrine event, or the Sleeping Fox inn) and ends with a **Warlord**.
-- **Nine lives.** Losing a skirmish costs 2 lives, and losing to a Warlord costs 3.
-- **Duels.** Physical cats fight in the Vanguard, Magic cats in the Arcane row. Win 2 of 3 rounds. Abilities include Sword Hammer (smite), Aural Orb (inspire), Black Cat (hex), Litter, Pounce, Nine Lives, Stray, Groom, Purr, War Yowl and Call the Pride. Specials are Downpour, Moonfog, Sunbeam, Rallying Yowl, Cardboard Box and Hairball.
-- **Coats.** Ember > Gilt > Tide > Ember gives +2 in a row. Shadow cats are the Black Cats.
-- **Growth.** Cats you play in won duels gain XP and become Knights (★) and then Paladins (★★).
-- **Charms.** Thirteen passive relics, with up to 5 carried at once.
-- **The Four Hands (nemesis system):**
-  - Persistent Warlords with procedural names, coats, personalities, portraits and hidden **strengths and weaknesses**.
-  - Traits are revealed when they trigger in a duel, by interrogating strays you beat, by bribing a rat, or by carrying a Spyglass.
-  - A Warlord who beats you levels up, gains a **Grudge**, becomes "Bane of *you*", and trains a new strength between runs.
-  - A stray who beats you can get **promoted** into the Hands and kick out the lowest one.
-  - After beating a Warlord you choose its fate. **Slay** it, though it may return "the Returned" with scars. **Recruit** it after a flawless 2–0: it becomes a Legendary card, but may betray you next run. **Brand** it to give it a weakness and a grudge.
-  - Between runs **the Arena moves on**: power struggles, returns from the dead, betrayals, new blood. You can also *sow discord* or *poison a Warlord's supper* through shrine events.
-  - Dialogue reacts to your shared history: first meeting, they beat you, you scarred them, they came back from the dead, they betrayed you.
-
-## Project layout
-
-```
-src/core/        pure game logic (no DOM): duel engine, AI, cards, traits, nemesis, run/meta
-src/ui/          DOM screens, dithered procedural portraits, sfx
-src/assets/      SVGs exported from the Figma file (logo, tagline, mascot, shadow, badge)
-tests/           engine unit tests and a full-run AI simulation
-docs/DESIGN.md   design notes, Figma mapping, balance numbers, roadmap
+```bash
+tools/build-love.sh
 ```
 
-See [docs/DESIGN.md](docs/DESIGN.md) for details.
+| Key | Action |
+| --- | --- |
+| F11 / Alt+Enter | fullscreen |
+| F2 | CRT filter on/off |
+| F3 | sound on/off |
+| Esc | menu |
+| Space / P | pass (in a duel) |
+
+## Presentation
+
+All of these effects are original code:
+
+- **CRT post-process** (`src/ui/shaders.lua`): barrel curvature, RGB split, bloom, scanlines, aperture mask, vignette, grain and flicker.
+- **Animated swirl background**, pixel-quantized and Bayer-dithered. Its palette changes per scene: green on the map, gold in the market, red for Warlords.
+- **Cards** (`src/ui/cardview.lua`):
+  - Spring physics, idle sway, and lean on movement.
+  - Pseudo-3D tilt toward the mouse, done with a perspective-projected mesh.
+  - Holographic foil on Legendaries.
+  - A white flash when a card is played, and a noise dissolve when a card is destroyed.
+- **Juice** (`src/ui/fx.lua`): particles, screen shake, pop-in floating numbers, wavy titles, round banners, ticking score counters, and dithered scene wipes.
+- **Synthesized audio** (`src/ui/sfx.lua`): every sound effect plus an ambient loop is generated at startup, so there are no audio files.
+- **Procedural dithered cat portraits** (`src/ui/art.lua`): each one is drawn with primitives, then ordered-dithered to the Figma palette on the GPU.
+- **Figma assets**: the logo, mascot, shadow creature and badge are rasterized from your Figma file. The font is Ancizar Serif (OFL).
+
+## Layout
+
+```
+main.lua, conf.lua     boot, scene manager, CRT pass, input
+src/core/              pure game logic (no LÖVE): duel engine, AI, cards, traits, nemesis, run/meta
+src/ui/                shaders, card views, widgets, fx, art, sfx, HUD, overlays
+src/scenes/            title, draft, map, encounter, duel, reward, market, event, summary
+src/autotest.lua       scripted walkthrough that saves screenshots (love . --autotest shots)
+tests/run.lua          engine tests + 120-run AI simulation (luajit tests/run.lua)
+assets/                fonts and Figma-exported images
+```
+
+See [docs/DESIGN.md](docs/DESIGN.md) for the rules, the nemesis system and the tuning knobs.

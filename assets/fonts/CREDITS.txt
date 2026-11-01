@@ -1,0 +1,3 @@
+Ancizar Serif - Universidad Nacional de Colombia, SIL Open Font License 1.1
+IBM Plex Mono - IBM Corp., SIL Open Font License 1.1
+Both downloaded from Google Fonts (https://fonts.google.com). License: https://openfontlicense.org

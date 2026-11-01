@@ -1,4 +1,3 @@
-node_modules
-dist
+*.love
+dist/
 .DS_Store
-*.log
