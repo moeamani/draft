@@ -1,13 +1,12 @@
 # Draft: Four Hands. One Arena.
 
-A roguelike deck-drafting card battler about medieval cats, built in **LÖVE 11 (Lua)**.
+A pixel-art roguelike card battler about medieval cats, built in **LÖVE 11 (Lua)**.
 
-- Duels play like Gwent: best of three rounds, two rows, and a hand that carries over.
-- Cats have Pokémon-style coats with type advantages, and they level up as you play them.
-- The Four Hands are a Shadow of War-style nemesis council that persists between runs.
-- Everything is shown through a CRT post-process with a dithered pixel-art look.
+- Each run is an **Arena Festival**: 16 cats, four groups of four, a live points table, then an 8-cat knockout bracket.
+- Every match is a duel of **Formations**. Pick up to 5 cats, make the best Formation you can, and score **Paws x Cheer**. The higher score knocks Pride off the loser.
+- The **Four Hands** are persistent nemesis Warlords. They enter every festival, remember you, hide strengths and weaknesses, and scheme between festivals.
 
-![Duel](docs/screenshots/06_duel_hover.png)
+![Match](docs/screenshots/05_match_scoring.png)
 
 ## Run it
 
@@ -18,13 +17,7 @@ A roguelike deck-drafting card battler about medieval cats, built in **LÖVE 11 
 love .
 ```
 
-On Windows you can also drag the folder onto `love.exe`, or run:
-
-```bash
-"C:\Program Files\LOVE\love.exe" .
-```
-
-To package a `.love` file:
+On Windows you can also drag the folder onto `love.exe`. To package a `.love` file:
 
 ```bash
 tools/build-love.sh
@@ -32,38 +25,37 @@ tools/build-love.sh
 
 | Key | Action |
 | --- | --- |
+| Click cards | select up to 5 |
+| Enter / Space | play the selection |
+| R | redraw the selected cards |
+| S | sort the hand by coat or by Paws |
 | F11 / Alt+Enter | fullscreen |
 | F2 | CRT: subtle curve / flat / off |
 | F3 | sound on/off |
 | Esc | menu |
-| Space / P | pass (in a duel) |
 
-## Presentation
+## How a festival plays
 
-All of these effects are original code:
+1. You're dealt a random pride of 15 cats. There's no draft.
+2. **Group stage**: 3 matches. A win is worth 3 points, and Pride difference breaks ties. The top 2 of each group go through.
+3. **Knockouts**: quarter-final, semi-final, final. Lose once and you're out.
+4. Before every match there's a **VS screen**. Between matches you visit one stall: the **Mews Market**, the **Fortune Teller** (random events) or the **Training Yard**.
+5. After the festival, **the Arena moves on**:
+   - The festival champion climbs the hierarchy, or takes a seat among the Hands if they were a stray.
+   - Slain Hands may return, and recruited Hands may betray you.
+   - Hands who beat you train new strengths.
 
-- **CRT post-process** (`src/ui/shaders.lua`): barrel curvature, RGB split, bloom, scanlines, aperture mask, vignette, grain and flicker.
-- **Animated swirl background**, pixel-quantized and Bayer-dithered. Its palette changes per scene: green on the map, gold in the market, red for Warlords.
-- **Cards** (`src/ui/cardview.lua`):
-  - Spring physics, idle sway, and lean on movement.
-  - Pseudo-3D tilt toward the mouse, done with a perspective-projected mesh.
-  - Holographic foil on Legendaries.
-  - A white flash when a card is played, and a noise dissolve when a card is destroyed.
-- **Juice** (`src/ui/fx.lua`): particles, screen shake, pop-in floating numbers, wavy titles, round banners, ticking score counters, and dithered scene wipes.
-- **Synthesized audio** (`src/ui/sfx.lua`): every sound effect plus an ambient loop is generated at startup, so there are no audio files.
-- **Procedural dithered cat portraits** (`src/ui/art.lua`): each one is drawn with primitives, then ordered-dithered to the Figma palette on the GPU.
-- **Figma assets**: the logo, mascot, shadow creature and badge are rasterized from your Figma file. The font is Ancizar Serif (OFL).
-
-## Layout
+## Code layout
 
 ```
-main.lua, conf.lua     boot, scene manager, CRT pass, input
-src/core/              pure game logic (no LÖVE): duel engine, AI, cards, traits, nemesis, run/meta
-src/ui/                shaders, card views, widgets, fx, art, sfx, HUD, overlays
-src/scenes/            title, draft, map, encounter, duel, reward, market, event, summary
-src/autotest.lua       scripted walkthrough that saves screenshots (love . --autotest shots)
-tests/run.lua          engine tests + 120-run AI simulation (luajit tests/run.lua)
-assets/                fonts and Figma-exported images
+main.lua, conf.lua     boot, 640x360 virtual canvas (rendered 2x), scene manager, CRT pass, input
+src/core/              pure game logic, no LÖVE: formations, match engine + AI, festival, nemesis, cards, traits, charms, run/meta
+src/ui/                theme (palette, fonts), gfx (pixel panels/text), icons (ASCII pixel sprites), cardview, art (dithered cats),
+                       shaders (CRT, swirl, foil, dissolve, dither, bake), widgets, fx, sfx, hud, picker, overlays
+src/scenes/            title, hub (festival grounds), vs, match, result, market, event (fortune teller), summary
+src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots
+tests/run.lua          engine tests + 90-festival AI simulation: luajit tests/run.lua
+assets/                pixel fonts (OFL) and images from the Figma file
 ```
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the rules, the nemesis system and the tuning knobs.
+To tweak the look, start with `src/ui/theme.lua` (palette, type scale), `src/ui/gfx.lua` (panel/button style), and the CRT block in `src/ui/shaders.lua`. Design notes and balance knobs are in [docs/DESIGN.md](docs/DESIGN.md).

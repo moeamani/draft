@@ -1,25 +1,27 @@
 -- Card database. The first entries come from the Figma card sheet.
 local M = {}
 
+-- Abilities trigger when the cat is scored as part of a Formation.
+-- Specials ("Tricks") are played alongside cats; they never count toward the Formation.
 M.ABILITIES = {
   none = { name = "Steadfast", desc = "No ability. Just a very good cat." },
-  smite = { name = "Sword Hammer", desc = "Destroy the strongest enemy unit(s). Legendaries are immune." },
-  inspire = { name = "Aural Orb", desc = "Every other unit in this row gets +1." },
-  hex = { name = "Black Cat", desc = "The strongest enemy unit loses 1 power for every Black Cat you have on the board." },
-  litter = { name = "Litter", desc = "Power is multiplied by the number of cats with this name in the row." },
-  pounce = { name = "Pounce", desc = "Deal 3 damage to the strongest enemy unit in the opposite row." },
-  ninelives = { name = "Nine Lives", desc = "Stays on the board for the next round (once)." },
-  stray = { name = "Stray", desc = "Wanders onto the enemy's side (they get the points). You draw 2 cards." },
-  groom = { name = "Groom", desc = "Revive the strongest non-legendary unit from your discard pile." },
-  purr = { name = "Purr", desc = "Your weakest other unit permanently gains +2." },
-  yowl = { name = "War Yowl", desc = "Doubles the power of every other unit in this row." },
-  muster = { name = "Call the Pride", desc = "Every copy of this cat in your deck joins the fight too." },
-  downpour = { name = "Downpour", desc = "Weather: all Vanguard units (both sides) drop to 1 power. Cats hate rain." },
-  moonfog = { name = "Moonfog", desc = "Weather: all Arcane units (both sides) drop to 1 power." },
-  sunbeam = { name = "Sunbeam", desc = "Clear all weather. Everyone has a nice nap in the sun." },
-  warhorn = { name = "Rallying Yowl", desc = "Double the power of all units in your best row." },
-  box = { name = "Cardboard Box", desc = "Return your strongest non-legendary unit to your hand. If it fits, it sits." },
-  hairball = { name = "Hairball", desc = "Destroy the strongest non-legendary unit(s) on the WHOLE board. Both sides." },
+  smite = { name = "Sword Hammer", desc = "When scored: x2 Cheer." },
+  inspire = { name = "Aural Orb", desc = "When scored: +2 Cheer for each other Magic cat scored." },
+  hex = { name = "Black Cat", desc = "When scored: the rival loses 6 Paws." },
+  litter = { name = "Litter", desc = "When scored: +6 Paws for each other scored cat of the same coat." },
+  pounce = { name = "Pounce", desc = "When scored: +12 Paws if your coat beats the rival's coat." },
+  ninelives = { name = "Nine Lives", desc = "Returns to your hand after scoring (once per match)." },
+  stray = { name = "Stray", desc = "When played: draw 2 extra cards next exchange." },
+  groom = { name = "Groom", desc = "When scored: heal 6 Pride." },
+  purr = { name = "Purr", desc = "When scored: +3 Paws for every other scored cat." },
+  yowl = { name = "War Yowl", desc = "When scored: your strongest other scored cat scores again." },
+  muster = { name = "Call the Pride", desc = "When scored: +1 Cheer for each copy of this cat in your deck." },
+  downpour = { name = "Downpour", desc = "Trick: the rival's Cheer -2 this exchange. Cats hate rain." },
+  moonfog = { name = "Moonfog", desc = "Trick: the rival's strongest scored cat is lost in the fog." },
+  sunbeam = { name = "Sunbeam", desc = "Trick: +3 Cheer." },
+  warhorn = { name = "Rallying Yowl", desc = "Trick: x1.5 Cheer." },
+  box = { name = "Cardboard Box", desc = "Trick: one of your cats counts as any coat. If it fits, it sits." },
+  hairball = { name = "Hairball", desc = "Trick: the rival's Cheer is halved this exchange." },
 }
 
 M.COATS = {
@@ -115,7 +117,16 @@ M.LEVEL_TITLES = { [1] = "", [2] = "Knight", [3] = "Paladin" }
 
 function M.isLegend(d) return d.rarity == "legendary" end
 
-function M.rowOf(type_) return type_ == "magic" and "arcane" or "vanguard" end
-M.ROWS = { "vanguard", "arcane" }
+-- Short name for tiny card faces.
+function M.shortName(d)
+  local n = d.name:gsub("^Sir ", ""):gsub("^The ", ""):gsub("^King ", "")
+  n = n:gsub(" of .*$", ""):gsub(" the .*$", ""):gsub(" le .*$", "")
+  return n
+end
+
+function M.paws(inst)
+  local d = M.getDef(inst)
+  return d.power + M.levelBonus(inst.level or 1)
+end
 
 return M

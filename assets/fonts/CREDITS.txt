@@ -1,3 +1,7 @@
-Ancizar Serif - Universidad Nacional de Colombia, SIL Open Font License 1.1
-IBM Plex Mono - IBM Corp., SIL Open Font License 1.1
-Both downloaded from Google Fonts (https://fonts.google.com). License: https://openfontlicense.org
+All fonts are from Google Fonts and licensed under the SIL Open Font License 1.1 (https://openfontlicense.org).
+
+Jacquard12-Regular.ttf  https://fonts.google.com/specimen/Jacquard+12   (titles)
+Tiny5-Regular.ttf       https://fonts.google.com/specimen/Tiny5         (UI text)
+Jersey10-Regular.ttf    https://fonts.google.com/specimen/Jersey+10     (numbers, buttons)
+
+The "Draft" logo artwork (assets/img) comes from the project's Figma file and uses Ancizar Serif.

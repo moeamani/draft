@@ -1,129 +1,143 @@
--- Drawing helpers: chunky panels, text effects, gradients.
+-- Pixel drawing helpers. Everything is drawn in virtual pixels on integer coordinates.
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
 local M = {}
+local C = theme.c
+local floor = math.floor
 
+-- Filled box with 1px notched corners.
+function M.box(x, y, w, h, col, a)
+  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
+  theme.set(col, a)
+  lg.rectangle("fill", x + 1, y, w - 2, h)
+  lg.rectangle("fill", x, y + 1, 1, h - 2)
+  lg.rectangle("fill", x + w - 1, y + 1, 1, h - 2)
+end
+
+-- The one panel style: drop shadow, black outline, fill, 1px top highlight.
 function M.panel(x, y, w, h, col, opts)
   opts = opts or {}
-  local r = opts.r or 14
-  local depth = opts.depth or 6
-  if depth > 0 then
-    lg.setColor(0, 0, 0, 0.35 * (opts.alpha or 1))
-    lg.rectangle("fill", x, y + depth, w, h, r, r)
-  end
-  theme.set(col, opts.alpha)
-  lg.rectangle("fill", x, y, w, h, r, r)
+  local a = opts.alpha or 1
+  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
+  if opts.shadow ~= false then M.box(x + 1, y + 2, w, h, C.black, 0.55 * a) end
+  M.box(x, y, w, h, opts.outline or C.black, a)
+  M.box(x + 1, y + 1, w - 2, h - 2, col, a)
   if opts.border then
-    theme.set(opts.border, opts.alpha)
-    lg.setLineWidth(opts.lw or 3)
-    lg.rectangle("line", x, y, w, h, r, r)
-    lg.setLineWidth(1)
-  end
-  if opts.sheen ~= false then
-    lg.setColor(1, 1, 1, 0.05 * (opts.alpha or 1))
-    lg.rectangle("fill", x + 4, y + 3, w - 8, math.min(h * 0.35, 30), r - 2, r - 2)
+    theme.set(opts.border, a)
+    lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
+    lg.rectangle("fill", x + 2, y + h - 2, w - 4, 1)
+    lg.rectangle("fill", x + 1, y + 2, 1, h - 4)
+    lg.rectangle("fill", x + w - 2, y + 2, 1, h - 4)
+  elseif opts.highlight ~= false then
+    local hl = theme.mix(col, C.paper, 0.18)
+    theme.set(hl, a)
+    lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
   end
 end
 
--- Text with a hard drop shadow.
 function M.text(str, font, x, y, col, opts)
   opts = opts or {}
   lg.setFont(font)
   local w = font:getWidth(str)
   local ox = 0
-  if opts.align == "center" then ox = -w / 2 elseif opts.align == "right" then ox = -w end
-  local sd = opts.shadow == nil and math.max(2, math.floor(font:getHeight() / 14)) or opts.shadow
-  if sd > 0 then
-    lg.setColor(0, 0, 0, 0.55 * (opts.alpha or 1))
-    lg.print(str, math.floor(x + ox + sd * 0.6), math.floor(y + sd))
+  if opts.align == "center" then ox = -floor(w / 2) elseif opts.align == "right" then ox = -w end
+  x, y = floor(x + ox), floor(y)
+  if opts.shadow ~= false then
+    theme.set(opts.shadowCol or C.black, (opts.alpha or 1) * 0.85)
+    lg.print(str, x + (opts.sx or 0), y + (opts.sy or 1))
   end
   theme.set(col, opts.alpha)
-  lg.print(str, math.floor(x + ox), math.floor(y))
+  lg.print(str, x, y)
+  return w
+end
+
+-- Text with a full 1px outline (for numbers over art).
+function M.outlined(str, font, x, y, col, opts)
+  opts = opts or {}
+  lg.setFont(font)
+  local w = font:getWidth(str)
+  if opts.align == "center" then x = x - floor(w / 2) elseif opts.align == "right" then x = x - w end
+  x, y = floor(x), floor(y)
+  theme.set(opts.outline or C.black, opts.alpha)
+  for dx = -1, 1 do for dy = -1, 1 do if dx ~= 0 or dy ~= 0 then lg.print(str, x + dx, y + dy) end end end
+  lg.print(str, x, y + 2)
+  theme.set(col, opts.alpha)
+  lg.print(str, x, y)
   return w
 end
 
 function M.textf(str, font, x, y, w, align, col, opts)
   opts = opts or {}
   lg.setFont(font)
+  x, y = floor(x), floor(y)
   if opts.shadow ~= false then
-    lg.setColor(0, 0, 0, 0.5 * (opts.alpha or 1))
-    lg.printf(str, math.floor(x + 1), math.floor(y + 2), w, align)
+    theme.set(C.black, (opts.alpha or 1) * 0.85)
+    lg.printf(str, x, y + 1, w, align)
   end
   theme.set(col, opts.alpha)
-  lg.printf(str, math.floor(x), math.floor(y), w, align)
+  lg.printf(str, x, y, w, align)
   local _, lines = font:getWrap(str, w)
-  return #lines * font:getHeight() * font:getLineHeight()
+  return #lines * font:getHeight()
 end
 
--- Per-letter bobbing text, for titles.
+function M.wrapHeight(str, font, w)
+  local _, lines = font:getWrap(str, w)
+  return #lines * font:getHeight()
+end
+
+-- Title text with per-letter bobbing.
 function M.wavy(str, font, cx, y, col, t, amp, opts)
   opts = opts or {}
   lg.setFont(font)
-  local total = font:getWidth(str)
-  local x = cx - total / 2
-  amp = amp or 4
+  local x = floor(cx - font:getWidth(str) / 2)
+  amp = amp or 2
   for i = 1, #str do
     local ch = str:sub(i, i)
-    local dy = math.sin(t * 2.2 + i * 0.45) * amp
-    local rot = math.sin(t * 1.7 + i * 0.6) * 0.03
-    lg.setColor(0, 0, 0, 0.5)
-    lg.print(ch, x + 3, y + dy + 5, rot)
+    local dy = floor(math.sin(t * 2.4 + i * 0.5) * amp + 0.5)
+    theme.set(C.black, opts.alpha)
+    lg.print(ch, x + 1, y + dy + 2)
     theme.set(col, opts.alpha)
-    lg.print(ch, x, y + dy, rot)
+    lg.print(ch, x, y + dy)
     x = x + font:getWidth(ch)
   end
 end
 
-function M.vgradient(x, y, w, h, c1, c2)
-  local mesh = lg.newMesh({
-    { x, y, 0, 0, c1[1], c1[2], c1[3], c1[4] or 1 },
-    { x + w, y, 1, 0, c1[1], c1[2], c1[3], c1[4] or 1 },
-    { x + w, y + h, 1, 1, c2[1], c2[2], c2[3], c2[4] or 1 },
-    { x, y + h, 0, 1, c2[1], c2[2], c2[3], c2[4] or 1 },
-  }, "fan", "static")
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(mesh)
-  mesh:release()
-end
-
-function M.radial(cx, cy, r, inner, outer, segs)
-  segs = segs or 32
-  local verts = { { cx, cy, 0.5, 0.5, inner[1], inner[2], inner[3], inner[4] or 1 } }
-  for i = 0, segs do
-    local a = i / segs * math.pi * 2
-    verts[#verts + 1] = { cx + math.cos(a) * r, cy + math.sin(a) * r, 0, 0, outer[1], outer[2], outer[3], outer[4] or 0 }
-  end
-  local mesh = lg.newMesh(verts, "fan", "static")
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(mesh)
-  mesh:release()
-end
-
--- A pill-shaped chip; returns its width.
-function M.chip(str, x, y, kind, font)
-  font = font or theme.font("mono", 13)
-  local w = font:getWidth(str) + 18
-  local h = font:getHeight() + 6
-  local c = theme.c
-  local bg, fg, br
-  if kind == "strength" then bg, fg, br = { 0.91, 0.28, 0.23, 0.18 }, { 1, 0.72, 0.68 }, c.red
-  elseif kind == "weakness" then bg, fg, br = { 0.25, 0.81, 0.56, 0.15 }, { 0.66, 1, 0.82 }, c.green
-  else bg, fg, br = { 0, 0, 0, 0.25 }, { 0.55, 0.6, 0.63 }, { 0.3, 0.35, 0.39 } end
-  theme.set(bg)
-  lg.rectangle("fill", x, y, w, h, h / 2, h / 2)
-  theme.set(br)
-  lg.setLineWidth(1.5)
-  lg.rectangle("line", x, y, w, h, h / 2, h / 2)
-  lg.setLineWidth(1)
-  theme.set(fg)
-  lg.setFont(font)
-  lg.print(str, x + 9, y + 3)
-  return w, h
-end
-
 function M.label(str, x, y, col, align)
-  M.text(str:upper(), theme.font("monoBold", 14), x, y, col or theme.c.pale, { align = align, shadow = 0 })
+  return M.text(str:upper(), theme.T.tiny(), x, y, col or C.pale, { align = align })
+end
+
+-- Horizontal bar (Pride, progress).
+function M.bar(x, y, w, h, frac, col, back)
+  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
+  M.box(x, y, w, h, C.black)
+  theme.set(back or C.deep)
+  lg.rectangle("fill", x + 1, y + 1, w - 2, h - 2)
+  local fw = floor((w - 2) * math.max(0, math.min(1, frac)) + 0.5)
+  if fw > 0 then
+    theme.set(col)
+    lg.rectangle("fill", x + 1, y + 1, fw, h - 2)
+    theme.set(theme.mix(col, C.paper, 0.35))
+    lg.rectangle("fill", x + 1, y + 1, fw, 1)
+  end
+end
+
+function M.chip(str, x, y, kind)
+  local font = theme.T.tiny()
+  local w = font:getWidth(str) + 6
+  local bg, fg
+  if kind == "strength" then bg, fg = C.redDark, C.paper
+  elseif kind == "weakness" then bg, fg = theme.hex("#1f6b45"), C.paper
+  else bg, fg = C.deep, C.muted end
+  M.box(x, y, w, 10, C.black)
+  M.box(x + 1, y + 1, w - 2, 8, bg)
+  M.text(str, font, x + 3, y + 1, fg, { shadow = false })
+  return w
+end
+
+function M.dim(a)
+  lg.setColor(0.01, 0.03, 0.02, a or 0.75)
+  lg.rectangle("fill", -10, -10, theme.W + 20, theme.H + 20)
 end
 
 return M

@@ -1,27 +1,36 @@
--- Scripted walkthrough used for headless verification: `love . --autotest shots`
+-- Scripted walkthrough for headless verification: `love . --autotest shots`
 -- Drives the real scenes and saves screenshots into the LÖVE save directory.
 local game = require("src.core.game")
+local match = require("src.core.match")
 local overlays = require("src.ui.overlays")
 
-local M = { steps = {}, i = 0, wait = 0, dir = "shots", mx = nil, my = nil, pendingShot = nil, log = {} }
+local M = { steps = {}, i = 0, wait = 0, dir = "shots", mx = nil, my = nil, pendingShot = nil }
 
 local function step(delay, fn) M.steps[#M.steps + 1] = { delay = delay, fn = fn } end
+local function tick(fn, shotAfter) M.steps[#M.steps + 1] = { delay = 0, tick = fn, shotAfter = shotAfter } end
 local function shot(name) M.pendingShot = name end
 
-local function playDuelUntilDone(maxTime)
-  -- returns a step function that keeps pressing until the reward scene shows
+-- keep playing the best selection until the match scene is gone (or a time limit)
+local function autoMatch(limit)
   local elapsed = 0
   return function(dt)
     elapsed = elapsed + dt
     local sc = G.scene
-    if G.sceneName ~= "duel" then return true end
-    if sc.phase == "mulligan" then sc:startPlay() end
-    if sc.lock <= 0 and #sc.timeline == 0 and require("src.core.duel").canPlay(sc.s, 1) then
-      local hand = sc.s.sides[1].hand
-      local me, foe = require("src.core.duel").score(sc.s, 1), require("src.core.duel").score(sc.s, 2)
-      if #hand > 0 and (me <= foe or #hand > 5) then sc:playHand(hand[1]) else sc:pass() end
+    if G.sceneName ~= "match" then return true end
+    if not sc.animating and sc.lock <= 0 and not sc.finished then
+      local best = match.bestSelection(sc.s, 1, 0)
+      sc.selected = best.uids
+      sc:play()
     end
-    return elapsed > maxTime
+    return limit and elapsed > limit
+  end
+end
+
+local function waitScene(name, limit)
+  local elapsed = 0
+  return function(dt)
+    elapsed = elapsed + dt
+    return G.sceneName == name or elapsed > (limit or 30)
   end
 end
 
@@ -29,61 +38,79 @@ function M.start(dir)
   M.dir = dir or "shots"
   love.filesystem.createDirectory(M.dir)
   local save
-  step(0.5, function()
+  step(0.4, function()
     save = game.newSave("Sir Whiskers", 4242)
     G.save = save
     G.go("title", {}, true)
   end)
-  step(1.2, function() shot("01_title") end)
-  step(0.3, function() game.startRun(save); G.go("map", { dealt = true }, true) end)
-  step(1.2, function() shot("03_map") end)
+  step(1.2, function() M.mx, M.my = 482, 268; end)
+  step(0.6, function() shot("01_title"); M.mx = nil end)
+  step(0.2, function() game.startRun(save); G.go("hub", { fresh = true }, true) end)
+  step(1.2, function() shot("02_hub") end)
+  step(0.2, function() G.go("vs", {}, true) end)
+  step(1.6, function() shot("03_vs") end)
+  step(0.2, function() G.go("match", {}, true) end)
+  step(1.0, function()
+    local sc = G.scene
+    local best = match.bestSelection(sc.s, 1, 0)
+    sc.selected = best.uids
+    local v = sc.hand[best.uids[1]]
+    if v then M.mx, M.my = v.x, v.y end
+  end)
+  step(0.8, function() shot("04_match_select"); M.mx = nil end)
+  step(0.1, function() G.scene:play() end)
+  step(2.2, function() shot("05_match_scoring") end)
+  tick(autoMatch(), nil)
+  tick(waitScene("result"), nil)
+  step(1.0, function() shot("06_result") end)
   step(0.2, function()
-    local node
-    for _, o in ipairs(save.run.options) do if o.kind == "skirmish" then node = o end end
-    G.go("duel", { node = node }, true)
+    local sc = G.scene
+    if sc.step == "fate" then game.decideFate(save, sc.n, "brand"); sc.step = "cards"; sc:makeCards() end
   end)
-  step(1.6, function() shot("04_mulligan") end)
-  step(0.1, function() G.scene:startPlay() end)
-  M.steps[#M.steps + 1] = { delay = 0, tick = playDuelUntilDone(9), shotAfter = "05_duel" }
-  step(0.1, function()
-    local hand = G.scene.s and G.scene.s.sides[1].hand
-    if hand and hand[1] then
-      local v = G.scene.hand[hand[1].uid]
-      if v then M.mx, M.my = v.x + 20, v.y - 30 end
-    end
-  end)
-  step(0.8, function() shot("06_duel_hover"); M.mx, M.my = nil, nil end)
-  M.steps[#M.steps + 1] = { delay = 0, tick = playDuelUntilDone(120) }
-  step(2.0, function() shot("07_reward") end)
-  step(0.2, function()
-    save.run.options = { { kind = "warlord" } }
-    save.run.step = 2
-    save.run.detour = false
-    G.go("encounter", { node = { kind = "warlord" } }, true)
-  end)
-  step(2.0, function() shot("08_encounter") end)
-  step(0.2, function() G.go("duel", { node = { kind = "warlord" } }, true) end)
-  step(0.2, function() G.scene:startPlay() end)
-  M.steps[#M.steps + 1] = { delay = 0, tick = playDuelUntilDone(6), shotAfter = "09_warlord_duel" }
+  step(0.8, function() shot("07_result_cards") end)
+  step(0.2, function() G.scene:continue() end)
+  tick(waitScene("hub"), nil)
+  step(1.0, function() shot("08_hub_after") end)
   step(0.2, function() G.go("market", {}, true) end)
-  step(1.4, function() shot("10_market") end)
+  step(1.2, function() shot("09_market") end)
   step(0.2, function() G.go("event", { event = "discord" }, true) end)
-  step(1.0, function() shot("11_event") end)
-  step(0.2, function() G.go("map", {}, true); overlays.hands() end)
-  step(1.0, function() shot("12_hands") end)
+  step(0.8, function() shot("10_fortune") end)
+  step(0.2, function() G.go("hub", {}, true); overlays.standings(save.run.festival) end)
+  step(0.8, function() shot("11_standings") end)
+  step(0.2, function() G.closeOverlay(); overlays.hands() end)
+  step(0.8, function() shot("12_hands") end)
   step(0.2, function() G.closeOverlay(); overlays.deck(save.run.deck) end)
   step(1.2, function() shot("13_deck") end)
+  step(0.2, function() G.closeOverlay(); overlays.help() end)
+  step(0.6, function() G.overlay.tab = 2 end)
+  step(0.4, function() shot("14_rules") end)
+  -- fast-forward the rest of the group stage in the engine
   step(0.2, function()
     G.closeOverlay()
-    save.run.phase = "over"
-    save.run.outcome = "defeat"
-    save.run.killedBy = save.hands[4].id
+    local guard = 0
+    while save.run.festival.stage == "group" and save.run.phase ~= "over" and guard < 10 do
+      guard = guard + 1
+      local ctx = game.setupMatch(save)
+      local s = ctx.state
+      while not s.over do match.commit(s, match.bestSelection(s, 1, 0).uids) end
+      local out = game.resolveMatch(save, ctx)
+      if out.won and ctx.nemesis then game.decideFate(save, ctx.nemesis, "brand") end
+      game.afterMatch(save)
+    end
+    if save.run.phase == "over" then G.go("summary", {}, true) else G.go("hub", {}, true) end
+  end)
+  step(1.0, function() shot("15_hub_knockout") end)
+  step(0.2, function()
+    if save.run.phase ~= "over" then
+      game.finishRun(save, "defeat")
+      save.run.festival.placing = save.run.festival.placing or "qf"
+    end
     G.go("summary", {}, true)
   end)
-  step(1.2, function() shot("14_summary") end)
+  step(1.2, function() shot("16_summary") end)
   step(0.2, function() G.scene.news = game.arenaMovesOn(save) end)
-  step(1.0, function() shot("15_news") end)
-  step(0.5, function() print("AUTOTEST DONE"); love.event.quit() end)
+  step(1.0, function() shot("17_news") end)
+  step(0.4, function() print("AUTOTEST DONE"); love.event.quit() end)
 end
 
 function M.mouse(mx, my)
@@ -95,7 +122,9 @@ function M.update(dt)
   local s = M.steps[M.i + 1]
   if not s then return end
   if s.tick then
-    if s.tick(dt) then
+    local ok, done = pcall(s.tick, dt)
+    if not ok then print("AUTOTEST STEP ERROR: " .. tostring(done)); love.event.quit(1); return end
+    if done then
       M.i = M.i + 1
       if s.shotAfter then shot(s.shotAfter) end
     end

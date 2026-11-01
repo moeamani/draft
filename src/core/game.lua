@@ -1,7 +1,8 @@
--- Run and meta-progression: starter deck, map, duel setup/resolution, fates, events, the Arena moving on.
+-- Run and meta-progression: one run is one festival. Starter deck, matches, duel setup/resolution, fates, events, the Arena moving on.
 local cards = require("src.core.cards")
 local charms = require("src.core.charms")
-local duel = require("src.core.duel")
+local festival = require("src.core.festival")
+local match = require("src.core.match")
 local nemesis = require("src.core.nemesis")
 local rng = require("src.core.rng")
 local traits = require("src.core.traits")
@@ -9,11 +10,7 @@ local util = require("src.core.util")
 
 local M = {}
 
-M.START_LIVES = 9
-M.RINGS = 4
-M.STEPS = 3
 M.DRAFT_PICKS = 10 -- random cats dealt into the starting pride
-M.RING_NAMES = { "The Gutter Ring", "The Yard", "The Rooftops", "The Moon Court" }
 
 local function nid(save)
   save.nextId = save.nextId + 1
@@ -76,20 +73,18 @@ end
 function M.startRun(save)
   save.runs = save.runs + 1
   local run = {
-    rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, ring = 1, step = 0,
-    lives = M.START_LIVES, fish = 20, deck = {}, charms = {}, phase = "map",
-    options = {}, detour = false, bossIds = {}, uidc = 0,
+    rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, fish = 25, deck = {}, charms = {},
+    phase = "hub", stallUsed = false, nextPride = 0, uidc = 0,
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
-  for i = 4, 1, -1 do run.bossIds[#run.bossIds + 1] = save.hands[i].id end
   M.dealStarterDeck(run)
+  run.festival = festival.create(save, rng.int(run.rng, 1e9) + 1)
   save.run = run
-  run.options = M.genOptions(save)
   return run
 end
 
--- A random but playable starting pride: basics plus 10 random cats, at least 4 of each row,
--- at most 2 specials and at most 1 Legendary. Litter/Call-the-Pride cats arrive in pairs.
+-- A random but playable starting pride: basics plus 10 random cats, at least 4 Physical and
+-- 4 Magic, at most 2 tricks and 1 Legendary. Litter/Call-the-Pride cats arrive in pairs.
 function M.dealStarterDeck(run)
   for _, id in ipairs({ "squire", "squire", "hedgedruid", "sunbeam" }) do M.addCard(run, id) end
   local picks, physical, magic, specials, legends = 0, 0, 0, 0, 0
@@ -120,77 +115,70 @@ function M.dealStarterDeck(run)
   end
 end
 
-function M.currentBoss(save)
-  local run = save.run
-  return M.findNemesis(save, run.bossIds[run.ring])
-end
-
-function M.atWarlord(run) return run.step >= M.STEPS - 1 and not run.detour end
-
 M.EVENT_IDS = { "rat", "sword", "bard", "discord", "sabotage", "milk", "basket", "bookie" }
-
-function M.genOptions(save)
-  local run = save.run
-  if M.atWarlord(run) then return { { kind = "warlord" } } end
-  local tier = run.ring
-  local opts = { { kind = "skirmish", foe = nemesis.stray(run.rng, tier, false) } }
-  local extra = rng.shuffle(run.rng, { "pit", "market", "shrine", "tavern", "shrine", "market" })
-  for _, k in ipairs(extra) do
-    if #opts >= 3 then break end
-    if not util.find(opts, function(o) return o.kind == k end) and not (k == "tavern" and run.lives >= M.START_LIVES) then
-      if k == "pit" then opts[#opts + 1] = { kind = "pit", foe = nemesis.stray(run.rng, tier, true) }
-      elseif k == "shrine" then opts[#opts + 1] = { kind = "shrine", event = rng.pick(run.rng, M.EVENT_IDS) }
-      else opts[#opts + 1] = { kind = k } end
-    end
-  end
-  return rng.shuffle(run.rng, opts)
-end
 
 function M.finishRun(save, outcome)
   local run = save.run
   run.phase = "over"
   run.outcome = outcome
   if outcome == "victory" then save.victories = save.victories + 1 end
+  local f = run.festival
+  if f and f.stage ~= "done" then festival.simulateRest(f) end
+  save.bestPlacing = save.bestPlacing or "group"
 end
 
-function M.advance(save)
-  local run = save.run
-  if run.detour then run.detour = false else run.step = run.step + 1 end
-  if run.step >= M.STEPS then
-    run.ring = run.ring + 1
-    run.step = 0
-    save.bestRing = math.max(save.bestRing, run.ring - 1)
-    if run.ring > M.RINGS then
-      M.finishRun(save, "victory")
-      return
-    end
+-- The entrant the player faces next (table from festival.entrants), or nil.
+function M.nextOpponent(save)
+  local f = save.run.festival
+  local id = festival.playerOpponent(f)
+  return id and f.entrants[id] or nil
+end
+
+-- The Hand the player is most likely to meet next (for shrine events).
+function M.nextHand(save)
+  local opp = M.nextOpponent(save)
+  if opp and opp.kind == "hand" then return M.findNemesis(save, opp.id) end
+  local f = save.run.festival
+  local gi = festival.groupOf(f, festival.PLAYER)
+  for _, id in ipairs(f.groups[gi] or {}) do
+    local e = f.entrants[id]
+    if e.kind == "hand" and not f.withdrawn[id] then return M.findNemesis(save, id) end
   end
-  run.options = M.genOptions(save)
+  return save.hands[#save.hands]
 end
 
--- ---------------------------------------------------------------- duels
+-- ---------------------------------------------------------------- matches
 
-function M.setupDuel(save, node)
+function M.setupMatch(save)
   local run = save.run
+  local f = run.festival
+  local opp = M.nextOpponent(save)
+  local tier = festival.tier(f)
   local pm, em = traits.baseMods(), traits.baseMods()
-  local deck, foeName, n, personality, spyglass
-  if node.kind == "warlord" then
-    n = M.currentBoss(save)
+  charms.apply(pm, run.charms)
+  pm.pride = pm.pride + (run.nextPride or 0)
+  local deck, n, personality, spyglass
+  if opp.kind == "hand" then
+    n = M.findNemesis(save, opp.id)
     traits.apply(em, nemesis.traitIds(n), n.wins)
-    deck = nemesis.nemesisDeck(run.rng, n, run.ring)
-    foeName, personality = n.name, n.personality
-    if util.contains(run.charms, "spyglass") then spyglass = nemesis.revealRandom(run.rng, n) end
+    deck = nemesis.nemesisDeck(run.rng, n, math.ceil(tier / 2) + 1)
+    personality = n.personality
+    if pm.seeCoat then spyglass = nemesis.revealRandom(run.rng, n) end
   else
-    local foe = node.foe
+    local foe = opp.foe
+    foe.level = math.max(1, math.floor((tier + 1) / 2) + (foe.elite and 1 or 0))
     deck = nemesis.strayDeck(run.rng, foe)
-    foeName, personality = foe.name, foe.personality
-    if foe.elite then traits.apply(em, { rng.pick(run.rng, { "warlord", "archmage", "hoarder", "vengeful" }) }, 0) end
-    if run.ring <= 2 then em.extraDraw = em.extraDraw - 1 end
+    personality = foe.personality
+    if foe.elite then traits.apply(em, { rng.pick(run.rng, { "warlord", "archmage", "hoarder", "vengeful", "bodyguard" }) }, 0) end
+    if tier <= 2 then em.handSize = em.handSize - 1 end
   end
-  charms.apply(pm, em, run.charms)
-  local state = duel.create({ name = save.playerName, deck = run.deck, mods = pm }, { name = foeName, deck = deck, mods = em },
-    rng.int(run.rng, 1e9) + 1, rng.chance(run.rng, 0.5) and 1 or 2)
-  return { node = node, foeName = foeName, nemesis = n, state = state, personality = personality, spyglass = spyglass }
+  -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra Pride
+  if tier >= 4 then em.pride = em.pride + (tier - 3) * 12 end
+  if n then em.pride = em.pride + n.level * 5 end
+  local style = match.STYLES[personality] or match.STYLES.default
+  local state = match.create({ name = save.playerName, deck = run.deck, mods = pm }, { name = opp.name, deck = deck, mods = em },
+    rng.int(run.rng, 1e9) + 1, style)
+  return { opp = opp, nemesis = n, state = state, personality = personality, spyglass = spyglass, stage = f.stage, tier = tier }
 end
 
 function M.charmOffer(run, n)
@@ -207,35 +195,31 @@ function M.addCharm(run, c)
   return true
 end
 
-function M.resolveDuel(save, ctx)
+-- Record a finished match: festival table, rewards, nemesis memory. Returns an outcome for the UI.
+function M.resolveMatch(save, ctx)
   local run = save.run
+  local f = run.festival
   local s = ctx.state
-  local result = s.result or "loss"
-  local flawless = result == "win" and s.sides[1].gems == 2
-  local out = { result = result, flawless = flawless, fish = 0, livesLost = 0, levelUps = {}, intel = {}, line = "", cardChoices = {}, charmChoices = {}, runOver = false }
+  local won = s.result == "win"
+  local lostAny = false
+  for _, h in ipairs(s.history) do if h.winner == 2 then lostAny = true end end
+  local me, them = s.sides[1], s.sides[2]
+  local out = {
+    result = s.result, won = won, flawless = won and not lostAny, fish = 0, levelUps = {}, intel = {}, line = "",
+    cardChoices = {}, charmChoices = {}, notes = {}, stage = ctx.stage, opp = ctx.opp,
+  }
+  run.nextPride = 0
   local n = ctx.nemesis
-  if n then
-    for _, t in ipairs(s.revealed[2]) do
-      local kt = util.find(n.traits, function(x) return x.id == t end)
-      if kt and not kt.known then
-        kt.known = true
-        out.intel[#out.intel + 1] = "Learned: " .. n.name .. " has " .. traits.TRAITS[t].name .. "."
-      end
-    end
-    if ctx.spyglass then out.intel[#out.intel + 1] = "Spyglass: " .. n.name .. " has " .. traits.TRAITS[ctx.spyglass].name .. "." end
-    n.met = true
-  end
+  if n then n.met = true end
+  local pd = math.max(5, math.abs(math.max(0, me.pride) - math.max(0, them.pride)))
 
-  if result == "win" then
+  if won then
     run.stats.won = run.stats.won + 1
-    local k = ctx.node.kind
-    local base = k == "warlord" and (30 + 10 * run.ring) or k == "pit" and (22 + 5 * run.ring) or (12 + 4 * run.ring)
-    out.fish = base + (util.contains(run.charms, "fishbone") and 8 or 0) + (flawless and 5 or 0)
+    local base = ({ group = 14, qf = 24, sf = 30, final = 40 })[ctx.stage] or 14
+    out.fish = base + (n and 10 or 0) + (util.contains(run.charms, "fishbone") and 8 or 0) + (out.flawless and 5 or 0)
     run.fish = run.fish + out.fish
-    local played = {}
-    for _, uid in ipairs(s.sides[1].played) do played[uid] = true end
     for _, c in ipairs(run.deck) do
-      if played[c.uid] and cards.getDef(c).kind == "unit" and c.level < 3 then
+      if me.scored[c.uid] and cards.getDef(c).kind == "unit" and c.level < 3 then
         c.xp = c.xp + 1
         if c.xp >= cards.XP_FOR_LEVEL[c.level + 1] then
           c.level = c.level + 1
@@ -243,10 +227,10 @@ function M.resolveDuel(save, ctx)
         end
       end
     end
-    local quality = k == "warlord" and 3 or k == "pit" and 2 or (run.ring >= 3 and 1 or 0)
+    local quality = n and 3 or (ctx.stage ~= "group" and 2 or (ctx.tier >= 2 and 1 or 0))
     out.cardChoices = M.rollCards(run.rng, 3, quality)
-    if k == "warlord" then
-      out.charmChoices = M.charmOffer(run, 2)
+    if n or ctx.stage ~= "group" then out.charmChoices = M.charmOffer(run, 2) end
+    if n then
       out.line = nemesis.speak(run.rng, n, "beaten", save.playerName)
     else
       local targets = util.filter(save.hands, nemesis.hasSecrets)
@@ -255,41 +239,53 @@ function M.resolveDuel(save, ctx)
         local t = nemesis.revealRandom(run.rng, target)
         if t then out.intel[#out.intel + 1] = ('The beaten stray squeals: "%s has %s! %s"'):format(target.name, traits.TRAITS[t].name, traits.TRAITS[t].desc) end
       end
+      out.line = rng.pick(run.rng, { "Lucky paws, champion. Lucky paws.", "Fine. Go on, then. The crowd loves you.", "I'll be back next festival. With sharper claws.", "Tell the Hands I sent you. They won't care." })
     end
   else
     run.stats.lost = run.stats.lost + 1
-    out.livesLost = result == "draw" and 1 or (ctx.node.kind == "warlord" and 3 or 2)
-    run.lives = math.max(0, run.lives - out.livesLost)
+    run.fish = run.fish + 5
     if n then
       n.wins = n.wins + 1
       n.level = n.level + 1
       n.growth = (n.growth or 0) + 1
-      nemLog(save, n, "Defeated " .. save.playerName .. " in ring " .. run.ring .. ".")
+      nemLog(save, n, "Beat " .. save.playerName .. " at " .. f.name .. ".")
       if not n.epithet:find("^Bane") then n.epithet = "Bane of " .. save.playerName end
       out.line = nemesis.speak(run.rng, n, "gloat", save.playerName)
-      chronicle(save, n.name .. " defeated " .. save.playerName .. " and grows in power (level " .. n.level .. ").")
-      run.detour = true
-    elseif ctx.node.foe then
-      out.line = "The stray licks its paw, unimpressed."
-      if run.lives <= 0 or rng.chance(run.rng, 0.25) then
-        local promoted = nemesis.promoteStray(run.rng, ctx.node.foe, nid(save), save.runs, save.playerName)
-        local ousted = table.remove(save.hands)
-        ousted.status = "exiled"
-        nemLog(save, ousted, "Ousted from the Fourth Hand by " .. promoted.name .. ".")
-        table.insert(save.fallen, ousted)
-        table.insert(save.hands, promoted)
-        out.promoted = promoted.name .. " is promoted to the Fourth Hand for beating you! " .. ousted.name .. " is cast out."
-        chronicle(save, out.promoted)
-        local bi = util.indexOf(run.bossIds, ousted.id)
-        if bi then run.bossIds[bi] = promoted.id end
+      chronicle(save, n.name .. " beat " .. save.playerName .. " at " .. f.name .. ".")
+    else
+      out.line = rng.pick(run.rng, { "Back to your cushion, house cat.", "And they call YOU a champion?", "Remember my name. Everyone will soon.", "Hah! The fish are on me tonight." })
+      ctx.opp.beatPlayer = true
+    end
+    if ctx.stage ~= "group" then run.knockedOutBy = ctx.opp.id end
+  end
+  -- reveal-on-sight: traits shown during the match become known
+  if n then
+    for _, kt in ipairs(n.traits) do
+      local seen = util.contains(s.revealed, kt.id) or kt.id == "arrogant" or kt.id == "bodyguard" or kt.id == "hoarder" or kt.id == "sluggish"
+      if not kt.known and seen then
+        kt.known = true
+        out.intel[#out.intel + 1] = "Learned: " .. n.name .. " has " .. traits.TRAITS[kt.id].name .. "."
       end
     end
-    if run.lives <= 0 then
-      run.killedBy = n and n.id or nil
-      out.runOver = true
-    end
+    if ctx.spyglass then out.intel[#out.intel + 1] = "Spyglass: " .. n.name .. " has " .. traits.TRAITS[ctx.spyglass].name .. "." end
+  end
+
+  out.notes = festival.finishRound(f, { won = won, pd = pd })
+  run.stallUsed = false
+  if f.eliminated then
+    out.eliminated = true
+    festival.simulateRest(f)
+  elseif f.stage == "done" then
+    out.champion = f.champion == festival.PLAYER
   end
   return out
+end
+
+-- After the result screen: either the festival goes on, or the run ends.
+function M.afterMatch(save)
+  local f = save.run.festival
+  if f.eliminated then M.finishRun(save, "defeat")
+  elseif f.stage == "done" then M.finishRun(save, f.champion == festival.PLAYER and "victory" or "defeat") end
 end
 
 local function moveToFallen(save, n)
@@ -305,6 +301,7 @@ function M.decideFate(save, n, fate)
     run.uidc = run.uidc + 1
     table.insert(run.deck, { uid = "c" .. run.uidc, id = card.id, level = 1, xp = 0, def = card })
     n.status = "recruited"
+    if run.festival then festival.withdraw(run.festival, n.id) end
     nemLog(save, n, "Swore loyalty to " .. save.playerName .. " after a flawless defeat.")
     moveToFallen(save, n)
     run.stats.recruited = run.stats.recruited + 1
@@ -322,6 +319,7 @@ function M.decideFate(save, n, fate)
     return n.name .. " is branded" .. (w and (" and is now " .. traits.TRAITS[w].name .. ".") or ".") .. " They will remember."
   end
   run.stats.slain = run.stats.slain + 1
+  if run.festival then festival.withdraw(run.festival, n.id) end
   local survives = util.find(n.traits, function(t) return t.id == "ninelives" end) or rng.chance(run.rng, 0.25)
   if survives then
     n.status = "returning"
@@ -333,7 +331,7 @@ function M.decideFate(save, n, fate)
   end
   moveToFallen(save, n)
   chronicle(save, save.playerName .. " struck down " .. nemesis.fullName(n) .. ".")
-  return survives and (n.name .. " falls into the river... the body is never found.") or (n.name .. " is slain. A Hand is empty.")
+  return survives and (n.name .. " is dragged from the arena... the body is never found.") or (n.name .. " is slain. A Hand is empty, and they forfeit the festival.")
 end
 
 -- ---------------------------------------------------------------- market
@@ -343,7 +341,7 @@ M.REMOVE_PRICE, M.UPGRADE_PRICE = 20, 25
 
 function M.makeMarket(run)
   local stock = { cards = {}, charms = {}, removed = false, upgraded = false }
-  for _, id in ipairs(M.rollCards(run.rng, 4, run.ring >= 3 and 2 or 1)) do
+  for _, id in ipairs(M.rollCards(run.rng, 4, festival.tier(run.festival) >= 4 and 2 or 1)) do
     stock.cards[#stock.cards + 1] = { id = id, price = M.CARD_PRICE[cards.CARDS[id].rarity], sold = false }
   end
   for _, id in ipairs(M.charmOffer(run, 2)) do
@@ -387,10 +385,7 @@ local function powerStruggle(save, winner, loser, exile)
     table.insert(save.hands, fresh)
     nemLog(save, fresh, "Claimed the empty seat after " .. loser.name .. "'s exile.")
     text = winner.name .. " mauls " .. loser.name .. ", who is exiled. " .. fresh.name .. " claims the empty seat."
-    if save.run then
-      local bi = util.indexOf(save.run.bossIds, loser.id)
-      if bi then save.run.bossIds[bi] = fresh.id end
-    end
+    if save.run and save.run.festival then festival.withdraw(save.run.festival, loser.id) end
   else
     if li < wi then save.hands[li], save.hands[wi] = winner, loser end
     text = winner.name .. " defeats " .. loser.name .. " in a duel for rank."
@@ -408,7 +403,7 @@ local function randomSecretHand(save)
 end
 
 local function discordPair(save)
-  local boss = M.currentBoss(save)
+  local boss = M.nextHand(save)
   local pool = util.filter(save.hands, function(h) return h ~= boss end)
   return pool[#pool] or save.hands[4], pool[#pool - 1] or save.hands[3]
 end
@@ -438,15 +433,15 @@ M.EVENTS = {
     title = "The Sword in the Scratching Post",
     text = function() return "A gleaming blade is stuck deep in an old scratching post. Many paws have tried." end,
     choices = {
-      { label = "Pull the sword", hint = "35%: a Legendary. Otherwise lose 2 lives.", enabled = function(s) return s.run.lives > 2 end,
+      { label = "Pull the sword", hint = "35%: a Legendary. Otherwise -25 Pride next match.", enabled = function() return true end,
         apply = function(s)
           if rng.chance(s.run.rng, 0.35) then
             local c = rng.pick(s.run.rng, util.filter(cards.DRAFTABLE, function(x) return x.rarity == "legendary" end))
             M.addCard(s.run, c.id)
             return "It slides free! " .. c.name .. " answers your call."
           end
-          s.run.lives = s.run.lives - 2
-          return 'You pull until something in your back goes "pop". Lose 2 lives.'
+          s.run.nextPride = (s.run.nextPride or 0) - 25
+          return 'You pull until something in your back goes "pop". -25 Pride next match.'
         end },
       leave,
     },
@@ -491,14 +486,14 @@ M.EVENTS = {
   sabotage = {
     title = "The Warlord's Supper",
     text = function(s)
-      local b = M.currentBoss(s)
+      local b = M.nextHand(s)
       return "You find the kitchen where " .. (b and b.name or "the Warlord") .. "'s supper is prepared. There is a suspicious bottle of Essence of Cucumber."
     end,
     choices = {
-      { label = "Poison the supper", hint = "20 fish. Your Warlord gains a weakness, loses a level.", enabled = function(s) return s.run.fish >= 20 and M.currentBoss(s) ~= nil end,
+      { label = "Poison the supper", hint = "20 fish. Your next Hand gains a weakness, -1 level.", enabled = function(s) return s.run.fish >= 20 and M.nextHand(s) ~= nil end,
         apply = function(s)
           s.run.fish = s.run.fish - 20
-          local n = M.currentBoss(s)
+          local n = M.nextHand(s)
           local w = nemesis.addTrait(s.run.rng, n, "weakness")
           if w then util.find(n.traits, function(t) return t.id == w end).known = true end
           n.level = math.max(1, n.level - 1)
@@ -512,8 +507,8 @@ M.EVENTS = {
     title = "Fountain of Warm Milk",
     text = function() return "An ancient fountain bubbles with warm milk. It smells... mostly fine." end,
     choices = {
-      { label = "Drink deeply", hint = "Gain 2 lives", enabled = function(s) return s.run.lives < M.START_LIVES end,
-        apply = function(s) s.run.lives = math.min(M.START_LIVES, s.run.lives + 2); return "Warm. Creamy. You feel two lives younger." end },
+      { label = "Drink deeply", hint = "+25 Pride next match", enabled = function() return true end,
+        apply = function(s) s.run.nextPride = (s.run.nextPride or 0) + 25; return "Warm. Creamy. You start your next match with +25 Pride." end },
       { label = "Bottle it to sell", hint = "Gain 25 fish", enabled = function() return true end,
         apply = function(s) s.run.fish = s.run.fish + 25; return 'A merchant pays 25 fish for "artisanal fountain milk".' end },
     },
@@ -548,9 +543,44 @@ function M.arenaMovesOn(save)
   local run = save.run
   local news = {}
   local r = save.rng
-  if run and run.outcome == "defeat" and run.killedBy then
-    local k = M.findNemesis(save, run.killedBy)
-    if k then news[#news + 1] = k.name .. " boasts of ending your run. Their legend grows." end
+  local f = run and run.festival
+  if f then
+    local champ = f.champion and f.entrants[f.champion]
+    if champ and champ.kind == "player" then
+      news[#news + 1] = save.playerName .. " is crowned champion of " .. f.name .. "!"
+    elseif champ and champ.kind == "hand" then
+      local h = M.findNemesis(save, champ.id)
+      if h then
+        h.level = h.level + 1
+        nemLog(save, h, "Won " .. f.name .. ".")
+        local i = util.indexOf(save.hands, h)
+        if i and i > 1 then save.hands[i], save.hands[i - 1] = save.hands[i - 1], h end
+        news[#news + 1] = h.name .. " wins " .. f.name .. " and climbs the hierarchy."
+      end
+    elseif champ and champ.kind == "stray" then
+      local promoted = nemesis.promoteStray(r, champ.foe, nid(save), save.runs, save.playerName)
+      promoted.wins = champ.beatPlayer and 1 or 0
+      if not champ.beatPlayer then promoted.epithet = "the Festival Champion" end
+      promoted.history = { { run = save.runs, text = "A nameless stray who won " .. f.name .. "." } }
+      local ousted = table.remove(save.hands)
+      ousted.status = "exiled"
+      table.insert(save.fallen, ousted)
+      table.insert(save.hands, promoted)
+      news[#news + 1] = "Nobody saw it coming: " .. champ.name .. " wins the festival and takes " .. ousted.name .. "'s seat among the Hands!"
+    end
+    -- a stray that knocked you out (and didn't win) may also be noticed
+    local ko = run.knockedOutBy and f.entrants[run.knockedOutBy]
+    if ko and ko.kind == "stray" and ko.id ~= f.champion and rng.chance(r, 0.5) then
+      local promoted = nemesis.promoteStray(r, ko.foe, nid(save), save.runs, save.playerName)
+      local ousted = table.remove(save.hands)
+      ousted.status = "exiled"
+      table.insert(save.fallen, ousted)
+      table.insert(save.hands, promoted)
+      news[#news + 1] = ko.name .. " is promoted to the Fourth Hand for knocking you out. " .. ousted.name .. " is cast out."
+    elseif ko and ko.kind == "hand" then
+      local k = M.findNemesis(save, ko.id)
+      if k then news[#news + 1] = k.name .. " boasts of knocking you out. Their legend grows." end
+    end
   end
   for _, n in ipairs(util.map(save.fallen, function(x) return x end)) do
     if n.status == "returning" then

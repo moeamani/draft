@@ -14,12 +14,12 @@ G = {
   scenes = {}, trans = nil, settings = { crt = true, crtCurve = "subtle", music = true },
 }
 
-local W, H = theme.W, theme.H
+local W, H, SC = theme.W, theme.H, theme.SCALE
 local canvas
 local SAVE_FILE = "save.lua"
 local SETTINGS_FILE = "settings.lua"
 
-local SCENES = { "title", "map", "encounter", "duel", "reward", "market", "event", "summary" }
+local SCENES = { "title", "hub", "vs", "match", "result", "market", "event", "summary" }
 
 function G.persist()
   if G.save then love.filesystem.write(SAVE_FILE, util.serialize(G.save)) end
@@ -72,24 +72,28 @@ function G.openOverlay(ov) G.overlay = ov end
 function G.scissor(x, y, w, h) return x, y, w, h end
 function G.closeOverlay() G.overlay = nil end
 
+-- the canvas is W*SC x H*SC; this returns how it maps onto the window
 local function viewport()
   local ww, wh = lg.getDimensions()
-  local s = math.min(ww / W, wh / H)
-  return s, (ww - W * s) / 2, (wh - H * s) / 2
+  local s = math.min(ww / (W * SC), wh / (H * SC))
+  if s >= 1 then s = math.floor(s * 2) / 2 end -- prefer clean multiples when we can
+  return s, math.floor((ww - W * SC * s) / 2), math.floor((wh - H * SC * s) / 2)
 end
 
 function G.toVirtual(x, y)
   local s, ox, oy = viewport()
-  return (x - ox) / s, (y - oy) / s
+  return (x - ox) / (s * SC), (y - oy) / (s * SC)
 end
 
 function love.load(args)
-  lg.setDefaultFilter("linear", "linear")
+  lg.setDefaultFilter("nearest", "nearest")
+  lg.setLineStyle("rough")
   love.keyboard.setKeyRepeat(true)
   shaders.load()
   sfx.load()
   for _, n in ipairs({ "logo-lockup", "wordmark", "tagline", "mascot", "shadow", "badge" }) do
     G.images[n] = lg.newImage("assets/img/" .. n .. ".png", { mipmaps = true })
+    G.images[n]:setFilter("linear", "linear")
     G.images[n]:setMipmapFilter("linear")
   end
   cardview.images = G.images
@@ -97,7 +101,8 @@ function love.load(args)
     local id = love.image.newImageData("assets/img/mascot.png")
     love.window.setIcon(id)
   end)
-  canvas = lg.newCanvas(W, H)
+  canvas = lg.newCanvas(W * SC, H * SC)
+  canvas:setFilter("linear", "linear")
   if love.filesystem.getInfo(SETTINGS_FILE) then
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
@@ -151,16 +156,16 @@ local function drawBackground()
   local sh = shaders.background
   if sh then
     sh:send("time", G.time)
-    sh:send("res", { W, H })
+    sh:send("res", { W * SC, H * SC })
     sh:send("colA", { bg[1][1] * 0.85, bg[1][2] * 0.85, bg[1][3] * 0.85 })
     sh:send("colB", { bg[2][1], bg[2][2], bg[2][3] })
     sh:send("colC", { bg[3][1] * 0.55, bg[3][2] * 0.55, bg[3][3] * 0.55 })
     sh:send("spin", bg.spin or 1.2)
-    sh:send("pix", 4)
+    sh:send("pix", SC * 2)
     lg.setShader(sh)
   end
   lg.setColor(1, 1, 1)
-  lg.rectangle("fill", 0, 0, W, H)
+  lg.rectangle("fill", 0, 0, W * SC, H * SC)
   lg.setShader()
 end
 
@@ -169,6 +174,7 @@ function love.draw()
   lg.clear(theme.c.ink)
   drawBackground()
   lg.push()
+  lg.scale(SC, SC)
   local sx, sy = fx.shakeOffset()
   lg.translate(sx, sy)
   widgets.layer = "scene"
@@ -188,7 +194,7 @@ function love.draw()
     shaders.wipe:send("progress", math.min(1, p))
     shaders.wipe:send("tint", { 0.03, 0.06, 0.05 })
     lg.setShader(shaders.wipe)
-    lg.rectangle("fill", 0, 0, W, H)
+    lg.rectangle("fill", 0, 0, W * SC, H * SC)
     lg.setShader()
   end
   lg.setCanvas()
@@ -196,7 +202,8 @@ function love.draw()
   lg.clear(0, 0, 0)
   local s, ox, oy = viewport()
   if G.settings.crt and shaders.crt then
-    shaders.crt:send("res", { W, H })
+    shaders.crt:send("res", { W * SC, H * SC })
+    shaders.crt:send("rows", H)
     shaders.crt:send("time", G.time)
     shaders.crt:send("strength", 1)
     shaders.crt:send("curvature", G.settings.crtCurve == "flat" and 0 or 1)

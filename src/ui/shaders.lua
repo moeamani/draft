@@ -55,6 +55,7 @@ extern float time;
 extern float strength;
 extern float curvature;
 extern float flash;
+extern float rows;
 vec2 curve(vec2 uv) {
   // gentle barrel: curvature 1.0 is a mild tube, 0.0 is flat
   uv = uv * 2.0 - 1.0;
@@ -66,7 +67,7 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
   vec2 cuv = curve(uv);
   if (cuv.x < 0.0 || cuv.x > 1.0 || cuv.y < 0.0 || cuv.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);
   vec2 px = 1.0 / res;
-  float ca = 1.6 * px.x * strength;
+  float ca = 1.0 * px.x * strength;
   vec3 col;
   col.r = Texel(tex, cuv + vec2(ca, 0.0)).r;
   col.g = Texel(tex, cuv).g;
@@ -81,11 +82,12 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
   glow += Texel(tex, cuv + vec2(5.0, -5.0) * px).rgb;
   glow += Texel(tex, cuv - vec2(5.0, -5.0) * px).rgb;
   glow /= 8.0;
-  col += max(glow - 0.5, 0.0) * 0.7 * strength;
-  float scan = 0.5 + 0.5 * sin(sc.y * 2.0944);
-  col *= mix(1.0, 0.86 + 0.14 * scan, strength);
+  col += max(glow - 0.55, 0.0) * 0.5 * strength;
+  // one scanline per virtual pixel row
+  float scan = 0.5 + 0.5 * cos(cuv.y * rows * 6.28318);
+  col *= mix(1.0, 0.9 + 0.1 * scan, strength);
   float m = mod(sc.x, 3.0);
-  vec3 mask = vec3(m < 1.0 ? 1.0 : 0.94, (m >= 1.0 && m < 2.0) ? 1.0 : 0.94, m >= 2.0 ? 1.0 : 0.94);
+  vec3 mask = vec3(m < 1.0 ? 1.0 : 0.96, (m >= 1.0 && m < 2.0) ? 1.0 : 0.96, m >= 2.0 ? 1.0 : 0.96);
   col *= mix(vec3(1.0), mask, strength);
   vec2 v = cuv * (1.0 - cuv.yx);
   float vig = pow(clamp(v.x * v.y * 30.0, 0.0, 1.0), 0.18);
@@ -132,6 +134,26 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
   vec4 c = Texel(tex, uv);
   float t = (bayer4(sc) - 0.5) * spread;
   vec3 v = c.rgb + vec3(t);
+  vec3 best = pal[0];
+  float bd = 1e9;
+  for (int i = 0; i < 24; i++) {
+    if (float(i) >= count) break;
+    vec3 d = v - pal[i];
+    float dist = dot(d * d, vec3(0.3, 0.59, 0.11));
+    if (dist < bd) { bd = dist; best = pal[i]; }
+  }
+  return vec4(best, 1.0);
+}
+]]
+
+-- Bake smooth artwork to crisp pixels: snap to the palette, hard alpha edge.
+M.src.bake = [[
+extern vec3 pal[24];
+extern float count;
+vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
+  vec4 c = Texel(tex, uv);
+  if (c.a < 0.5) discard;
+  vec3 v = c.rgb / max(c.a, 0.001);
   vec3 best = pal[0];
   float bd = 1e9;
   for (int i = 0; i < 24; i++) {

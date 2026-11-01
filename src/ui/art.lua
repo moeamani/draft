@@ -191,7 +191,8 @@ end
 
 local cache = {}
 
-local function render(key, W, H, painter)
+-- Paint at a logical size (lw x lh), output at W x H real pixels, then dither 1:1.
+local function render(key, W, H, painter, lw, lh)
   if cache[key] then return cache[key] end
   local raw = lg.newCanvas(W, H)
   local out = lg.newCanvas(W, H)
@@ -201,7 +202,9 @@ local function render(key, W, H, painter)
   lg.origin()
   lg.setCanvas(raw)
   lg.clear(0, 0, 0, 1)
+  lg.scale(W / (lw or W), H / (lh or H))
   painter()
+  lg.origin()
   lg.setCanvas(out)
   lg.clear(0, 0, 0, 1)
   if shaders.dither then
@@ -219,35 +222,81 @@ local function render(key, W, H, painter)
   return out
 end
 
+M.CARD_W, M.CARD_H = 44, 32
+
 function M.card(def)
   local key = "card:" .. def.id .. ":" .. (def.scars or 0)
-  return render(key, 64, 52, function()
-    if def.kind == "special" then drawSpecial(64, 52, def.ability)
+  return render(key, M.CARD_W, M.CARD_H, function()
+    if def.kind == "special" then drawSpecial(64, 46, def.ability)
     else
-      drawCat(64, 52, {
+      drawCat(64, 46, {
         seed = def.artSeed or rngm.hash(def.id), coat = def.coat == "none" and "shadow" or def.coat,
         magic = def.type == "magic", ability = def.ability, legendary = def.rarity == "legendary", scars = def.scars,
       })
     end
-  end)
+  end, 64, 46)
 end
 
-function M.portrait(o)
-  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s"):format(o.seed, o.coat, tostring(o.magic), o.ability, tostring(o.legendary), o.scars or 0, tostring(o.crown), tostring(o.menace))
-  return render(key, 64, 64, function() drawCat(64, 64, o) end)
+-- size: output pixels (32, 48, 96...). The cat is always painted on a 64x64 logical grid.
+function M.portrait(o, size)
+  size = size or 48
+  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s:%d"):format(o.seed, o.coat, tostring(o.magic), o.ability, tostring(o.legendary), o.scars or 0, tostring(o.crown), tostring(o.menace), size)
+  return render(key, size, size, function() drawCat(64, 64, o) end, 64, 64)
 end
 
-function M.nemesis(n, rank)
+function M.nemesis(n, rank, size)
   return M.portrait({ seed = n.seed, coat = n.coat, magic = n.style == "hex" or n.style == "inspire" or n.style == "groom",
-    ability = n.style, legendary = false, crown = rank == 1, scars = n.scars, menace = true })
+    ability = n.style, legendary = false, crown = rank == 1, scars = n.scars, menace = true }, size)
 end
 
-function M.player(name)
-  return M.portrait({ seed = rngm.hash(name), coat = "gilt", magic = false, ability = "smite", legendary = false })
+function M.player(name, size)
+  return M.portrait({ seed = rngm.hash(name), coat = "gilt", magic = false, ability = "smite", legendary = false }, size)
 end
 
-function M.stray(foe)
-  return M.portrait({ seed = foe.seed, coat = foe.coat, magic = false, ability = "none", legendary = false, menace = foe.elite })
+function M.stray(foe, size)
+  return M.portrait({ seed = foe.seed, coat = foe.coat, magic = false, ability = "none", legendary = false, menace = foe.elite }, size)
+end
+
+-- Portrait for any festival entrant.
+function M.entrant(save, e, size)
+  if e.kind == "player" then return M.player(save.playerName, size) end
+  if e.kind == "hand" then
+    local game = require("src.core.game")
+    local n = game.findNemesis(save, e.id)
+    if n then return M.nemesis(n, game.rankOf(save, n), size) end
+  end
+  return M.stray(e.foe or { seed = e.seed or 1, coat = e.coat or "shadow" }, size)
+end
+
+-- Turn a smooth image (Figma export) into crisp palette pixels at the given width.
+local baked = {}
+function M.bake(img, w)
+  local key = tostring(img) .. w
+  if baked[key] then return baked[key] end
+  local h = math.floor(img:getHeight() * w / img:getWidth() + 0.5)
+  local tmp = lg.newCanvas(w, h)
+  local out = lg.newCanvas(w, h)
+  out:setFilter("nearest", "nearest")
+  lg.push("all")
+  lg.origin()
+  lg.setCanvas(tmp)
+  lg.clear(0, 0, 0, 0)
+  lg.setColor(1, 1, 1)
+  lg.draw(img, 0, 0, 0, w / img:getWidth(), h / img:getHeight())
+  lg.setCanvas(out)
+  lg.clear(0, 0, 0, 0)
+  lg.setBlendMode("alpha", "premultiplied")
+  if shaders.bake then
+    lg.setShader(shaders.bake)
+    shaders.bake:send("pal", unpack(palette()))
+    shaders.bake:send("count", #PALETTE)
+  end
+  lg.draw(tmp)
+  lg.setShader()
+  lg.pop()
+  tmp:release()
+  baked[key] = out
+  return out
 end
 
 return M

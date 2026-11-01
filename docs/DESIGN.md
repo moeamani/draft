@@ -1,58 +1,127 @@
 # Draft: design notes
 
-## From the Figma file (`Draft.fig`)
+## Art direction
 
-| Figma | In game |
-| --- | --- |
-| Wordmark "Draft" with the arched cat, tagline "Four Hands. One Arena" | `assets/img/logo-lockup.png` (title and victory screens) |
-| Red/blue cat head | `assets/img/mascot.png` (title background, card backs, window icon) |
-| Black shadow creature with red eyes and flames | `assets/img/shadow.png` (Warlord encounter, defeat screen) |
-| "Draft / IN DEVELOPMENT" badge | `assets/img/badge.png` (title screen) |
-| Colours `#0e2119` `#e8483b` `#2378f7` `#d3a200` `#47e7fd` | `src/ui/theme.lua`, the background shader and the dither palette |
-| Font *Ancizar Serif* | bundled in `assets/fonts` (OFL) |
-| Genre: Roguelike · Art style: Dithered · Card types: Medieval Cats · Content: 284 cards | roguelike run structure, ordered-dither procedural portraits, Arthurian cat roster |
-| Card sheet columns: Name / Type / Ability / Power / Rarity | `CardDef` fields `name`, `type`, `ability`, `power`, `rarity` |
-| Artheline · Physical · Sword Hammer · 20 · Legendary | `artheline` (Sword Hammer = smite) |
-| Merline · Magic · Aural Orb · 15 | `merline` (Aural Orb = inspire), made Legendary |
-| Lanceline, Morgelius, Circaleus, Purrceval, Purrlinore, Mordraleus, Merlinus · Magic · Black Cat | Black Cat (hex) cats; powers and rarities filled in |
+- **Full pixel art.** Everything is drawn in a 640x360 virtual pixel space, rendered at 2x with nearest filtering, then post-processed.
+- **One palette**, taken from the Figma file: `#0e2119` ink, `#e8483b` red, `#2378f7` blue, `#d3a200` gold, `#47e7fd` cyan and `#f4f1e8` paper (`src/ui/theme.lua`).
+- **One type scale** with three OFL pixel fonts:
+  - Jacquard 12, a pixel blackletter, for titles and names.
+  - Tiny5 for UI text.
+  - Jersey 10 for numbers and buttons.
+- **One panel style** and **one button style** (`src/ui/gfx.lua`, `src/ui/widgets.lua`):
+  - Panels: 1px notched corners, a black outline, a 1px highlight and a drop shadow.
+  - Buttons: the same box with a pressable lip.
+- **Icons** are hand-placed ASCII pixel sprites (`src/ui/icons.lua`), baked per tint.
+- **Cat portraits** are procedural. They're drawn with primitives and ordered-dithered to the palette at their final pixel size (`src/ui/art.lua`).
+- **Figma vectors** (the logo, mascot, shadow creature and badge) are *baked* to crisp palette pixels at load (`art.bake`).
+- **CRT** (`src/ui/shaders.lua`): subtle barrel curve, one scanline per virtual pixel row, slight RGB split, bloom, vignette and grain. F2 cycles subtle / flat / off.
 
-The vectors were extracted directly from the `.fig` binary (kiwi schema + zstd), then rasterized to PNG, because LÖVE can't load SVG.
+## The match: Formations
 
-### Interpretation of "Four Hands. One Arena"
+Each exchange:
 
-The Arena's ruling council of four Warlords is called **the Four Hands**. You face one per ring, from the Fourth Hand up to the First. If you meant something else, such as 2v2 or four-player matches, the engine's `sides` array is the place to extend.
+1. You hold 8 cards. Select up to 5. **Redraw** twice per exchange, tossing up to 5 selected cards.
+2. Your rival commits face-down. You can see how many cards they're playing.
+3. Both reveal. Each side's best **Formation** among its selected cats scores: `(formation Paws + each scoring cat's Paws + bonuses) x (formation Cheer + bonuses)`.
+4. The higher score wins the exchange. The loser loses `16 + 32 x (1 - lower/higher)` Pride, clamped to 16–48. Matches start at 100 Pride.
 
-## Systems
+| Formation | Needs | Paws x Cheer |
+| --- | --- | --- |
+| Lone Paw | 1 cat | 5 x 1 |
+| Duet | 2 of a coat | 10 x 2 |
+| Vanguard | 3–5 Physical | 15 x 2 |
+| Conclave | 3–5 Magic | 15 x 2 |
+| Litter | 3 of a coat | 25 x 3 |
+| Charge | 3 cats rising one Paw at a time | 30 x 3 |
+| Coven | 3–5 Black Cats | 30 x 4 |
+| Round Table | one of each coat | 40 x 4 |
+| Pride | 4 of a coat | 45 x 4 |
+| Grand Charge | 5 rising | 60 x 5 |
+| Full Pride | 5 of a coat | 60 x 6 |
 
-### Duel (`src/core/duel.lua`)
+**Coats**: Ember beats Gilt, Gilt beats Tide, and Tide beats Ember. If your Formation's coat beats theirs, you get +2 Cheer.
 
-- Hand of 8 (charms and traits adjust this). +1 card each new round. Up to 2 redraws before the duel.
-- Power is calculated in this order: base + level bonus + permanent mods → weather (sets to 1) → Litter multiplier → Inspire (+1 per inspirer) → War Yowl/horn ×2 → row and coat bonuses → coat advantage (+2) → nemesis dread (+2). Legendaries skip weather, multipliers, damage and smite.
-- Round ties cost both sides a gem. 0 gems on both sides is a draw, which the player loses 1 life for.
-- Every state change also emits UI events (`float`, `banner`, `trait`, `destroy`, `roundend`…). The duel scene turns these into a timeline of animations. The AI simulates moves on a deep copy of the state with events off.
+**Abilities** trigger when a cat scores:
+- Sword Hammer: x2 Cheer.
+- Aural Orb: +2 Cheer for each other Magic cat.
+- Black Cat: the rival loses 6 Paws.
+- Litter: +6 Paws for each other cat of the same coat.
+- Pounce: +12 Paws on coat advantage.
+- Groom: heals.
+- Purr: Paws for each scored cat.
+- War Yowl: your strongest other cat scores again.
+- Call the Pride: Cheer for each copy of this cat in your deck.
+- Nine Lives: the cat returns to your hand.
+- Stray: you draw extra next exchange.
 
-### AI (`src/core/ai.lua`)
+**Tricks** are played alongside your cats and bend the scoring:
+- Sunbeam: +3 Cheer.
+- Rallying Yowl: x1.5 Cheer.
+- Downpour: the rival loses Cheer.
+- Moonfog: the rival's best cat doesn't score.
+- Hairball: the rival's Cheer is halved.
+- Cardboard Box: one of your cats counts as any coat.
 
-The AI tries every card in hand on a cloned state and scores the gain, adding value for cards drawn or returned. It passes when comfortably ahead, concedes non-decisive rounds when far behind, and plays the cheapest winning card when the opponent has passed. It holds Legendaries and specials back in early rounds. Nemesis personality sets the pass and concede thresholds, and the *Arrogant* trait makes it pass early.
+**Charms** (up to 5) are festival favours that change the rules, for example the Tally Stick, Round Seal, Lucky Tail and Witch's Candle.
 
-### Nemesis (`src/core/nemesis.lua`, `src/core/game.lua`)
+The UI animates the engine's step-by-step scoring breakdown (`match.evaluate` and `cross` record every step), so the numbers you watch count up are exactly what the engine computed.
 
-- 19 traits (10 strengths, 9 weaknesses) with conflict rules. All start hidden.
-- Each nemesis keeps a history log, scars, wins/losses, status (`active / slain / returning / recruited / exiled`), personality and a signature Legendary card generated from its level and style.
-- `arenaMovesOn()` runs between runs. It returns the slain who survived, resolves betrayals by recruited Hands, converts wins over you into new strengths, fills empty seats, and runs a random power struggle.
+## The festival
+
+- 16 entrants. The Four Hands seed groups A–D. You're in group D with the Fourth Hand, and you meet them in round 3.
+- Round-robin groups: 3 points per win, with Pride difference as the tie-breaker. The top 2 go to the knockout: A1-B2, C1-D2, B1-A2, D1-C2.
+- Matches between other entrants are simulated by rating. Upsets show up in the hub ticker.
+- Rival strength rises with the stage: stray card levels, extra Pride in knockouts, and Hands get Pride per level.
+
+## The Four Hands (nemesis system)
+
+- **Persistent.** Each Hand keeps a name, epithet, coat, personality (which drives the AI style), level, scars, a win/loss record against you, and history.
+- **Traits** (10 strengths and 9 weaknesses) start hidden. You can learn them in several ways:
+  - They reveal themselves when they fire mid-match.
+  - Strays you beat squeal one.
+  - The Fortune Teller's rat informant sells two.
+  - The Spyglass charm reveals one.
+  - Some are visible on sight (Arrogant, Bodyguard, Hoarder).
+- **When a Hand beats you**, they gain a level and a Grudge, and train a new strength between festivals.
+- **When you beat a Hand**, you choose their fate:
+  - **Slay**: they forfeit the festival, and may return "the Returned".
+  - **Recruit**: only after a flawless match. They join your deck as a Legendary, and may betray you next festival.
+  - **Brand**: they get a weakness and a grudge.
+- **Between festivals**:
+  - The champion climbs the hierarchy. A stray champion takes the lowest seat.
+  - A stray that knocks you out may be promoted.
+  - The Hands hold power struggles.
+  - Dialogue reacts to your shared history.
 
 ## Balance snapshot
 
-`luajit tests/run.lua` plays 120 full runs with the AI on both sides. The bot always takes the first draft card and never shops:
+`luajit tests/run.lua` plays 90 festivals with the AI choosing for you. It takes the first reward and never shops:
 
-- about 56% duel win rate, about 30% against Warlords, a few run victories.
+- about 63% of matches won, about 50% against Hands, and about 5.7 exchanges per match.
+- About 17% of festivals won: roughly 1/3 out in the groups, 1/5 quarter-finalists, 1/5 semi-finalists, and the rest finalists.
 
-A human who drafts for synergy, uses markets and reads Warlord traits should clear runs far more often. Tuning knobs: `enemyDeck` levels in `nemesis.lua`, the early-ring stray hand penalty in `game.setupDuel`, `RARITY_WEIGHTS`, and the life costs in `resolveDuel`.
+Tuning knobs:
+- Damage: `match.damageFor`.
+- Pride: `match.PRIDE`.
+- Stage scaling: `game.setupMatch`.
+- Formation values: `formations.LIST`.
+- Reward quality: `game.RARITY_WEIGHTS`.
+- Stray ratings: `festival.create`.
 
-## Roadmap ideas
+## From the Figma file
 
-- Grow the roster towards the 284 cards in the Figma brief. Each card is one line in `CARD_LIST`.
-- Hand-drawn dithered art to replace the procedural portraits. Set `artSeed` or swap `cardArt()` for real images.
-- Manual targeting for Cardboard Box and the horn.
-- Drag-to-play, discard-pile viewer, and a seeded-run option.
-- Leader abilities per champion. More shrine events. Nemesis-to-nemesis rivalries shown in the Four Hands screen.
+| Figma | In game |
+| --- | --- |
+| "Draft" wordmark and tagline | title and victory screens (baked to pixels) |
+| Red/blue cat mascot | title background, window icon |
+| Shadow creature with flames | defeat summary |
+| "In development" badge | title screen |
+| Card sheet (Artheline, Merline, the Black Cats) | the first entries in `src/core/cards.lua` |
+
+## Ideas for later
+
+- Formation levels earned from festival trophies.
+- More tricks and charms.
+- Duo formations that need specific named cats.
+- Hand-drawn card art to replace the procedural cats. Swap `art.card`.
+- Music beyond the generated ambient loop.
