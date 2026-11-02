@@ -54,9 +54,6 @@ M.T = {
   deco = function() return M.font("jacquard12", 12) end, -- small decorative captions
 }
 
--- TEMP aliases while scenes move to the new scale
-M.T.tiny, M.T.num, M.T.numL, M.T.numXL, M.T.head, M.T.headS, M.T.headL = M.T.label, M.T.small, M.T.big, M.T.huge, M.T.title, M.T.deco, M.T.title
-
 function M.set(col, a)
   love.graphics.setColor(col[1], col[2], col[3], (a or 1) * (col[4] or 1))
 end

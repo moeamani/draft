@@ -59,30 +59,40 @@ function M.start(dir)
   step(0.8, function() shot("04_match_place"); M.mx = nil end)
   step(0.1, function() G.scene:charge() end)
   step(3.2, function() shot("05_match_duel") end)
+  -- bout 2: you lead
+  tick(function() return G.sceneName ~= "match" or (not G.scene.busy) end, nil)
+  step(0.3, function()
+    local sc = G.scene
+    if G.sceneName ~= "match" then return end
+    sc.slots = match.suggest(sc.s, 1, 0)
+    local v = sc.slots[2] and sc.views[sc.slots[2]]
+    if v then M.mx, M.my = v.x, v.y end
+  end)
+  step(0.6, function() shot("06_match_lead"); M.mx = nil end)
   tick(autoMatch(), nil)
   tick(waitScene("result"), nil)
-  step(1.0, function() shot("06_result") end)
+  step(1.0, function() shot("07_result") end)
   step(0.2, function()
     local sc = G.scene
     if sc.step == "fate" then game.decideFate(save, sc.n, "brand"); sc.step = "cards"; sc:makeCards() end
   end)
-  step(0.8, function() shot("07_result_cards") end)
+  step(0.8, function() shot("08_result_cards") end)
   step(0.2, function() G.scene:continue() end)
   tick(waitScene("hub"), nil)
-  step(1.0, function() shot("08_hub_after") end)
+  step(1.0, function() shot("09_hub_after") end)
   step(0.2, function() G.go("market", {}, true) end)
-  step(1.2, function() shot("09_market") end)
+  step(1.2, function() shot("10_market") end)
   step(0.2, function() G.go("event", { event = "discord" }, true) end)
-  step(0.8, function() shot("10_fortune") end)
+  step(0.8, function() shot("11_fortune") end)
   step(0.2, function() G.go("hub", {}, true); overlays.standings(save.run.festival) end)
-  step(0.8, function() shot("11_standings") end)
+  step(0.8, function() shot("12_standings") end)
   step(0.2, function() G.closeOverlay(); overlays.hands() end)
-  step(0.8, function() shot("12_hands") end)
+  step(0.8, function() shot("13_hands") end)
   step(0.2, function() G.closeOverlay(); overlays.deck(save.run.deck) end)
-  step(1.2, function() shot("13_deck") end)
+  step(1.2, function() shot("14_deck") end)
   step(0.2, function() G.closeOverlay(); overlays.help() end)
   step(0.6, function() G.overlay.tab = 2 end)
-  step(0.4, function() shot("14_rules") end)
+  step(0.4, function() shot("15_rules") end)
   -- fast-forward the rest of the group stage in the engine
   step(0.2, function()
     G.closeOverlay()
@@ -98,7 +108,7 @@ function M.start(dir)
     end
     if save.run.phase == "over" then G.go("summary", {}, true) else G.go("hub", {}, true) end
   end)
-  step(1.0, function() shot("15_hub_knockout") end)
+  step(1.0, function() shot("16_hub_knockout") end)
   step(0.2, function()
     if save.run.phase ~= "over" then
       game.finishRun(save, "defeat")
@@ -106,9 +116,9 @@ function M.start(dir)
     end
     G.go("summary", {}, true)
   end)
-  step(1.2, function() shot("16_summary") end)
+  step(1.2, function() shot("17_summary") end)
   step(0.2, function() G.scene.news = game.arenaMovesOn(save) end)
-  step(1.0, function() shot("17_news") end)
+  step(1.0, function() shot("18_news") end)
   step(0.4, function() print("AUTOTEST DONE"); love.event.quit() end)
 end
 

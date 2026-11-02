@@ -27,7 +27,7 @@ local C = theme.c
 local T = theme.T
 
 local HORIZON = 100
-local RIVAL_Y, MY_Y, HAND_Y = 152, 236, 336
+local RIVAL_Y, MY_Y, HAND_Y = 152, 236, 338
 local RIVAL_X = { 258, 320, 382 }
 local MY_X = { 246, 320, 394 }
 local RIVAL_SCALE = 0.86
@@ -438,7 +438,7 @@ function S:update(dt)
     v.hovered = hov
     v.selected = false
     v.paws, v.previewInfo = nil, nil
-    v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 26 or 0), hov and 1.08 or 1, off * 0.05)
+    v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 22 or 0), hov and 1.05 or 1, off * 0.05)
   end
   for i = 1, 3 do
     local uid = self.slots[i]
@@ -648,6 +648,18 @@ function S:draw()
     cushion(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, theme.hex("#4a1712"), nil, false)
     local dropTarget = self.drag and self.drag.moved and self:cushionAt(widgets.mx, widgets.my) == i
     cushion(MY_X[i], MY_Y, 1, theme.hex("#5a1f19"), (not self.slots[i] and not self.board[i]) and tostring(i) or nil, dropTarget)
+  end
+  -- what the rival's empty cushions mean right now
+  if not self.busyResolve and not self.finished then
+    for i = 1, 3 do
+      if not self.rviews[i] then
+        if s.lead == 1 then
+          gfx.text("?", T.big(), RIVAL_X[i], RIVAL_Y - 12, theme.hex("#7a3a30"), { align = "center", shadow = false })
+        elseif not self.busy and not s.sides[2].placed[i] then
+          gfx.text("Empty", T.body(), RIVAL_X[i], RIVAL_Y - 9, theme.hex("#c08070"), { align = "center", shadow = false })
+        end
+      end
+    end
   end
   self:drawGoblets(2)
   self:drawGoblets(1)

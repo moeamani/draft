@@ -95,6 +95,32 @@ function M.button(id, x, y, w, h, label, opts)
   return clicked
 end
 
+-- A clickable choice card: a title and a wrapped, readable description.
+-- opts: color, icon, iconColor, disabled, border, titleColor
+function M.choice(id, x, y, w, h, title, desc, opts)
+  opts = opts or {}
+  local s = st(id)
+  local clicked, over = M.click(id, x, y, w, h)
+  if opts.disabled then clicked = false end
+  s.over = over and not opts.disabled
+  if s.over and not s.wasOver then sfx.play("hover", 1, 0.4) end
+  s.wasOver = s.over
+  if clicked then sfx.play("click") end
+  local lift = math.floor(s.hover * 2 + 0.5)
+  local col = opts.color or C.ink2
+  if opts.disabled then col = C.deep elseif s.hover > 0.5 then col = theme.mix(col, C.paper, 0.1) end
+  local by = y - lift
+  gfx.panel(x, by, w, h, col, { border = opts.disabled and C.ink3 or (opts.border or C.goldDark) })
+  local tx = x + 9
+  if opts.icon then
+    require("src.ui.icons").draw(opts.icon, x + 16, by + 17, opts.disabled and C.muted or (opts.iconColor or C.gold), 2)
+    tx = x + 32
+  end
+  gfx.text(title, theme.T.big(), tx, by + 5, opts.disabled and C.muted or (opts.titleColor or C.paper))
+  if desc then gfx.textf(desc, theme.T.body(), x + 9, by + 30, w - 18, "left", opts.disabled and C.muted or C.paper2) end
+  return clicked
+end
+
 function M.tooltip(fn) M.tooltipFn = fn end
 function M.drawTooltip() if M.tooltipFn then M.tooltipFn() end end
 

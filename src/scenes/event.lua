@@ -11,7 +11,8 @@ local widgets = require("src.ui.widgets")
 
 local S = {}
 local C = theme.c
-S.bg = { C.ink, C.ink2, C.cyan, spin = 1.3 }
+local T = theme.T
+S.bg = { horizon = 0, light = { 0.5, 0.35 }, radius = 0.75, power = 1.0 }
 
 function S:enter(p)
   self.t = 0
@@ -32,23 +33,23 @@ end
 function S:draw()
   local run = G.save.run
   hud.draw(run)
-  icons.draw("star", 320, 62, C.cyan, 4, math.sin(self.t * 1.5) * 0.15)
-  gfx.text("THE FORTUNE TELLER SEES...", theme.T.tiny(), 320, 86, C.muted, { align = "center" })
-  gfx.wavy(self.ev.title, theme.T.head(), 320, 96, C.paper, self.t, 1)
-  gfx.panel(120, 130, 400, 70, C.deep, { border = C.ink3 })
-  gfx.textf(self.result or self.text, theme.T.body(), 132, 140, 376, "center", self.result and C.paper or C.paper2)
+  icons.draw("star", 320, 62, C.cyan, 3, math.sin(self.t * 1.5) * 0.15)
+  gfx.text("The Fortune Teller sees...", T.body(), 320, 78, C.paper2, { align = "center" })
+  gfx.wavy(self.ev.title, T.title(), 320, 96, C.gold, self.t, 1)
+  gfx.paper(110, 132, 420, 84, { pin = C.cyan })
+  gfx.textf(self.result or self.text, T.body(), 122, 140, 396, "center", C.parchInk, { shadow = false })
   if self.result then
-    if widgets.button("ev_go", 240, 226, 160, 28, "Back to the grounds", { color = C.red, font = theme.T.num() }) then back() end
+    if widgets.button("ev_go", 230, 236, 180, 32, "Back to the grounds", { color = C.red, font = T.body() }) then back() end
     return
   end
   local n = #self.ev.choices
   for i, ch in ipairs(self.ev.choices) do
-    local x = 320 - (n * 196) / 2 + (i - 1) * 196 + 6
+    local x = 320 - (n * 208) / 2 + (i - 1) * 208 + 4
     local ok = ch.enabled(G.save)
-    if widgets.button("ev" .. i, x, 220, 184, 44, ch.label, { sub = ch.hint, disabled = not ok, color = i == 1 and C.red or C.ink3 }) then
+    if widgets.choice("ev" .. i, x, 232, 200, 84, ch.label, ch.hint, { color = i == 1 and C.redDark or C.ink2, disabled = not ok }) then
       self.result = ch.apply(G.save)
       sfx.play("reveal")
-      fx.burst(320, 165, C.cyan, 24, 120)
+      fx.burst(320, 175, C.cyan, 24, 120)
       G.persist()
     end
   end

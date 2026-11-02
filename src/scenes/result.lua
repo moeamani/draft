@@ -17,6 +17,7 @@ local lg = love.graphics
 
 local S = {}
 local C = theme.c
+local T = theme.T
 
 local function consequence(out, f)
   if out.champion then return "FESTIVAL CHAMPION!" end
@@ -33,7 +34,7 @@ function S:enter(p)
   self.t = 0
   self.n = self.ctx.nemesis
   local won = self.out.won
-  S.bg = won and { C.ink, { 0.3, 0.24, 0.02 }, C.gold, spin = 1.6 } or { C.black, { 0.25, 0.05, 0.04 }, C.red, spin = 0.8 }
+  S.bg = { horizon = 0, light = { 0.5, 0.45 }, radius = 0.9, power = 1.0, ramp = won and "felt" or "blood" }
   self.step = won and (self.n and "fate" or "cards") or "loss"
   if self.step == "cards" then self:makeCards() end
   self.portrait = art.entrant(G.save, self.ctx.opp, 48)
@@ -43,7 +44,7 @@ end
 function S:makeCards()
   local items = {}
   for i, id in ipairs(self.out.cardChoices) do items[i] = { id = id } end
-  self.picker = picker.new(items, { x = 320, y = 230, scale = 1.3, gap = 22, dealFrom = { 320, 420 } })
+  self.picker = picker.new(items, { x = 320, y = 248, scale = 1.2, gap = 24, dealFrom = { 320, 420 } })
 end
 
 function S:update(dt)
@@ -71,24 +72,24 @@ function S:header()
   local out = self.out
   local f = G.save.run.festival
   local title = out.won and "Victory" or "Defeat"
-  gfx.wavy(title, theme.T.headL(), 320, 8, out.won and C.gold or C.red, self.t, 2)
+  gfx.wavy(title, T.title(), 320, 8, out.won and C.gold or C.red, self.t, 2)
   local cons = consequence(out, f)
-  gfx.text(cons, theme.T.big(), 320, 52, out.champion and C.gold or C.paper, { align = "center" })
-  gfx.text(out.won and ("+" .. out.fish .. " fish" .. (out.flawless and "   flawless!" or "")) or "+5 fish for showing up", theme.T.body(), 320, 72, C.gold, { align = "center" })
-  local y = 86
+  gfx.text(cons, T.big(), 320, 38, out.champion and C.gold or C.paper, { align = "center" })
+  gfx.text(out.won and ("+" .. out.fish .. " fish" .. (out.flawless and ", never lost a bout!" or "")) or "+5 fish for showing up", T.body(), 320, 60, C.gold, { align = "center" })
+  local y = 82
   if out.line ~= "" then
-    gfx.box(155, y, 34, 34, C.black)
+    gfx.box(125, y, 34, 34, C.black)
     lg.setColor(1, 1, 1)
-    lg.draw(self.portrait, 156, y + 1, 0, 32 / 48, 32 / 48)
-    gfx.textf(self.ctx.opp.name .. ': "' .. out.line .. '"', theme.T.body(), 196, y + 4, 300, "left", C.paper)
-    y = y + 40
+    lg.draw(self.portrait, 126, y + 1, 0, 32 / 48, 32 / 48)
+    local h = gfx.textf(self.ctx.opp.name .. ': "' .. out.line .. '"', T.body(), 166, y + 1, 350, "left", C.paper)
+    y = y + math.max(38, h + 6)
   end
   for _, l in ipairs(out.levelUps) do
-    gfx.text("* " .. l.name .. " reached level " .. l.level .. "!", theme.T.body(), 320, y, C.gold, { align = "center" })
-    y = y + 11
+    gfx.text(l.name .. " reached level " .. l.level .. "!", T.body(), 320, y, C.gold, { align = "center" })
+    y = y + 17
   end
   for _, t in ipairs(out.intel) do
-    y = y + gfx.textf(t, theme.T.body(), 120, y, 400, "center", C.green) + 2
+    y = y + gfx.textf(t, T.body(), 110, y, 420, "center", C.green) + 3
   end
   return y
 end
@@ -97,18 +98,19 @@ function S:draw()
   local run = G.save.run
   local y = self:header()
   if self.step == "loss" then
-    if self.n then gfx.text(self.n.name .. " will remember this, and grow stronger.", theme.T.body(), 320, y + 8, C.muted, { align = "center" }) end
-    if widgets.button("r_go", 240, 300, 160, 30, "Continue", { color = C.red }) then self:continue() end
+    if self.n then gfx.text(self.n.name .. " will remember this, and grow stronger.", T.body(), 320, y + 8, C.paper2, { align = "center" }) end
+    if widgets.button("r_go", 240, 300, 160, 32, "Continue", { color = C.red }) then self:continue() end
   elseif self.step == "fate" then
     local n = self.n
-    gfx.text(n.name .. " is at your mercy.", theme.T.head(), 320, math.max(y + 6, 150), C.paper, { align = "center" })
+    local ty = math.max(y + 6, 150)
+    gfx.text(n.name .. " is at your mercy.", T.title(), 320, ty, C.paper, { align = "center" })
     local opts = {
-      { "slay", "Slay", "They forfeit the festival. They might not stay dead.", C.red, false },
-      { "recruit", "Recruit", self.out.flawless and "They join your pride as a Legendary." or "Only after a flawless match.", C.blue, not self.out.flawless },
-      { "brand", "Brand", "Spare them, but leave a weakness and a grudge.", C.ink3, false },
+      { "slay", "Slay", "They forfeit the festival. They might not stay dead.", C.redDark, false },
+      { "recruit", "Recruit", self.out.flawless and "They join your pride as a Legendary card." or "Only if you never lost a bout.", C.blueDark, not self.out.flawless },
+      { "brand", "Brand", "Spare them, but leave a weakness and a grudge.", C.ink2, false },
     }
     for i, o in ipairs(opts) do
-      if widgets.button("fate_" .. o[1], 28 + (i - 1) * 200, 214, 184, 56, o[2], { color = o[4], sub = o[3], disabled = o[5] }) then
+      if widgets.choice("fate_" .. o[1], 24 + (i - 1) * 200, ty + 40, 192, 84, o[2], o[3], { color = o[4], disabled = o[5] }) then
         local txt = game.decideFate(G.save, n, o[1])
         local sit = o[1] == "slay" and "slain" or o[1] == "recruit" and "recruit" or "brand"
         local line = nemesis.speak({ s = math.floor(love.math.random() * 2 ^ 30) + 1 }, n, sit, G.save.playerName)
@@ -119,7 +121,7 @@ function S:draw()
       end
     end
   elseif self.step == "cards" then
-    gfx.label("Choose a cat to join your pride", 320, 162, C.pale, "center")
+    gfx.text("Choose a cat to join your pride", T.big(), 320, math.max(y + 4, 166), C.gold, { align = "center" })
     local i = self.picker and self.picker:draw()
     if i then
       local v = self.picker.views[i]
@@ -128,22 +130,17 @@ function S:draw()
       G.persist()
       self:nextAfterCards()
     end
-    if widgets.button("r_skip", 260, 322, 120, 22, "Skip (+10 fish)", { font = theme.T.num() }) then
+    if widgets.button("r_skip", 250, 322, 140, 26, "Skip (+10 fish)", { font = T.body() }) then
       run.fish = run.fish + 10
       sfx.play("coin")
       self:nextAfterCards()
     end
   elseif self.step == "charms" then
-    gfx.label("A charm from the festival judges", 320, 162, C.gold, "center")
+    gfx.text("A charm from the festival judges", T.big(), 320, math.max(y + 4, 150), C.gold, { align = "center" })
     for i, id in ipairs(self.out.charmChoices) do
       local info = charms.CHARMS[id]
-      local x = 320 - (#self.out.charmChoices * 210) / 2 + (i - 1) * 210 + 5
-      local clicked, over = widgets.click("rc" .. i, x, 180, 200, 80)
-      gfx.panel(x, 180 - (over and 2 or 0), 200, 80, over and C.ink3 or C.ink2, { border = C.goldDark })
-      icons.draw(info.icon, x + 22, 214, info.color and cards.COATS[info.color].color or C.gold, 3)
-      gfx.text(info.name, theme.T.headS(), x + 44, 190, C.paper)
-      gfx.textf(info.desc, theme.T.body(), x + 44, 206, 150, "left", C.paper2)
-      if clicked then
+      local x = 320 - (#self.out.charmChoices * 220) / 2 + (i - 1) * 220 + 10
+      if widgets.choice("rc" .. i, x, 184, 200, 90, info.name, info.desc, { icon = info.icon, iconColor = info.color and cards.COATS[info.color].color or C.gold }) then
         game.addCharm(run, id)
         sfx.play("coin")
         fx.burst(x + 100, 220, C.gold, 24, 140)
@@ -151,7 +148,7 @@ function S:draw()
         self:continue()
       end
     end
-    if widgets.button("r_leave", 260, 300, 120, 22, "Leave it", { font = theme.T.num() }) then self:continue() end
+    if widgets.button("r_leave", 250, 300, 140, 26, "Leave it", { font = T.body() }) then self:continue() end
   end
 end
 
