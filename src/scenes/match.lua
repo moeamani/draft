@@ -4,7 +4,6 @@
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
 local cardview = require("src.ui.cardview")
-local charms = require("src.core.charms")
 local festival = require("src.core.festival")
 local fx = require("src.ui.fx")
 local game = require("src.core.game")
@@ -700,8 +699,6 @@ function S:draw()
   if widgets.button("m_menu", PX + 112, 8, 52, 18, "Menu", { font = T.body() }) then overlays.pause() end
   self:drawPanel()
   local idle = not self.busy and not self.finished
-  local placed = 0
-  for i = 1, 3 do if self.slots[i] then placed = placed + 1 end end
   local label = idle and "Charge!" or "..."
   if widgets.button("m_charge", PX, 310, PW, 40, label, { color = C.red, disabled = not idle, font = T.huge() }) then self:charge() end
 end
