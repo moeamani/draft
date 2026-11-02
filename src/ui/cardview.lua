@@ -1,4 +1,4 @@
--- Pixel cards: a 52x72 face baked once, drawn through a projected mesh for tilt,
+-- Pixel cards: a 56x78 face baked once, drawn through a projected mesh for tilt,
 -- with spring motion, hover lift, legendary foil, play flash and dissolve.
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
@@ -9,7 +9,7 @@ local theme = require("src.ui.theme")
 local lg = love.graphics
 
 local M = {}
-M.W, M.H = 52, 72
+M.W, M.H = 56, 78
 
 local C = theme.c
 local faceCache = {}
@@ -19,7 +19,13 @@ local function rarityCol(d) return cards.RARITY_COLOR[d.rarity] end
 M.SHORT = {
   none = "STEADY", smite = "HAMMER", inspire = "ORB", hex = "HEX", litter = "LITTER", pounce = "POUNCE",
   ninelives = "9 LIVES", stray = "STRAY", groom = "GROOM", purr = "PURR", yowl = "YOWL", muster = "RALLY",
+  downpour = "RAIN", moonfog = "FOG", sunbeam = "NAP", warhorn = "RALLY", box = "BOX", hairball = "HRRK",
 }
+
+local function fit(font, str, w)
+  while font:getWidth(str) > w and #str > 3 do str = str:sub(1, -2) end
+  return str
+end
 
 local function renderFace(def, level)
   local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
@@ -41,33 +47,32 @@ local function renderFace(def, level)
   theme.set(C.black)
   lg.rectangle("fill", 3, 3, W - 6, art.CARD_H + 2)
   lg.setColor(1, 1, 1)
-  lg.draw(art.card(def), 4, 4)
+  lg.draw(art.card(def), 3, 4)
   -- name
-  local f = theme.T.tiny()
-  local name = cards.shortName(def)
-  while f:getWidth(name) > W - 8 and #name > 3 do name = name:sub(1, -2) end
-  gfx.text(name, f, W / 2, 37, C.ink, { align = "center", shadow = false })
+  local f10 = theme.T.small()
+  local name = fit(f10, cards.shortName(def), W - 6)
+  gfx.text(name, f10, W / 2, 40, C.ink, { align = "center", shadow = false })
   -- ability: icon + short label
-  local label = def.kind == "special" and "TRICK" or (M.SHORT[def.ability] or "")
+  local f8 = theme.T.label()
+  local label = M.SHORT[def.ability] or ""
   local iconCol = def.kind == "special" and C.cyan or (def.ability == "none" and C.steel or C.blue)
-  local lw = f:getWidth(label) + 11
+  local lw = f8:getWidth(label) + 11
   local lx = math.floor(W / 2 - lw / 2)
-  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 51, iconCol)
-  gfx.text(label, f, lx + 10, 47, C.blueDark, { shadow = false })
+  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 57, iconCol)
+  gfx.text(label, f8, lx + 10, 53, C.blueDark, { shadow = false })
   -- footer: coat bar with class icon
+  gfx.box(3, H - 15, W - 6, 12, C.black)
   if def.kind == "unit" then
     local coat = cards.COATS[def.coat]
-    gfx.box(3, H - 13, W - 6, 10, C.black)
-    gfx.box(4, H - 12, W - 8, 8, coat.color)
+    gfx.box(4, H - 14, W - 8, 10, coat.color)
     theme.set(theme.mix(coat.color, C.paper, 0.35))
-    lg.rectangle("fill", 5, H - 12, W - 10, 1)
+    lg.rectangle("fill", 5, H - 14, W - 10, 1)
     local dark = def.coat == "gilt" or def.coat == "shadow"
-    icons.draw(def.type == "magic" and "orb" or "sword", 9, H - 8, C.paper)
-    gfx.text(coat.name:upper(), f, W / 2 + 4, H - 13, dark and C.black or C.paper, { align = "center", shadow = false })
+    icons.draw(def.type == "magic" and "orb" or "sword", 10, H - 9, C.paper)
+    gfx.text(coat.name:upper(), f8, W / 2 + 4, H - 14, dark and C.black or C.paper, { align = "center", shadow = false })
   else
-    gfx.box(3, H - 13, W - 6, 10, C.black)
-    gfx.box(4, H - 12, W - 8, 8, C.ink3)
-    gfx.text("TRICK", f, W / 2, H - 13, C.cyan, { align = "center", shadow = false })
+    gfx.box(4, H - 14, W - 8, 10, C.ink3)
+    gfx.text("TRICK", f8, W / 2, H - 14, C.cyan, { align = "center", shadow = false })
   end
   if level > 1 then
     for i = 1, level - 1 do icons.draw("star", W - 9 - (i - 1) * 8, 9, C.gold) end
@@ -78,30 +83,42 @@ local function renderFace(def, level)
 end
 M.face = renderFace
 
-local back
-function M.back()
-  if back then return back end
+-- Card backs show the coat: Ember, Tide and Gilt cats have coloured backs, while Shadow cats and
+-- tricks share the same dark back.
+M.BACKS = {
+  ember = { field = C.red, hatch = C.redDark, icon = "paw" },
+  tide = { field = C.blue, hatch = C.blueDark, icon = "paw" },
+  gilt = { field = C.gold, hatch = C.goldDark, icon = "paw" },
+  dark = { field = theme.hex("#1b2420"), hatch = C.black, icon = "moon" },
+  plain = { field = C.ink3, hatch = C.ink2, icon = "paw" },
+}
+local backs = {}
+function M.back(kind)
+  kind = kind or "plain"
+  if backs[kind] then return backs[kind] end
+  local spec = M.BACKS[kind] or M.BACKS.plain
   local W, H = M.W, M.H
-  back = lg.newCanvas(W, H)
-  back:setFilter("nearest", "nearest")
+  local cv = lg.newCanvas(W, H)
+  cv:setFilter("nearest", "nearest")
   lg.push("all")
   lg.origin()
-  lg.setCanvas(back)
+  lg.setCanvas(cv)
   lg.clear(0, 0, 0, 0)
   gfx.box(0, 0, W, H, C.black)
   gfx.box(1, 1, W - 2, H - 2, C.paper)
-  gfx.box(3, 3, W - 6, H - 6, C.red)
-  theme.set(C.redDark)
+  gfx.box(3, 3, W - 6, H - 6, spec.field)
+  theme.set(spec.hatch)
   for y = 3, H - 4 do
     for x = 3, W - 4 do
       if (x + y) % 6 < 2 then lg.rectangle("fill", x, y, 1, 1) end
     end
   end
-  gfx.box(12, 22, W - 24, 28, C.black)
-  gfx.box(13, 23, W - 26, 26, C.red)
-  icons.draw("paw", W / 2, H / 2, C.paper, 2)
+  gfx.box(13, 24, W - 26, 30, C.black)
+  gfx.box(14, 25, W - 28, 28, spec.field)
+  icons.draw(spec.icon, W / 2, H / 2 + 1, C.paper, 2)
   lg.pop()
-  return back
+  backs[kind] = cv
+  return cv
 end
 
 -- ---------------------------------------------------------------- views
@@ -115,7 +132,8 @@ function M.new(inst, x, y, scale)
   local v = setmetatable({
     inst = inst, def = def, x = x, y = y, vx = 0, vy = 0, tx = x, ty = y, s = scale or 1, ts = scale or 1,
     rot = 0, trot = 0, tiltX = 0, tiltY = 0, flash = 0, alpha = 1, dying = nil, phase = love.math.random() * 6.28,
-    hovered = false, faceDown = false, flip = 1, tflip = 1, selected = false, bounce = 0,
+    hovered = false, faceDown = false, flip = 1, tflip = 1, selected = false, bounce = 0, dim = 0,
+    backKind = "plain", lunge = 0,
   }, View)
   v.mesh = lg.newMesh((GRID + 1) * (GRID + 1), "triangles", "stream")
   local map = {}
@@ -191,7 +209,7 @@ function View:draw(opts)
   if self.dying and self.dying >= 1 then return end
   local def = self.def
   local showBack = self.faceDown or self.flip < 0
-  local tex = showBack and M.back() or renderFace(def, self.inst.level or 1)
+  local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1)
   local alpha = self.alpha
   local s = self.s * (1 + self.bounce * 0.25)
   -- shadow
@@ -207,7 +225,8 @@ function View:draw(opts)
     for i = 0, GRID do
       local u, v = i / GRID, j / GRID
       local px, py = self:project(u - 0.5, v - 0.5)
-      verts[#verts + 1] = { px, py, u, v, 1, 1, 1, alpha }
+      local k = 1 - self.dim * 0.6
+      verts[#verts + 1] = { px, py, u, v, k, k, k, alpha }
     end
   end
   self.mesh:setVertices(verts)
@@ -236,17 +255,20 @@ function View:draw(opts)
     lg.setLineWidth(1)
     lg.rectangle("line", math.floor(math.min(x1, x2)) - 1.5, math.floor(math.min(y1, y2)) - 1.5, math.floor(math.abs(x2 - x1)) + 3, math.floor(math.abs(y2 - y1)) + 3)
   end
-  if showBack or self.dying or def.kind ~= "unit" then return end
-  -- paws badge (dynamic, so buffs can show)
+  if showBack or self.dying or (def.kind ~= "unit" and not self.paws) then return end
+  -- paws badge (dynamic, so buffs and hexes can show)
   local bx, by = self:project(-0.5 + 9 / M.W, -0.5 + 9 / M.H)
-  local p = opts.paws or cards.paws(self.inst)
-  local font = theme.T.num()
+  local base = def.ability == "box" and 4 or cards.paws(self.inst)
+  local p = opts.paws or self.paws or base
+  local font = theme.T.body()
   local str = tostring(p)
-  local bw = math.max(11, font:getWidth(str) + 4)
-  local bxl, byt = math.floor(bx - bw / 2), math.floor(by - 6)
-  gfx.box(bxl, byt, bw, 12, C.black, alpha)
-  gfx.box(bxl + 1, byt + 1, bw - 2, 10, def.rarity == "legendary" and C.gold or C.ink, alpha)
-  gfx.text(str, font, bxl + bw / 2, byt, def.rarity == "legendary" and C.black or C.paper, { align = "center", shadow = false, alpha = alpha })
+  local bw = math.max(14, font:getWidth(str) + 5)
+  local bxl, byt = math.floor(bx - bw / 2), math.floor(by - 7)
+  local bg = def.rarity == "legendary" and C.gold or C.ink
+  if p > base then bg = theme.hex("#1f6b45") elseif p < base then bg = C.redDark end
+  gfx.box(bxl, byt, bw, 14, C.black, alpha)
+  gfx.box(bxl + 1, byt + 1, bw - 2, 12, bg, alpha)
+  gfx.text(str, font, bxl + bw / 2, byt - 2, (bg == C.gold) and C.black or C.paper, { align = "center", shadow = false, alpha = alpha })
 end
 
 return M

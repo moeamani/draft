@@ -74,7 +74,7 @@ function M.startRun(save)
   save.runs = save.runs + 1
   local run = {
     rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, fish = 25, deck = {}, charms = {},
-    phase = "hub", stallUsed = false, nextPride = 0, uidc = 0,
+    phase = "hub", stallUsed = false, nextGoblets = 0, uidc = 0,
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
   M.dealStarterDeck(run)
@@ -156,25 +156,25 @@ function M.setupMatch(save)
   local tier = festival.tier(f)
   local pm, em = traits.baseMods(), traits.baseMods()
   charms.apply(pm, run.charms)
-  pm.pride = pm.pride + (run.nextPride or 0)
+  pm.goblets = pm.goblets + (run.nextGoblets or 0)
   local deck, n, personality, spyglass
   if opp.kind == "hand" then
     n = M.findNemesis(save, opp.id)
     traits.apply(em, nemesis.traitIds(n), n.wins)
-    deck = nemesis.nemesisDeck(run.rng, n, math.ceil(tier / 2) + 1)
+    deck = nemesis.nemesisDeck(run.rng, n, math.ceil(tier / 2))
     personality = n.personality
-    if pm.seeCoat then spyglass = nemesis.revealRandom(run.rng, n) end
+    if pm.peek then spyglass = nemesis.revealRandom(run.rng, n) end
   else
     local foe = opp.foe
     foe.level = math.max(1, math.floor((tier + 1) / 2) + (foe.elite and 1 or 0))
     deck = nemesis.strayDeck(run.rng, foe)
     personality = foe.personality
     if foe.elite then traits.apply(em, { rng.pick(run.rng, { "warlord", "archmage", "hoarder", "vengeful", "bodyguard" }) }, 0) end
-    if tier <= 2 then em.handSize = em.handSize - 1 end
+    if tier <= 2 then em.handSize = em.handSize - 1; em.goblets = em.goblets - 1 end
   end
-  -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra Pride
-  if tier >= 4 then em.pride = em.pride + (tier - 3) * 12 end
-  if n then em.pride = em.pride + n.level * 5 end
+  -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra goblets
+  if tier >= 5 then em.goblets = em.goblets + 1 end
+  if n then em.goblets = em.goblets + math.floor(n.level / 4) end
   local style = match.STYLES[personality] or match.STYLES.default
   local state = match.create({ name = save.playerName, deck = run.deck, mods = pm }, { name = opp.name, deck = deck, mods = em },
     rng.int(run.rng, 1e9) + 1, style)
@@ -203,15 +203,16 @@ function M.resolveMatch(save, ctx)
   local won = s.result == "win"
   local lostAny = false
   for _, h in ipairs(s.history) do if h.winner == 2 then lostAny = true end end
+  -- a "flawless" match: you never lost a bout
   local me, them = s.sides[1], s.sides[2]
   local out = {
     result = s.result, won = won, flawless = won and not lostAny, fish = 0, levelUps = {}, intel = {}, line = "",
     cardChoices = {}, charmChoices = {}, notes = {}, stage = ctx.stage, opp = ctx.opp,
   }
-  run.nextPride = 0
+  run.nextGoblets = 0
   local n = ctx.nemesis
   if n then n.met = true end
-  local pd = math.max(5, math.abs(math.max(0, me.pride) - math.max(0, them.pride)))
+  local pd = 10 + 10 * math.abs(math.max(0, me.goblets) - math.max(0, them.goblets))
 
   if won then
     run.stats.won = run.stats.won + 1
@@ -433,15 +434,15 @@ M.EVENTS = {
     title = "The Sword in the Scratching Post",
     text = function() return "A gleaming blade is stuck deep in an old scratching post. Many paws have tried." end,
     choices = {
-      { label = "Pull the sword", hint = "35%: a Legendary. Otherwise -25 Pride next match.", enabled = function() return true end,
+      { label = "Pull the sword", hint = "35%: a Legendary. Otherwise -1 goblet next match.", enabled = function() return true end,
         apply = function(s)
           if rng.chance(s.run.rng, 0.35) then
             local c = rng.pick(s.run.rng, util.filter(cards.DRAFTABLE, function(x) return x.rarity == "legendary" end))
             M.addCard(s.run, c.id)
             return "It slides free! " .. c.name .. " answers your call."
           end
-          s.run.nextPride = (s.run.nextPride or 0) - 25
-          return 'You pull until something in your back goes "pop". -25 Pride next match.'
+          s.run.nextGoblets = (s.run.nextGoblets or 0) - 1
+          return 'You pull until something in your back goes "pop". -1 goblet next match.'
         end },
       leave,
     },
@@ -507,8 +508,8 @@ M.EVENTS = {
     title = "Fountain of Warm Milk",
     text = function() return "An ancient fountain bubbles with warm milk. It smells... mostly fine." end,
     choices = {
-      { label = "Drink deeply", hint = "+25 Pride next match", enabled = function() return true end,
-        apply = function(s) s.run.nextPride = (s.run.nextPride or 0) + 25; return "Warm. Creamy. You start your next match with +25 Pride." end },
+      { label = "Drink deeply", hint = "+1 goblet next match", enabled = function() return true end,
+        apply = function(s) s.run.nextGoblets = (s.run.nextGoblets or 0) + 1; return "Warm. Creamy. You start your next match with an extra goblet." end },
       { label = "Bottle it to sell", hint = "Gain 25 fish", enabled = function() return true end,
         apply = function(s) s.run.fish = s.run.fish + 25; return 'A merchant pays 25 fish for "artisanal fountain milk".' end },
     },

@@ -10,8 +10,8 @@ local cardview = require("src.ui.cardview")
 local lg = love.graphics
 
 G = {
-  save = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, crt = true, time = 0,
-  scenes = {}, trans = nil, settings = { crt = true, crtCurve = "subtle", music = true },
+  save = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
+  scenes = {}, trans = nil, settings = { screen = "lamp", music = true },
 }
 
 local W, H, SC = theme.W, theme.H, theme.SCALE
@@ -37,18 +37,15 @@ local function loadSave()
   return nil
 end
 
--- CRT modes: subtle curve -> flat screen -> off
-function G.cycleCrt()
-  local st = G.settings
-  if st.crt and st.crtCurve ~= "flat" then st.crtCurve = "flat"
-  elseif st.crt then st.crt = false
-  else st.crt = true; st.crtCurve = "subtle" end
+-- Screen modes: lamplight (default) -> CRT -> plain
+local SCREEN_MODES = { lamp = "crt", crt = "off", off = "lamp" }
+function G.cycleScreen()
+  G.settings.screen = SCREEN_MODES[G.settings.screen] or "lamp"
   G.saveSettings()
 end
 
-function G.crtLabel()
-  if not G.settings.crt then return "off" end
-  return G.settings.crtCurve == "flat" and "flat" or "subtle curve"
+function G.screenLabel()
+  return ({ lamp = "lamplight", crt = "CRT", off = "plain" })[G.settings.screen] or "lamplight"
 end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
@@ -69,7 +66,8 @@ function G.go(name, params, instant)
 end
 
 function G.openOverlay(ov) G.overlay = ov end
-function G.scissor(x, y, w, h) return x, y, w, h end
+-- scissor rectangles are in canvas pixels, not virtual pixels
+function G.scissor(x, y, w, h) return x * SC, y * SC, w * SC, h * SC end
 function G.closeOverlay() G.overlay = nil end
 
 -- the canvas is W*SC x H*SC; this returns how it maps onto the window
@@ -106,6 +104,7 @@ function love.load(args)
   if love.filesystem.getInfo(SETTINGS_FILE) then
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
+    if not SCREEN_MODES[G.settings.screen] then G.settings.screen = "lamp" end
   end
   if G.settings.muted then sfx.toggleMute() end
   for _, n in ipairs(SCENES) do G.scenes[n] = require("src.scenes." .. n) end
@@ -151,17 +150,33 @@ function love.update(dt)
   if G.autotest then G.autotest.update(dt) end
 end
 
+local hex = theme.hex
+local RAMPS = {
+  felt = { hex("#08140f"), hex("#0e2119"), hex("#16352a"), hex("#24503c"), hex("#3e7552") },
+  blood = { hex("#120809"), hex("#220c0c"), hex("#3a1513"), hex("#5a1f19"), hex("#7c2c22") },
+}
+local WOOD = { hex("#120c07"), hex("#1f150c"), hex("#3b2a1a"), hex("#6b4a2a") }
+local VOID = { hex("#050807"), hex("#0a110d"), hex("#141c16") }
+local function rgb(list) local out = {} for i, c in ipairs(list) do out[i] = { c[1], c[2], c[3] } end return out end
+local RAMP_RGB, WOOD_RGB, VOID_RGB = { felt = rgb(RAMPS.felt), blood = rgb(RAMPS.blood) }, rgb(WOOD), rgb(VOID)
+
+-- Every scene sits on the same candle-lit table. A scene's bg table can move the light,
+-- tilt the table into perspective (horizon) or switch the baize to blood red.
+local DEFAULT_BG = { horizon = 0, light = { 0.5, 0.42 }, radius = 0.95, power = 0.95 }
 local function drawBackground()
-  local bg = (G.scene and G.scene.bg) or { theme.c.ink, theme.c.ink2, theme.c.red }
-  local sh = shaders.background
+  local bg = (G.scene and G.scene.bg) or DEFAULT_BG
+  local sh = shaders.table
   if sh then
     sh:send("time", G.time)
     sh:send("res", { W * SC, H * SC })
-    sh:send("colA", { bg[1][1] * 0.85, bg[1][2] * 0.85, bg[1][3] * 0.85 })
-    sh:send("colB", { bg[2][1], bg[2][2], bg[2][3] })
-    sh:send("colC", { bg[3][1] * 0.55, bg[3][2] * 0.55, bg[3][3] * 0.55 })
-    sh:send("spin", bg.spin or 1.2)
-    sh:send("pix", SC * 2)
+    sh:send("pix", SC)
+    sh:send("horizon", bg.horizon or 0)
+    sh:send("light", bg.light or DEFAULT_BG.light)
+    sh:send("radius", bg.radius or DEFAULT_BG.radius)
+    sh:send("power", bg.power or DEFAULT_BG.power)
+    sh:send("felt", unpack(RAMP_RGB[bg.ramp or "felt"]))
+    sh:send("wood", unpack(WOOD_RGB))
+    sh:send("voidc", unpack(VOID_RGB))
     lg.setShader(sh)
   end
   lg.setColor(1, 1, 1)
@@ -201,14 +216,15 @@ function love.draw()
 
   lg.clear(0, 0, 0)
   local s, ox, oy = viewport()
-  if G.settings.crt and shaders.crt then
-    shaders.crt:send("res", { W * SC, H * SC })
-    shaders.crt:send("rows", H)
-    shaders.crt:send("time", G.time)
-    shaders.crt:send("strength", 1)
-    shaders.crt:send("curvature", G.settings.crtCurve == "flat" and 0 or 1)
-    shaders.crt:send("flash", fx.flash * 0.25)
-    lg.setShader(shaders.crt)
+  local mode = G.settings.screen
+  if mode ~= "off" and shaders.post then
+    shaders.post:send("res", { W * SC, H * SC })
+    shaders.post:send("rows", H)
+    shaders.post:send("time", G.time)
+    shaders.post:send("mode", mode == "crt" and 1 or 0)
+    shaders.post:send("curvature", 0.6)
+    shaders.post:send("flash", fx.flash * 0.2)
+    lg.setShader(shaders.post)
   end
   lg.setColor(1, 1, 1)
   lg.draw(canvas, ox, oy, 0, s, s)
@@ -232,8 +248,8 @@ function love.keypressed(k)
     return
   end
   if k == "f2" then
-    G.cycleCrt()
-    fx.toast("CRT: " .. G.crtLabel())
+    G.cycleScreen()
+    fx.toast("Screen: " .. G.screenLabel())
     return
   end
   if k == "f3" then

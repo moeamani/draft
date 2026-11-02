@@ -26,12 +26,12 @@ function M.float(x, y, text, color, big)
   M.floats[#M.floats + 1] = { x = x, y = y, text = text, color = color or C.paper, age = 0, life = 1.1, big = big }
 end
 
-function M.banner(text, sub, color, delay)
-  M.banners[#M.banners + 1] = { text = text, sub = sub, color = color or C.paper, age = -(delay or 0), life = 1.5 }
+function M.banner(text, sub, color, delay, y)
+  M.banners[#M.banners + 1] = { text = text, sub = sub, color = color or C.paper, age = -(delay or 0), life = 1.5, y = y }
 end
 
 function M.toast(text, kind)
-  M.toasts[#M.toasts + 1] = { text = text, kind = kind or "info", age = 0, life = 2.8 }
+  M.toasts[#M.toasts + 1] = { text = text, kind = kind or "info", age = 0, life = 3.2 }
   if #M.toasts > 3 then table.remove(M.toasts, 1) end
 end
 
@@ -69,7 +69,7 @@ function M.draw()
   end
   for _, f in ipairs(M.floats) do
     local t = f.age / f.life
-    local font = f.big and theme.T.numL() or theme.T.num()
+    local font = f.big and theme.T.huge() or theme.T.body()
     local pop = t < 0.12 and -3 or 0
     local a = t > 0.7 and (1 - (t - 0.7) / 0.3) or 1
     gfx.outlined(f.text, font, f.x, f.y - math.floor(t * 22) + pop, f.color, { align = "center", alpha = a })
@@ -79,8 +79,8 @@ function M.draw()
       local t = b.age / b.life
       local open = math.min(1, b.age / 0.12)
       local a = t > 0.8 and (1 - (t - 0.8) / 0.2) or 1
-      local h = math.floor(56 * open)
-      local cy = 150
+      local h = math.floor(60 * open)
+      local cy = b.y or 150
       lg.setColor(0.02, 0.03, 0.03, 0.9 * a)
       lg.rectangle("fill", 0, cy - h / 2, theme.W, h)
       theme.set(b.color, a)
@@ -88,22 +88,22 @@ function M.draw()
       lg.rectangle("fill", 0, cy + h / 2 - 1, theme.W, 1)
       if open >= 1 then
         local slide = math.floor((1 - math.min(1, (b.age - 0.12) / 0.2)) ^ 3 * 120)
-        gfx.wavy(b.text, theme.T.head(), theme.W / 2 + slide, cy - 20, b.color, M.time, 1, { alpha = a })
-        if b.sub then gfx.text(b.sub:upper(), theme.T.tiny(), theme.W / 2 - slide, cy + 12, C.gold, { align = "center", alpha = a }) end
+        gfx.wavy(b.text, theme.T.title(), theme.W / 2 + slide, cy - 22, b.color, M.time, 1, { alpha = a })
+        if b.sub then gfx.text(b.sub, theme.T.body(), theme.W / 2 - slide, cy + 8, C.paper2, { align = "center", alpha = a }) end
       end
     end
   end
-  local y = 30
+  local y = 34
   for _, t in ipairs(M.toasts) do
     local a = math.min(1, t.age / 0.1) * (t.age > t.life - 0.3 and (t.life - t.age) / 0.3 or 1)
     local font = theme.T.body()
-    local w = math.min(420, font:getWidth(t.text) + 14)
-    local h = gfx.wrapHeight(t.text, font, w - 10) + 7
+    local w = math.min(420, font:getWidth(t.text) + 16)
+    local h = gfx.wrapHeight(t.text, font, w - 12) + 6
     local col = t.kind == "good" and C.gold or t.kind == "bad" and C.red or C.paper
     local fg = t.kind == "bad" and C.paper or C.ink
     local dy = math.floor((1 - math.min(1, t.age / 0.15)) * -8)
     gfx.panel(theme.W / 2 - w / 2, y + dy, w, h, col, { alpha = a })
-    gfx.textf(t.text, font, theme.W / 2 - w / 2 + 5, y + dy + 3, w - 10, "center", fg, { alpha = a, shadow = false })
+    gfx.textf(t.text, font, theme.W / 2 - w / 2 + 6, y + dy + 2, w - 12, "center", fg, { alpha = a, shadow = false })
     y = y + h + 4
   end
 end

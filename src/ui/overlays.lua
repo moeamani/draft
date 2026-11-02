@@ -2,7 +2,6 @@
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
 local festival = require("src.core.festival")
-local formations = require("src.core.formations")
 local gfx = require("src.ui.gfx")
 local icons = require("src.ui.icons")
 local nemesis = require("src.core.nemesis")
@@ -242,7 +241,7 @@ function M.help()
     elseif self.tab == 2 then
       head("Formations")
       local fy = y
-      for i, f in ipairs(formations.LIST) do
+      for i, f in ipairs({}) do
         local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
         local fx, ry = x + col * 300, fy + row * 46
         gfx.panel(fx, ry, 294, 42, C.ink2)
@@ -272,7 +271,7 @@ function M.pause()
     local y = 104
     if widgets.button("p_resume", 236, y, 168, 24, "Resume", { color = C.red }) then G.closeOverlay() end
     if widgets.button("p_help", 236, y + 30, 168, 24, "How to play") then M.help() end
-    if widgets.button("p_crt", 236, y + 60, 168, 24, "CRT: " .. G.crtLabel()) then G.cycleCrt() end
+    if widgets.button("p_crt", 236, y + 60, 168, 24, "Screen: " .. G.screenLabel()) then G.cycleScreen() end
     local sfx = require("src.ui.sfx")
     if widgets.button("p_snd", 236, y + 90, 168, 24, "Sound: " .. (sfx.muted and "off" or "on")) then
       G.settings.muted = sfx.toggleMute(); G.saveSettings()

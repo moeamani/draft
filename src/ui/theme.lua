@@ -1,4 +1,4 @@
--- One palette (from the Figma file), one set of pixel fonts, one virtual resolution.
+-- One palette (from the Figma file), one set of pixel fonts drawn at their native sizes, one virtual resolution.
 local M = {}
 
 local function hex(h, a)
@@ -10,8 +10,12 @@ M.c = {
   ink = hex("#0e2119"), ink2 = hex("#16352a"), ink3 = hex("#24503c"), ink4 = hex("#2f6a4f"), deep = hex("#08140f"),
   red = hex("#e8483b"), redDark = hex("#9e2a20"), blue = hex("#2378f7"), blueDark = hex("#164f9e"),
   gold = hex("#d3a200"), goldDark = hex("#8a6a00"), cyan = hex("#47e7fd"), paper = hex("#f4f1e8"),
-  paper2 = hex("#cfc9b6"), muted = hex("#8fa79a"), black = hex("#050807"), steel = hex("#8a96a8"),
-  green = hex("#5fd38d"), pale = hex("#81a0cf"),
+  paper2 = hex("#d8d3c2"), muted = hex("#a9bfb3"), black = hex("#050807"), steel = hex("#8a96a8"),
+  green = hex("#5fd38d"), pale = hex("#9fb8e0"),
+  -- the table: walnut rim, candle light
+  wood = hex("#3b2a1a"), woodDark = hex("#1f150c"), woodLight = hex("#6b4a2a"), candle = hex("#ffd27a"),
+  -- parchment notes
+  parch = hex("#efe6cf"), parchDark = hex("#c9b98f"), parchInk = hex("#2a1d10"),
 }
 
 -- virtual pixel resolution; the canvas is rendered at SCALE x this and post-processed
@@ -19,9 +23,13 @@ M.W, M.H, M.SCALE = 640, 360, 2
 
 local cache = {}
 local files = {
-  title = "assets/fonts/Jacquard12-Regular.ttf", -- 12, 24, 36
-  ui = "assets/fonts/Tiny5-Regular.ttf", -- 8, 16
-  num = "assets/fonts/Jersey10-Regular.ttf", -- 10, 20, 30, 40
+  tiny5 = "assets/fonts/Tiny5-Regular.ttf",
+  jersey10 = "assets/fonts/Jersey10-Regular.ttf",
+  jersey15 = "assets/fonts/Jersey15-Regular.ttf",
+  jersey20 = "assets/fonts/Jersey20-Regular.ttf",
+  jersey25 = "assets/fonts/Jersey25-Regular.ttf",
+  jacquard12 = "assets/fonts/Jacquard12-Regular.ttf",
+  jacquard24 = "assets/fonts/Jacquard24-Regular.ttf",
 }
 
 function M.font(style, size)
@@ -34,18 +42,20 @@ function M.font(style, size)
   return cache[key]
 end
 
--- named type scale, so every screen uses the same sizes
+-- The type scale. Every font is used at the size it was drawn for, so text sits on the same
+-- pixel grid as the art (no 2x or 3x blown-up letters).
 M.T = {
-  tiny = function() return M.font("ui", 8) end,
-  body = function() return M.font("ui", 8) end,
-  big = function() return M.font("ui", 16) end,
-  num = function() return M.font("num", 10) end,
-  numL = function() return M.font("num", 20) end,
-  numXL = function() return M.font("num", 30) end,
-  head = function() return M.font("title", 24) end,
-  headS = function() return M.font("title", 12) end,
-  headL = function() return M.font("title", 36) end,
+  label = function() return M.font("tiny5", 8) end, -- short ALL-CAPS labels only
+  small = function() return M.font("jersey10", 10) end, -- names on cards, chips
+  body = function() return M.font("jersey15", 15) end, -- anything you need to read
+  big = function() return M.font("jersey20", 20) end, -- buttons, names, numbers
+  huge = function() return M.font("jersey25", 25) end, -- headline numbers
+  title = function() return M.font("jacquard24", 24) end, -- screen titles, champion names
+  deco = function() return M.font("jacquard12", 12) end, -- small decorative captions
 }
+
+-- TEMP aliases while scenes move to the new scale
+M.T.tiny, M.T.num, M.T.numL, M.T.numXL, M.T.head, M.T.headS, M.T.headL = M.T.label, M.T.small, M.T.big, M.T.huge, M.T.title, M.T.deco, M.T.title
 
 function M.set(col, a)
   love.graphics.setColor(col[1], col[2], col[3], (a or 1) * (col[4] or 1))

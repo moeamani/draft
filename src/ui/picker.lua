@@ -65,7 +65,7 @@ function M:draw()
     local v = self.views[self.hover]
     local w = cardview.W * v.s
     local tx = v.x + w / 2 + 6
-    if tx + 150 > theme.W then tx = v.x - w / 2 - 156 end
+    if tx + 190 > theme.W then tx = v.x - w / 2 - 196 end
     widgets.tooltip(function() M.cardTooltip(v.def, v.inst, tx, v.y - 40) end)
   end
   return clicked
@@ -77,32 +77,59 @@ function M:drawOne(i, v)
   v:draw()
   if it.price and not it.sold then
     local y = math.floor(v.y + cardview.H * v.s / 2 + 4)
-    gfx.panel(v.x - 18, y, 36, 12, C.gold)
-    gfx.text(it.price .. " fish", theme.T.tiny(), v.x, y + 2, C.black, { align = "center", shadow = false })
+    local label = it.price .. " fish"
+    local pw = theme.T.body():getWidth(label) + 10
+    gfx.panel(v.x - pw / 2, y, pw, 16, C.gold)
+    gfx.text(label, theme.T.body(), v.x, y - 1, C.black, { align = "center", shadow = false })
   elseif it.sold then
-    gfx.outlined("SOLD", theme.T.num(), v.x, v.y - 6, C.muted, { align = "center" })
+    gfx.outlined("SOLD", theme.T.big(), v.x, v.y - 10, C.paper2, { align = "center" })
   end
 end
 
-function M.cardTooltip(def, inst, x, y)
+local function signed(n) return (n >= 0 and "+" or "") .. n end
+
+-- The readable description of a card: used by tooltips and the match's inspect panel.
+-- inf (optional): the card's numbers in the current bout, from match.compute.
+function M.cardLines(def, inst, inf)
+  local T = theme.T
   local ab = cards.ABILITIES[def.ability]
-  local sub = def.kind == "unit" and ((def.type == "magic" and "Magic" or "Physical") .. " - " .. cards.COATS[def.coat].name .. " - " .. def.rarity) or ("Trick - " .. def.rarity)
-  local lines = {
-    { text = def.name, font = theme.T.big(), color = def.rarity == "legendary" and C.gold or C.paper },
-    { text = sub, color = C.muted },
-    { text = ab.name, color = C.cyan, gap = 1 },
-    { text = ab.desc },
-  }
+  local lines = { { text = def.name, font = T.big(), color = def.rarity == "legendary" and C.gold or C.paper } }
   if def.kind == "unit" then
+    local coat = cards.COATS[def.coat]
+    lines[#lines + 1] = { text = (def.type == "magic" and "Magic" or "Physical") .. ", " .. def.rarity, color = C.muted }
     local p = inst and cards.paws(inst) or def.power
-    lines[#lines + 1] = { text = p .. " Paws", color = C.gold }
-    if inst and inst.xp then
-      local lvl = inst.level or 1
-      lines[#lines + 1] = { text = lvl >= 3 and "Level 3 Paladin (max)" or ("Level " .. lvl .. (lvl == 2 and " Knight" or "") .. " - XP " .. (inst.xp or 0) .. "/" .. cards.XP_FOR_LEVEL[lvl + 1]), color = C.pale }
+    lines[#lines + 1] = { text = p .. " Paws   " .. coat.name .. " coat", color = coat.color }
+    if coat.beats then
+      local by
+      for _, cc in pairs(cards.COATS) do if cc.beats == def.coat then by = cc.name end end
+      lines[#lines + 1] = { text = "Beats " .. cards.COATS[coat.beats].name .. ", loses to " .. by, color = C.paper2 }
+    else
+      lines[#lines + 1] = { text = "No coat edge either way", color = C.paper2 }
     end
+  else
+    lines[#lines + 1] = { text = "Trick, " .. def.rarity, color = C.muted }
+  end
+  lines[#lines + 1] = { text = ab.name, color = C.cyan, gap = 0 }
+  lines[#lines + 1] = { text = ab.desc, color = C.paper }
+  if inf and inf.mods and #inf.mods > 0 and (inf.kind == "cat" or inf.kind == "box") then
+    local parts = {}
+    for _, m in ipairs(inf.mods) do parts[#parts + 1] = signed(m.amount) .. " " .. m.text end
+    lines[#lines + 1] = { text = table.concat(parts, ", ") .. " = " .. math.max(0, inf.paws) .. " Paws", color = C.green }
+  end
+  if inst and inst.level and inst.level > 1 then
+    lines[#lines + 1] = { text = cards.LEVEL_TITLES[inst.level] .. " (level " .. inst.level .. ")", color = C.pale }
+  end
+  return lines
+end
+
+function M.cardTooltip(def, inst, x, y)
+  local lines = M.cardLines(def, inst)
+  if inst and inst.xp and def.kind == "unit" then
+    local lvl = inst.level or 1
+    if lvl < 3 then lines[#lines + 1] = { text = "XP " .. (inst.xp or 0) .. "/" .. cards.XP_FOR_LEVEL[lvl + 1] .. " to the next level", color = C.pale } end
   end
   lines[#lines + 1] = { text = '"' .. def.flavor .. '"', color = C.muted }
-  widgets.infoBox(x, y, 150, lines)
+  widgets.infoBox(x, y, 190, lines)
 end
 
 return M

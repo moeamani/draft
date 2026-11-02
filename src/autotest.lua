@@ -10,17 +10,16 @@ local function step(delay, fn) M.steps[#M.steps + 1] = { delay = delay, fn = fn 
 local function tick(fn, shotAfter) M.steps[#M.steps + 1] = { delay = 0, tick = fn, shotAfter = shotAfter } end
 local function shot(name) M.pendingShot = name end
 
--- keep playing the best selection until the match scene is gone (or a time limit)
+-- keep playing suggested placements until the match scene is gone (or a time limit)
 local function autoMatch(limit)
   local elapsed = 0
   return function(dt)
     elapsed = elapsed + dt
     local sc = G.scene
     if G.sceneName ~= "match" then return true end
-    if not sc.animating and sc.lock <= 0 and not sc.finished then
-      local best = match.bestSelection(sc.s, 1, 0)
-      sc.selected = best.uids
-      sc:play()
+    if not sc.busy and not sc.finished then
+      sc.slots = match.suggest(sc.s, 1, 0)
+      sc:charge()
     end
     return limit and elapsed > limit
   end
@@ -50,16 +49,16 @@ function M.start(dir)
   step(0.2, function() G.go("vs", {}, true) end)
   step(1.6, function() shot("03_vs") end)
   step(0.2, function() G.go("match", {}, true) end)
-  step(1.0, function()
+  step(2.6, function()
     local sc = G.scene
-    local best = match.bestSelection(sc.s, 1, 0)
-    sc.selected = best.uids
-    local v = sc.hand[best.uids[1]]
-    if v then M.mx, M.my = v.x, v.y end
+    sc.slots = match.suggest(sc.s, 1, 0)
+    local hand = sc:handList()
+    local v = hand[1] and sc.views[hand[1].uid]
+    if v then M.mx, M.my = v.x, v.y - 10 end
   end)
-  step(0.8, function() shot("04_match_select"); M.mx = nil end)
-  step(0.1, function() G.scene:play() end)
-  step(2.2, function() shot("05_match_scoring") end)
+  step(0.8, function() shot("04_match_place"); M.mx = nil end)
+  step(0.1, function() G.scene:charge() end)
+  step(3.2, function() shot("05_match_duel") end)
   tick(autoMatch(), nil)
   tick(waitScene("result"), nil)
   step(1.0, function() shot("06_result") end)
@@ -92,7 +91,7 @@ function M.start(dir)
       guard = guard + 1
       local ctx = game.setupMatch(save)
       local s = ctx.state
-      while not s.over do match.commit(s, match.bestSelection(s, 1, 0).uids) end
+      while not s.over do match.commit(s, match.suggest(s, 1, 0)) end
       local out = game.resolveMatch(save, ctx)
       if out.won and ctx.nemesis then game.decideFate(save, ctx.nemesis, "brand") end
       game.afterMatch(save)

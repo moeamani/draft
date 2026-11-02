@@ -58,9 +58,11 @@ local function drawCat(W, H, o)
   local r = rngm.new(o.seed)
   local nx = function() return rngm.next(r) end
   local fur, furLight, furDark = FUR[o.coat][1], FUR[o.coat][2], FUR[o.coat][3]
-  vgrad(W, H, o.menace and C.black or C.ink3, C.ink)
-  local hc = o.menace and C.red or o.legendary and C.gold or (o.coat == "tide" and C.blue or o.coat == "ember" and C.red or o.coat == "gilt" and C.gold or C.cyan)
-  halo(W / 2, H * 0.45, W * 0.55, hc, 0.55)
+  if not o.cutout then
+    vgrad(W, H, o.menace and C.black or C.ink3, C.ink)
+    local hc = o.menace and C.red or o.legendary and C.gold or (o.coat == "tide" and C.blue or o.coat == "ember" and C.red or o.coat == "gilt" and C.gold or C.cyan)
+    halo(W / 2, H * 0.45, W * 0.55, hc, 0.55)
+  end
 
   local cx = W / 2 + (nx() - 0.5) * 4
   local cy = H * 0.5 + (nx() - 0.5) * 3
@@ -98,6 +100,7 @@ local function drawCat(W, H, o)
 
   local eyeCol = (o.menace or o.coat == "shadow") and C.red or (nx() < 0.5 and C.gold or C.cyan)
   local ey, ex = cy + 0.5, 6 + nx() * 1.2
+  o.eyes = { cx - ex, ey, cx + ex, ey, eyeCol }
   local sq = o.menace and 1.5 or 2.6
   ell(cx - ex, ey, 3.4, sq, eyeCol, o.menace and 0.35 or 0)
   ell(cx + ex, ey, 3.4, sq, eyeCol, o.menace and -0.35 or 0)
@@ -192,7 +195,7 @@ end
 local cache = {}
 
 -- Paint at a logical size (lw x lh), output at W x H real pixels, then dither 1:1.
-local function render(key, W, H, painter, lw, lh)
+local function render(key, W, H, painter, lw, lh, transparent)
   if cache[key] then return cache[key] end
   local raw = lg.newCanvas(W, H)
   local out = lg.newCanvas(W, H)
@@ -201,12 +204,12 @@ local function render(key, W, H, painter, lw, lh)
   lg.push("all")
   lg.origin()
   lg.setCanvas(raw)
-  lg.clear(0, 0, 0, 1)
+  lg.clear(0, 0, 0, transparent and 0 or 1)
   lg.scale(W / (lw or W), H / (lh or H))
   painter()
   lg.origin()
   lg.setCanvas(out)
-  lg.clear(0, 0, 0, 1)
+  lg.clear(0, 0, 0, transparent and 0 or 1)
   if shaders.dither then
     lg.setShader(shaders.dither)
     shaders.dither:send("pal", unpack(palette()))
@@ -222,7 +225,7 @@ local function render(key, W, H, painter, lw, lh)
   return out
 end
 
-M.CARD_W, M.CARD_H = 44, 32
+M.CARD_W, M.CARD_H = 50, 36
 
 function M.card(def)
   local key = "card:" .. def.id .. ":" .. (def.scars or 0)
@@ -238,34 +241,40 @@ function M.card(def)
 end
 
 -- size: output pixels (32, 48, 96...). The cat is always painted on a 64x64 logical grid.
+local eyes = {}
 function M.portrait(o, size)
   size = size or 48
-  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s:%d"):format(o.seed, o.coat, tostring(o.magic), o.ability, tostring(o.legendary), o.scars or 0, tostring(o.crown), tostring(o.menace), size)
-  return render(key, size, size, function() drawCat(64, 64, o) end, 64, 64)
+  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s:%d:%s"):format(o.seed, o.coat, tostring(o.magic), o.ability, tostring(o.legendary), o.scars or 0, tostring(o.crown), tostring(o.menace), size, tostring(o.cutout))
+  local img = render(key, size, size, function()
+    drawCat(64, 64, o)
+    local e, k = o.eyes, size / 64
+    eyes[key] = { e[1] * k, e[2] * k, e[3] * k, e[4] * k, e[5] }
+  end, 64, 64, o.cutout)
+  return img, eyes[key]
 end
 
-function M.nemesis(n, rank, size)
+function M.nemesis(n, rank, size, cutout)
   return M.portrait({ seed = n.seed, coat = n.coat, magic = n.style == "hex" or n.style == "inspire" or n.style == "groom",
-    ability = n.style, legendary = false, crown = rank == 1, scars = n.scars, menace = true }, size)
+    ability = n.style, legendary = false, crown = rank == 1, scars = n.scars, menace = true, cutout = cutout }, size)
 end
 
-function M.player(name, size)
-  return M.portrait({ seed = rngm.hash(name), coat = "gilt", magic = false, ability = "smite", legendary = false }, size)
+function M.player(name, size, cutout)
+  return M.portrait({ seed = rngm.hash(name), coat = "gilt", magic = false, ability = "smite", legendary = false, cutout = cutout }, size)
 end
 
-function M.stray(foe, size)
-  return M.portrait({ seed = foe.seed, coat = foe.coat, magic = false, ability = "none", legendary = false, menace = foe.elite }, size)
+function M.stray(foe, size, cutout)
+  return M.portrait({ seed = foe.seed, coat = foe.coat, magic = false, ability = "none", legendary = false, menace = foe.elite, cutout = cutout }, size)
 end
 
--- Portrait for any festival entrant.
-function M.entrant(save, e, size)
-  if e.kind == "player" then return M.player(save.playerName, size) end
+-- Portrait for any festival entrant. cutout: no backdrop, just the cat (for looming over the table).
+function M.entrant(save, e, size, cutout)
+  if e.kind == "player" then return M.player(save.playerName, size, cutout) end
   if e.kind == "hand" then
     local game = require("src.core.game")
     local n = game.findNemesis(save, e.id)
-    if n then return M.nemesis(n, game.rankOf(save, n), size) end
+    if n then return M.nemesis(n, game.rankOf(save, n), size, cutout) end
   end
-  return M.stray(e.foe or { seed = e.seed or 1, coat = e.coat or "shadow" }, size)
+  return M.stray(e.foe or { seed = e.seed or 1, coat = e.coat or "shadow" }, size, cutout)
 end
 
 -- Turn a smooth image (Figma export) into crisp palette pixels at the given width.

@@ -82,6 +82,10 @@ S.paw = {
   ".kk...kk.", "kxxk.kxxk", ".kk.k.kk.", "...kxk...", ".kkxxxkk.", "kxxxxxxxk", "kxxxxxxxk", ".kxxxxxk.", "..kkkkk.." }
 S.shield = {
   "kkkkkkkkk", "kxwxxxxxk", "kxwxxxxxk", "kxxxxxxxk", "kxxxxxxdk", ".kxxxxdk.", "..kxxdk..", "...kdk...", "....k...." }
+S.goblet = {
+  "kkkkkkkkk", "kwwxxxxdk", "kwxxxxxdk", "kxxxxxxdk", ".kxxxxdk.", "..kxxdk..", "...kxk...", "...kxk...", "..kxxxk..", ".kxxxxdk.", ".kkkkkkk." }
+S.zzz = {
+  "kkkkk....", "kwwwk....", "kkwkk....", ".kwk.kkkk", "kwkkkkwwk", "kwwwkkkwk", "kkkkkkwkk", ".....kwwk", ".....kkkk" }
 S.dagger = S.sword
 S.market, S.shrine, S.training = S.fish, S.star, S.shield
 

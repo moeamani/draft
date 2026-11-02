@@ -92,7 +92,7 @@ function M.signatureCard(n)
   local magic = n.style == "hex" or n.style == "inspire" or n.style == "groom"
   return {
     _def = true, id = "sig_" .. n.id, name = n.name, kind = "unit", type = magic and "magic" or "physical",
-    power = 7 + n.level * 2, ability = n.style, rarity = "legendary", coat = n.coat,
+    power = math.min(11, 6 + n.level), ability = n.style, rarity = "legendary", coat = n.coat,
     flavor = M.fullName(n) .. ". " .. (n.losses > 0 and "Bears the scars of your claws." or "Undefeated in the Arena."),
     signature = n.id, artSeed = n.seed, scars = n.scars,
   }

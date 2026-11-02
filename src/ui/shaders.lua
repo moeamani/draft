@@ -1,4 +1,5 @@
--- All GLSL effects: animated swirl backdrop, CRT post-process, legendary foil, dissolve, dither, transitions.
+-- All GLSL effects: the candle-lit table backdrop, the screen pass (lamplight or CRT), legendary foil,
+-- dissolve, dither, transitions.
 local lg = love.graphics
 
 local M = {}
@@ -21,80 +22,93 @@ float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 4; i++) { 
 
 M.src = {}
 
-M.src.background = BAYER .. [[
+-- The shared backdrop: a dark room and a green baize card table under one flickering candle.
+-- Everything is computed per virtual pixel and the light is quantised with ordered dithering,
+-- so the lighting has the same chunky pixel grain as the art. horizon > 0 draws the table in
+-- perspective (its far edge at that height); horizon <= 0 is a flat table top filling the screen.
+M.src.table = BAYER .. [[
+// @emu table
 extern float time;
 extern vec2 res;
-extern vec3 colA;
-extern vec3 colB;
-extern vec3 colC;
-extern float spin;
 extern float pix;
-vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
-  vec2 p = floor(sc / pix) * pix;
-  vec2 c = (p - res * 0.5) / res.y;
-  float r = length(c);
-  float a = atan(c.y, c.x) + spin / (r + 0.4) + time * 0.04;
-  vec2 q = vec2(cos(a), sin(a)) * r * 2.2;
-  for (int i = 0; i < 4; i++) {
-    float fi = float(i);
-    q += 0.32 * vec2(sin(q.y * 2.3 + time * 0.21 + fi * 1.3), cos(q.x * 2.1 - time * 0.17 + fi * 2.1));
+extern float horizon;
+extern vec2 light;
+extern float radius;
+extern float power;
+extern vec3 felt[5];
+extern vec3 wood[4];
+extern vec3 voidc[3];
+float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// constant indexing only, for older GLSL
+vec3 feltAt(float k) { if (k < 0.5) return felt[0]; if (k < 1.5) return felt[1]; if (k < 2.5) return felt[2]; if (k < 3.5) return felt[3]; return felt[4]; }
+vec3 woodAt(float k) { if (k < 0.5) return wood[0]; if (k < 1.5) return wood[1]; if (k < 2.5) return wood[2]; return wood[3]; }
+vec3 voidAt(float k) { if (k < 0.5) return voidc[0]; if (k < 1.5) return voidc[1]; return voidc[2]; }
+vec4 effect(vec4 color, Image tex, vec2 uv0, vec2 sc) {
+  vec2 V = res / pix;
+  vec2 vp = floor(sc / pix);
+  vec2 uv = (vp + 0.5) / V;
+  float b = bayer4(vp) - 0.5;
+  float flick = 0.035 * sin(time * 7.3) + 0.025 * sin(time * 13.1 + 1.7) + 0.015 * sin(time * 23.0 + 0.4);
+  vec2 d = (uv - light) * vec2(V.x / V.y, 1.0);
+  float L = clamp(power * (1.0 - smoothstep(0.0, radius, length(d))) + flick, 0.0, 1.0);
+  if (horizon > 0.0 && uv.y < horizon) {
+    float spill = L * smoothstep(horizon - 0.22, horizon, uv.y) * 0.9;
+    return vec4(voidAt(clamp(floor(spill * 3.0 + b), 0.0, 2.0)), 1.0) * color;
   }
-  float v = 0.5 + 0.5 * sin(q.x * 2.4 + q.y * 1.7);
-  float w = 0.5 + 0.5 * sin(length(q) * 3.2 - time * 0.35);
-  float d = (bayer4(sc / pix) - 0.5) * 0.18;
-  vec3 col = mix(colA, colB, step(0.55, v + d));
-  col = mix(col, colC, step(0.86, w + d) * 0.85);
-  col *= 1.0 - 0.45 * r * r;
-  return vec4(col, 1.0) * color;
+  float t = horizon > 0.0 ? (uv.y - horizon) / (1.0 - horizon) : 1.0;
+  float halfw = horizon > 0.0 ? mix(0.33, 0.78, t) : 10.0;
+  float u = (uv.x - 0.5) / halfw;
+  if (abs(u) > 1.0) {
+    return vec4(voidAt(clamp(floor(L * 0.8 * 3.0 + b), 0.0, 1.0)), 1.0) * color;
+  }
+  float depth = horizon > 0.0 ? 1.0 / (t + 0.12) : uv.y * 8.0;
+  bool rim = horizon > 0.0 && (abs(u) > 0.93 || uv.y < horizon + 0.022);
+  if (rim) {
+    float grain = abs(u) > 0.93 ? sin(depth * 9.0 + h21(vec2(floor(u * 30.0), 0.0)) * 6.0) : sin(uv.x * 140.0 + sin(uv.x * 23.0) * 2.0);
+    float lit = L * 3.2 + grain * 0.35 + b;
+    if (abs(u) < 0.93 && uv.y > horizon + 0.017) lit -= 1.0;
+    return vec4(woodAt(clamp(floor(lit), 0.0, 3.0)), 1.0) * color;
+  }
+  float nap = (h21(vec2(floor(u * 90.0), floor(depth * 14.0))) - 0.5) * 0.35;
+  return vec4(feltAt(clamp(floor(L * 4.6 + b + nap), 0.0, 4.0)), 1.0) * color;
 }
 ]]
 
-M.src.crt = [[
+-- The screen pass. mode 0: lamplight (soft vignette and film grain, text stays crisp).
+-- mode 1: CRT (scanlines, slight curve and colour split).
+M.src.post = [[
+// @emu post
 extern vec2 res;
 extern float time;
-extern float strength;
+extern float mode;
 extern float curvature;
 extern float flash;
 extern float rows;
 vec2 curve(vec2 uv) {
-  // gentle barrel: curvature 1.0 is a mild tube, 0.0 is flat
   uv = uv * 2.0 - 1.0;
   vec2 off = abs(uv.yx) * vec2(0.11, 0.14) * curvature;
   uv = uv + uv * off * off;
   return uv * 0.5 + 0.5;
 }
 vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
-  vec2 cuv = curve(uv);
+  vec2 cuv = mode > 0.5 ? curve(uv) : uv;
   if (cuv.x < 0.0 || cuv.x > 1.0 || cuv.y < 0.0 || cuv.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);
-  vec2 px = 1.0 / res;
-  float ca = 1.0 * px.x * strength;
   vec3 col;
-  col.r = Texel(tex, cuv + vec2(ca, 0.0)).r;
-  col.g = Texel(tex, cuv).g;
-  col.b = Texel(tex, cuv - vec2(ca, 0.0)).b;
-  vec3 glow = vec3(0.0);
-  glow += Texel(tex, cuv + vec2(3.0, 0.0) * px).rgb;
-  glow += Texel(tex, cuv - vec2(3.0, 0.0) * px).rgb;
-  glow += Texel(tex, cuv + vec2(0.0, 3.0) * px).rgb;
-  glow += Texel(tex, cuv - vec2(0.0, 3.0) * px).rgb;
-  glow += Texel(tex, cuv + vec2(5.0, 5.0) * px).rgb;
-  glow += Texel(tex, cuv - vec2(5.0, 5.0) * px).rgb;
-  glow += Texel(tex, cuv + vec2(5.0, -5.0) * px).rgb;
-  glow += Texel(tex, cuv - vec2(5.0, -5.0) * px).rgb;
-  glow /= 8.0;
-  col += max(glow - 0.55, 0.0) * 0.5 * strength;
-  // one scanline per virtual pixel row
-  float scan = 0.5 + 0.5 * cos(cuv.y * rows * 6.28318);
-  col *= mix(1.0, 0.9 + 0.1 * scan, strength);
-  float m = mod(sc.x, 3.0);
-  vec3 mask = vec3(m < 1.0 ? 1.0 : 0.96, (m >= 1.0 && m < 2.0) ? 1.0 : 0.96, m >= 2.0 ? 1.0 : 0.96);
-  col *= mix(vec3(1.0), mask, strength);
+  if (mode > 0.5) {
+    float ca = 1.0 / res.x;
+    col.r = Texel(tex, cuv + vec2(ca, 0.0)).r;
+    col.g = Texel(tex, cuv).g;
+    col.b = Texel(tex, cuv - vec2(ca, 0.0)).b;
+    float scan = 0.5 + 0.5 * cos(cuv.y * rows * 6.28318);
+    col *= 0.9 + 0.1 * scan;
+  } else {
+    col = Texel(tex, cuv).rgb;
+  }
   vec2 v = cuv * (1.0 - cuv.yx);
-  float vig = pow(clamp(v.x * v.y * 30.0, 0.0, 1.0), 0.18);
-  col *= mix(1.0, vig, strength * 0.8);
+  float vig = pow(clamp(v.x * v.y * 22.0, 0.0, 1.0), 0.3);
+  col *= mix(1.0, vig, 0.55);
   float n = fract(sin(dot(sc + vec2(time * 37.0, time * 11.0), vec2(12.9898, 78.233))) * 43758.5453);
-  col += (n - 0.5) * 0.035 * strength;
-  col *= 1.0 + 0.012 * sin(time * 50.0) * strength;
+  col += (n - 0.5) * 0.03;
   col += flash;
   return vec4(col, 1.0);
 }
@@ -142,7 +156,7 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
     float dist = dot(d * d, vec3(0.3, 0.59, 0.11));
     if (dist < bd) { bd = dist; best = pal[i]; }
   }
-  return vec4(best, 1.0);
+  return vec4(best, step(0.5, c.a));
 }
 ]]
 

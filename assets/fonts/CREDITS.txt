@@ -1,7 +1,12 @@
 All fonts are from Google Fonts and licensed under the SIL Open Font License 1.1 (https://openfontlicense.org).
+Every font is drawn at its native pixel size, so all text shares the art's pixel grid.
 
-Jacquard12-Regular.ttf  https://fonts.google.com/specimen/Jacquard+12   (titles)
-Tiny5-Regular.ttf       https://fonts.google.com/specimen/Tiny5         (UI text)
-Jersey10-Regular.ttf    https://fonts.google.com/specimen/Jersey+10     (numbers, buttons)
+Jacquard24-Regular.ttf  https://fonts.google.com/specimen/Jacquard+24   (titles, 24px)
+Jacquard12-Regular.ttf  https://fonts.google.com/specimen/Jacquard+12   (small decorative titles, 12px)
+Jersey15-Regular.ttf    https://fonts.google.com/specimen/Jersey+15     (body text, 15px)
+Jersey20-Regular.ttf    https://fonts.google.com/specimen/Jersey+20     (buttons, names, numbers, 20px)
+Jersey25-Regular.ttf    https://fonts.google.com/specimen/Jersey+25     (big numbers, 25px)
+Jersey10-Regular.ttf    https://fonts.google.com/specimen/Jersey+10     (small text on cards, 10px)
+Tiny5-Regular.ttf       https://fonts.google.com/specimen/Tiny5         (short all-caps labels, 8px)
 
 The "Draft" logo artwork (assets/img) comes from the project's Figma file and uses Ancizar Serif.

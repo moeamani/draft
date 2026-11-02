@@ -103,8 +103,24 @@ function M.wavy(str, font, cx, y, col, t, amp, opts)
   end
 end
 
+-- Short all-caps label (section headings, small tags).
 function M.label(str, x, y, col, align)
-  return M.text(str:upper(), theme.T.tiny(), x, y, col or C.pale, { align = align })
+  return M.text(str:upper(), theme.T.label(), x, y, col or C.pale, { align = align })
+end
+
+-- A parchment note lying on the table: warm paper, dark ink, torn-looking dark edge.
+function M.paper(x, y, w, h, opts)
+  opts = opts or {}
+  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
+  M.box(x + 1, y + 2, w, h, C.black, 0.5)
+  M.box(x, y, w, h, C.parchDark)
+  M.box(x + 1, y + 1, w - 2, h - 2, C.parch)
+  theme.set(C.paper)
+  lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
+  if opts.pin then
+    M.box(x + floor(w / 2) - 2, y - 1, 5, 5, C.black)
+    M.box(x + floor(w / 2) - 1, y, 3, 3, opts.pin)
+  end
 end
 
 -- Horizontal bar (Pride, progress).
@@ -122,16 +138,18 @@ function M.bar(x, y, w, h, frac, col, back)
   end
 end
 
+M.CHIP_H = 13
 function M.chip(str, x, y, kind)
-  local font = theme.T.tiny()
-  local w = font:getWidth(str) + 6
+  local font = theme.T.small()
+  local w = font:getWidth(str) + 8
   local bg, fg
   if kind == "strength" then bg, fg = C.redDark, C.paper
   elseif kind == "weakness" then bg, fg = theme.hex("#1f6b45"), C.paper
-  else bg, fg = C.deep, C.muted end
-  M.box(x, y, w, 10, C.black)
-  M.box(x + 1, y + 1, w - 2, 8, bg)
-  M.text(str, font, x + 3, y + 1, fg, { shadow = false })
+  elseif kind == "gold" then bg, fg = C.goldDark, C.paper
+  else bg, fg = C.ink2, C.paper2 end
+  M.box(x, y, w, M.CHIP_H, C.black)
+  M.box(x + 1, y + 1, w - 2, M.CHIP_H - 2, bg)
+  M.text(str, font, x + 4, y + 1, fg, { shadow = false })
   return w
 end
 
