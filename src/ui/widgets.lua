@@ -128,10 +128,12 @@ end
 function M.tooltip(fn) M.tooltipFn = fn end
 function M.drawTooltip() if M.tooltipFn then M.tooltipFn() end end
 
--- lines: { {text=, font=, color=, gap=} ... }
-function M.infoBox(x, y, w, lines)
+-- lines: { {text=, font=, color=, gap=} ... }; img (optional): a picture shown above the text
+function M.infoBox(x, y, w, lines, img)
   local pad = 6
   local h = pad
+  local iw, ih = 0, 0
+  if img then iw, ih = img:getDimensions(); h = h + ih + 4 end
   local hs = {}
   for i, l in ipairs(lines) do
     local font = l.font or theme.T.body()
@@ -143,6 +145,12 @@ function M.infoBox(x, y, w, lines)
   y = math.floor(math.max(2, math.min(theme.H - h - 2, y)))
   gfx.panel(x, y, w, h, C.deep)
   local cy = y + pad
+  if img then
+    local ix = math.floor(x + (w - iw) / 2)
+    gfx.box(ix - 1, cy - 1, iw + 2, ih + 2, C.black)
+    require("src.ui.plates").draw(img, ix, cy)
+    cy = cy + ih + 4
+  end
   for i, l in ipairs(lines) do
     gfx.textf(l.text, l.font or theme.T.body(), x + pad, cy, w - pad * 2, l.align or "left", l.color or C.paper, { shadow = l.shadow })
     cy = cy + hs[i]

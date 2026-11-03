@@ -38,6 +38,24 @@ function M.newSave(playerName, seed)
   return save
 end
 
+-- The Cattery: every card the player has owned or seen face up.
+function M.noteSeen(save, id)
+  if not cards.CARDS[id] then return end
+  save.seen = save.seen or {}
+  save.seen[id] = true
+end
+function M.noteDeck(save)
+  if save.run then for _, c in ipairs(save.run.deck) do M.noteSeen(save, c.id) end end
+end
+function M.seenCount(save)
+  local n, total = 0, 0
+  for _, d in ipairs(cards.DRAFTABLE) do
+    total = total + 1
+    if save.seen and save.seen[d.id] then n = n + 1 end
+  end
+  return n, total
+end
+
 function M.findNemesis(save, id)
   for _, n in ipairs(save.hands) do if n.id == id then return n end end
   for _, n in ipairs(save.fallen) do if n.id == id then return n end end
@@ -74,7 +92,7 @@ function M.startRun(save)
   save.runs = save.runs + 1
   local run = {
     rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, fish = 25, deck = {}, charms = {},
-    phase = "hub", stallUsed = false, nextGoblets = 0, uidc = 0,
+    phase = "hub", stallUsed = false, nextGoblets = 0, uidc = 0, cushions = { false, false, false },
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
   M.dealStarterDeck(run)
@@ -174,10 +192,11 @@ function M.setupMatch(save)
   end
   -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra goblets
   if tier >= 5 then em.goblets = em.goblets + 1 end
-  if n then em.goblets = em.goblets + math.floor(n.level / 4) end
+  if n then em.goblets = em.goblets + math.floor(n.level / 5) end
   local style = match.STYLES[personality] or match.STYLES.default
-  local state = match.create({ name = save.playerName, deck = run.deck, mods = pm }, { name = opp.name, deck = deck, mods = em },
-    rng.int(run.rng, 1e9) + 1, style)
+  local state = match.create({ name = save.playerName, deck = run.deck, mods = pm, cushions = run.cushions },
+    { name = opp.name, deck = deck, mods = em, cushions = n and M.handCushions(n) or nil },
+    rng.int(run.rng, 1e9) + 1, style, festival.omen(f))
   return { opp = opp, nemesis = n, state = state, personality = personality, spyglass = spyglass, stage = f.stage, tier = tier }
 end
 
@@ -340,8 +359,36 @@ end
 M.CARD_PRICE = { common = 14, rare = 28, epic = 48, legendary = 85 }
 M.REMOVE_PRICE, M.UPGRADE_PRICE = 20, 25
 
+-- The Hands upholster their own cushions as they rise: one at level 5, two at level 7.
+function M.handCushions(n)
+  local out = { false, false, false }
+  local count = (n.level >= 7 and 2) or (n.level >= 5 and 1) or 0
+  local r = rng.new((n.seed or 1) * 7 + 3)
+  local order = { 2, 1, 3 }
+  for k = 1, count do out[order[k]] = rng.pick(r, match.CUSHION_ORDER) end
+  return out
+end
+
+M.CUSHION_PRICE = 30
+
+-- Upholster one of the player's cushions for the rest of the festival.
+function M.upholster(run, slot, kind)
+  run.cushions = run.cushions or { false, false, false }
+  run.cushions[slot] = kind
+end
+
 function M.makeMarket(run)
   local stock = { cards = {}, charms = {}, removed = false, upgraded = false }
+  -- the upholsterer offers one cushion a visit (never one you already have)
+  local offers = {}
+  local have = run.cushions or {}
+  for slot = 1, 3 do
+    for _, kind in ipairs(match.CUSHION_ORDER) do
+      if have[slot] ~= kind then offers[#offers + 1] = { slot = slot, kind = kind } end
+    end
+  end
+  stock.cushion = rng.pick(run.rng, offers)
+  stock.cushion.price = M.CUSHION_PRICE
   for _, id in ipairs(M.rollCards(run.rng, 4, festival.tier(run.festival) >= 4 and 2 or 1)) do
     stock.cards[#stock.cards + 1] = { id = id, price = M.CARD_PRICE[cards.CARDS[id].rarity], sold = false }
   end

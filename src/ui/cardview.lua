@@ -39,18 +39,21 @@ local function begin(cv)
   lg.clear(0, 0, 0, 0)
 end
 
--- Face layout: rarity frame, art window, then three plates: name (ink), ability (blue), coat.
+-- Face layout: the rarity frame, a 50x48 illustration, then two plates: the name on its coat's
+-- colour (so the coat reads at a glance) and the ability. A type badge sits on the art.
 local function renderFace(def, level)
   local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
   if faceCache[key] then return faceCache[key] end
   local W, H = M.W, M.H
+  local unit = def.kind == "unit"
+  local coat = unit and cards.COATS[def.coat] or nil
   -- build the plates before switching canvases (they bake into their own canvases)
-  local namePlate = plates.plate(W - 6, 12, C.ink, { outline = false, light = 0.1 })
-  local abilCol = def.kind == "special" and C.ink3 or (def.ability == "none" and theme.hex("#3b4a5e") or C.blue)
+  local nameCol = unit and coat.color or C.ink3
+  local namePlate = plates.plate(W - 6, 12, nameCol, { outline = false, light = 0.16 })
+  local abilCol = not unit and C.ink2 or (def.ability == "none" and theme.hex("#3b4a5e") or C.blue)
   local abilPlate = plates.plate(W - 6, 11, abilCol, { outline = false, light = 0.14 })
-  local coatCol = def.kind == "unit" and cards.COATS[def.coat].color or C.ink2
-  local coatPlate = plates.plate(W - 6, 11, coatCol, { outline = false, light = 0.14 })
   local frame = plates.plate(W, H, rarityCol(def), { outline = C.black, light = 0.25 })
+  local pic = art.card(def)
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
   begin(cv)
@@ -59,27 +62,27 @@ local function renderFace(def, level)
   theme.set(C.black)
   lg.rectangle("fill", 2, 2, W - 4, H - 4)
   lg.setColor(1, 1, 1)
-  lg.draw(art.card(def), 3, 3)
-  lg.draw(namePlate, 3, 40)
-  lg.draw(abilPlate, 3, 53)
-  lg.draw(coatPlate, 3, 65)
+  lg.draw(pic, 3, 3)
+  lg.draw(namePlate, 3, 52)
+  lg.draw(abilPlate, 3, 65)
   local f10 = theme.T.small()
-  gfx.text(fit(f10, cards.shortName(def), W - 8), f10, W / 2, 40, C.paper, { align = "center", shadow = false })
+  local dark = unit and def.coat == "gilt"
+  gfx.text(fit(f10, cards.shortName(def), W - 8), f10, W / 2, 52, dark and C.black or (unit and C.white or C.cyan), { align = "center", shadow = false })
   local label = M.SHORT[def.ability] or ""
   local lw = f10:getWidth(label) + 11
   local lx = math.floor(W / 2 - lw / 2)
-  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 58, C.white)
-  gfx.text(label, f10, lx + 10, 53, C.white, { shadow = false })
-  if def.kind == "unit" then
-    local coat = cards.COATS[def.coat]
-    local dark = def.coat == "gilt"
-    icons.draw(def.type == "magic" and "orb" or "sword", 10, 70, C.white)
-    gfx.text(coat.name:upper(), f10, W / 2 + 4, 65, dark and C.black or C.white, { align = "center", shadow = false })
-  else
-    gfx.text("TRICK", f10, W / 2, 65, C.cyan, { align = "center", shadow = false })
+  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 70, C.white)
+  gfx.text(label, f10, lx + 10, 65, C.white, { shadow = false })
+  if unit then
+    -- type badge: sword for Physical, orb for Magic
+    theme.set(C.black)
+    lg.rectangle("fill", W - 15, 3, 12, 12)
+    theme.set(C.night)
+    lg.rectangle("fill", W - 14, 4, 10, 10)
+    icons.draw(def.type == "magic" and "orb" or "sword", W - 9, 9, def.type == "magic" and C.cyan or C.paper)
   end
   if level > 1 then
-    for i = 1, level - 1 do icons.draw("star", W - 9 - (i - 1) * 8, 9, C.gold) end
+    for i = 1, level - 1 do icons.draw("star", W - 9 - (i - 1) * 8, 46, C.gold) end
   end
   lg.pop()
   faceCache[key] = cv

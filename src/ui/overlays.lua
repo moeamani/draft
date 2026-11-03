@@ -238,9 +238,80 @@ function M.standings(f)
   G.openOverlay(ov)
 end
 
+-- ---------------------------------------------------------------- the Cattery
+
+-- Every cat and trick you've owned or seen face up, with its illustration, story and bonds.
+function M.cattery()
+  local game = require("src.core.game")
+  local art = require("src.ui.art")
+  local list = cards.DRAFTABLE
+  local ov = { sel = nil }
+  local COLS, CW, CH = 9, 53, 51
+  local GX, GY = 16, 44
+  function ov:draw()
+    local save = G.save
+    local seen = (save and save.seen) or {}
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Cattery")
+    local n, total = save and game.seenCount(save) or 0, #list
+    gfx.text(("%d of %d found"):format(n, total), T.body(), 250, 13, C.paper)
+    local hover
+    for i, d in ipairs(list) do
+      local col, row = (i - 1) % COLS, math.floor((i - 1) / COLS)
+      local x, y = GX + col * CW, GY + row * CH
+      local clicked, over = widgets.click("cat_" .. d.id, x, y, 50, 48)
+      if over then hover = d end
+      if clicked then self.sel = d end
+      local known = seen[d.id]
+      gfx.box(x - 1, y - 1, 52, 50, (self.sel == d or over) and C.gold or (d.rarity == "legendary" and C.goldDark or C.black))
+      if known then
+        plates.draw(art.card(d), x, y)
+      else
+        gfx.box(x, y, 50, 48, C.deep)
+        plates.print("?", 26, x + 25, y + 6, C.ink3, { align = "center" })
+      end
+    end
+    -- the detail page
+    local d = hover or self.sel
+    local px, py, pw = 498, 40, 126
+    gfx.panel(px, py, pw, 304, C.deep)
+    if not d then
+      gfx.textf("Every cat and trick you own, or see face up across the table, joins the Cattery. Hover one to read its story.", T.body(), px + 6, py + 6, pw - 12, "left", C.paper2)
+      local found = 0
+      for _, b in ipairs(cards.BONDS) do if seen[b[1]] and seen[b[2]] then found = found + 1 end end
+      gfx.text(("Bonds found: %d of %d"):format(found, #cards.BONDS), T.body(), px + 6, py + 120, C.gold)
+      return
+    end
+    if not seen[d.id] then
+      gfx.textf("Not found yet. Win it as a reward, buy it at the market, or meet it in a match.", T.body(), px + 6, py + 6, pw - 12, "left", C.paper2)
+      return
+    end
+    local pic = art.illustration(d)
+    local iw = pic:getWidth()
+    gfx.box(px + (pw - iw) / 2 - 1, py + 4, iw + 2, 98, C.black)
+    plates.draw(pic, px + (pw - iw) / 2, py + 5)
+    local y = py + 104
+    local size = plates.textWidth(d.name, 16) <= pw - 10 and 16 or 13
+    plates.print(d.name, size, px + 6, y, d.rarity == "legendary" and C.gold or C.white)
+    y = y + 20
+    local function line(t, c) y = y + gfx.textf(t, T.body(), px + 6, y, pw - 12, "left", c or C.paper) + 2 end
+    if d.kind == "unit" then
+      local coat = cards.COATS[d.coat]
+      line(d.power .. " Paws, " .. coat.name .. " coat", coat.color)
+    else
+      line("Trick, " .. d.rarity, C.muted)
+    end
+    line(cards.ABILITIES[d.ability].name, C.cyan)
+    for _, b in ipairs(cards.bondsOf(d.id)) do
+      line("Bond: " .. cards.CARDS[b[1]].name .. (seen[b[1]] and "" or " (not found)"), C.gold)
+    end
+    line('"' .. d.flavor .. '"', C.muted)
+  end
+  G.openOverlay(ov)
+end
+
 -- ---------------------------------------------------------------- rules
 
-local TABS = { "Bouts", "Cats", "Tricks", "Festival" }
+local TABS = { "Bouts", "Cats", "Tricks", "Bonds", "Festival" }
 local CAT_ABILITIES = { "none", "smite", "inspire", "hex", "litter", "pounce", "ninelives", "stray", "groom", "purr", "yowl", "muster" }
 local TRICKS = { "sunbeam", "box", "hairball", "downpour", "moonfog", "warhorn" }
 
@@ -249,7 +320,7 @@ function M.help()
   function ov:draw()
     M.frame(8, 8, theme.W - 16, theme.H - 16, "How to play")
     for i, name in ipairs(TABS) do
-      if widgets.button("h_t" .. i, 250 + (i - 1) * 82, 11, 78, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
+      if widgets.button("h_t" .. i, 236 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
     end
     local x, y, w = 20, 46, 600
     local function para(t, col) y = y + gfx.textf(t, T.body(), x, y, w, "left", col or C.paper) + 5 end
@@ -277,6 +348,7 @@ function M.help()
       para("The two cards on each cushion duel. The higher Paws wins and swats a goblet off the loser's side of the table. A cat facing an empty cushion or a trick walks in unopposed and swats too. Ties go to the leader.")
       para("Coat edge: Ember beats Gilt, Gilt beats Tide, Tide beats Ember. The winning coat gets +" .. match.COAT_EDGE .. " Paws. Shadow has no edge either way.")
       para("Knock every goblet off the rival's side to win the match.", C.gold)
+
     elseif self.tab == 2 then
       head("Cat abilities")
       list(CAT_ABILITIES, 2)
@@ -284,6 +356,18 @@ function M.help()
       head("Tricks")
       para("Tricks sit on a cushion but never duel (except the Box), so the cat facing one walks in unopposed unless the trick stops it.", C.paper2)
       list(TRICKS, 2)
+    elseif self.tab == 4 then
+      head("Bonds")
+      para("These pairs from the old stories get +" .. cards.BOND_PAWS .. " Paws each when they sit on cushions side by side. A gold link shows it. The rival's cats bond too.", C.paper2)
+      local colW = math.floor(w / 3)
+      for i, b in ipairs(cards.BONDS) do
+        local c, r = (i - 1) % 3, math.floor((i - 1) / 3)
+        gfx.text(cards.shortName(cards.CARDS[b[1]]) .. " + " .. cards.shortName(cards.CARDS[b[2]]), T.body(), x + c * colW, y + r * 16, C.gold)
+      end
+      y = y + math.ceil(#cards.BONDS / 3) * 16 + 6
+      head("Cushions and omens")
+      para("The market's upholsterer sells Velvet (+1 Paw), Thistle (the rival cat facing it loses 1) and Silk (you win ties there). They last the whole festival. The Hands bring their own as they rise.")
+      para("Every festival has an omen, a rule twist for all its matches: Midsummer Sun (Ember cats +1), Long Naps (ties go to the side that answers) and more. It's shown on the festival grounds.")
     else
       head("The festival")
       para("16 cats enter. You play 3 group matches: a win is worth 3 points, and goblet difference breaks ties. The top 2 of each group reach the knockouts: quarter-final, semi-final, final. Lose a knockout and you're out.")
@@ -310,7 +394,8 @@ function M.pause()
     local y = 100
     local bx, bw = 226, 188
     if widgets.button("p_resume", bx, y, bw, 28, "Resume", { color = C.red }) then G.closeOverlay() end
-    if widgets.button("p_help", bx, y + 34, bw, 28, "How to play") then M.help() end
+    if widgets.button("p_help", bx, y + 34, bw / 2 - 2, 28, "Rules") then M.help() end
+    if widgets.button("p_cattery", bx + bw / 2 + 2, y + 34, bw / 2 - 2, 28, "Cattery") then M.cattery() end
     if widgets.button("p_crt", bx, y + 68, bw, 28, "Screen: " .. G.screenLabel()) then G.cycleScreen() end
     local sfx = require("src.ui.sfx")
     if widgets.button("p_snd", bx, y + 102, bw, 28, "Sound: " .. (sfx.muted and "off" or "on")) then

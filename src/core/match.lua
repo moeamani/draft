@@ -16,6 +16,15 @@ M.GOBLETS = 7
 M.MAX_BOUTS = 12
 M.COAT_EDGE = 3
 
+-- Cushion upholstery, bought at the market and kept for the festival (the Hands bring their own).
+M.CUSHION_KINDS = {
+  velvet = { name = "Velvet", desc = "The cat on it gets +1 Paw." },
+  thistle = { name = "Thistle", desc = "The rival cat facing it loses 1 Paw." },
+  silk = { name = "Silk", desc = "You win ties on this cushion." },
+}
+M.CUSHION_ORDER = { "velvet", "thistle", "silk" }
+M.CUSHION_NAMES = { "Left", "Middle", "Right" }
+
 local N = M.CUSHIONS
 local function other(i) return 3 - i end
 M.other = other
@@ -27,15 +36,19 @@ local function newSide(setup)
     counts[c.id] = (counts[c.id] or 0) + 1
   end
   local mods = setup.mods or traits.baseMods()
-  local g = math.max(1, M.GOBLETS + mods.goblets)
+  local omen = setup.omen or {}
+  local g = math.max(1, M.GOBLETS + mods.goblets + (omen.goblets or 0))
+  local cushions = {}
+  for i = 1, M.CUSHIONS do cushions[i] = setup.cushions and setup.cushions[i] or false end
   return {
     name = setup.name, deck = deck, discard = {}, hand = {}, mods = mods, goblets = g, maxGoblets = g,
+    cushions = cushions, omenHand = omen.hand or 0,
     nineUsed = {}, counts = counts, vengeance = false, secondWindUsed = false, boutsWon = 0, duelsWon = 0,
     scored = {}, placed = { false, false, false }, shown = {},
   }
 end
 
-local function handSize(sd) return util.clamp(M.HAND + sd.mods.handSize, 3, 8) end
+local function handSize(sd) return util.clamp(M.HAND + sd.mods.handSize + (sd.omenHand or 0), 3, 8) end
 M.handSize = handSize
 
 local function drawOne(s, sd)
@@ -74,6 +87,14 @@ end
 
 local function beats(a, b) return a and b and cards.COATS[a] and cards.COATS[a].beats == b end
 M.beats = beats
+
+-- The coat edge this match (an omen can sharpen it), and who wins plain ties.
+function M.edge(s) return M.COAT_EDGE + (s.omen and s.omen.edge or 0) end
+function M.tiesTo(s, lead)
+  lead = lead or s.lead
+  if s.omen and s.omen.tiesToAnswer then return other(lead) end
+  return lead
+end
 
 -- The coat that beats `c` (for the Cardboard Box).
 local function counterOf(c)
@@ -158,6 +179,18 @@ local function compute(s, P, lead, soft)
         if m.catnip and lead ~= si then add(si, i, 1, "Catnip", "charm:catnip") end
         if m.tally and sd.boutsWon > 0 then add(si, i, math.min(3, sd.boutsWon), "Tally", "charm:tally") end
         if m.lazy and s.bout == 1 then add(si, i, -2, "Lazy", "trait:lazy") end
+        if s.omen and s.omen.coat == d.coat then add(si, i, s.omen.bonus or 1, s.omen.short, "omen") end
+        if sd.cushions[i] == "velvet" then add(si, i, 1, "Velvet", "cushion:velvet") end
+      end
+    end
+    -- Bonds: named pairs sitting side by side
+    for i = 1, N - 1 do
+      local a, b = I[i], I[i + 1]
+      if a.kind == "cat" and b.kind == "cat" and cards.bonded(a.def.id, b.def.id) then
+        add(si, i, cards.BOND_PAWS, "Bond", "bond")
+        add(si, i + 1, cards.BOND_PAWS, "Bond", "bond")
+        rec.bonds = rec.bonds or {}
+        rec.bonds[#rec.bonds + 1] = { side = si, a = i, b = i + 1 }
       end
     end
     if m.seal then
@@ -200,8 +233,9 @@ local function compute(s, P, lead, soft)
     for i = 1, N do
       local inf, opp = rec.info[si][i], rec.info[o][i]
       local ab = inf.def and inf.def.ability
+      if sd.cushions[i] == "thistle" and isFighter(opp) then add(o, i, -1, "Thistle", "cushion:thistle") end
       if isFighter(inf) and isFighter(opp) and beats(inf.coat, opp.coat) then
-        add(si, i, M.COAT_EDGE, "Coat edge", "coat")
+        add(si, i, M.edge(s), "Coat edge", "coat")
         if ab == "pounce" then add(si, i, 3 + m.pounceBonus, "Pounce!", inf.inst.uid) end
       end
       if inf.kind == "cat" and ab == "hex" and isFighter(opp) then
@@ -272,10 +306,12 @@ local function compute(s, P, lead, soft)
       local function tieWinner()
         local la, lb = s.sides[1].mods.lucky, s.sides[2].mods.lucky
         if la ~= lb then return la and 1 or 2 end
+        local ka, kb = s.sides[1].cushions[i] == "silk", s.sides[2].cushions[i] == "silk"
+        if ka ~= kb then d.silk = true; return ka and 1 or 2 end
         local sa = a.kind == "cat" and a.def.ability == "none"
         local sb = b.kind == "cat" and b.def.ability == "none"
         if sa ~= sb then return sa and 1 or 2 end
-        return lead
+        return M.tiesTo(s, lead)
       end
       local w
       if pa > pb then w = 1 elseif pb > pa then w = 2 else w = tieWinner(); d.tie = true end
@@ -556,10 +592,12 @@ local function startBout(s)
   end
 end
 
-function M.create(a, b, seed, aiStyle)
+-- omen (optional): the festival's rule twist, from festival.OMENS.
+function M.create(a, b, seed, aiStyle, omen)
+  a.omen, b.omen = omen, omen
   local s = {
     sides = { newSide(a), newSide(b) }, rng = rng.new(seed), bout = 1, lead = 2, over = false, result = nil,
-    history = {}, last = nil, aiStyle = aiStyle, revealed = {},
+    history = {}, last = nil, aiStyle = aiStyle, revealed = {}, omen = omen,
   }
   for i = 1, 2 do
     rng.shuffle(s.rng, s.sides[i].deck)

@@ -7,8 +7,12 @@ A pixel-art roguelike card duel about medieval cats, built in **LÖVE 11 (Lua)**
 - The look comes straight from the Figma file. The two-tone logo, Ancizar Serif title cards, the chromatic mascot smear and one ordered dither are used on every screen.
 - **Lead and answer.** Each bout one side leads, placing its cards face-down. The other side answers, seeing only the card backs. A back shows the cat's coat, but Shadow cats and tricks share the same dark back. The lead swaps every bout.
 - The **Four Hands** are persistent nemesis Warlords. They enter every festival, remember you, hide strengths and weaknesses, and scheme between festivals.
+- **Bonds**: legendary pairs from the old stories, such as Artheline and Merline, get +2 Paws each when they sit side by side. **Cushions** can be upholstered at the market (Velvet, Thistle, Silk). Every festival has an **omen** that twists one rule.
+- Every cat has its own illustration: a costumed bust on a backdrop for its coat. **The Cattery** collects every cat and trick you've owned or met.
 
 ![The rival leads; you answer](docs/screenshots/04_match_place.png)
+
+![Some of the cats](docs/screenshots/cats.png)
 
 ## Run it
 
@@ -59,6 +63,7 @@ It can also build an `.nsp` forwarder on your machine with hacBrewPack and keys 
    - **Coat edge**: Ember beats Gilt, Gilt beats Tide, Tide beats Ember. The winning coat gets +3 Paws.
    - A cat facing an empty cushion, or a trick, walks in unopposed.
    - Ties go to the leader.
+   - Bonded pairs side by side get +2 Paws each, and upholstered cushions add their own twist.
 5. Every winner swats a goblet off the loser's side of the table.
 6. Next bout, you lead and the rival answers your backs.
 
@@ -67,8 +72,9 @@ It can also build an `.nsp` forwarder on your machine with hacBrewPack and keys 
 1. You're dealt a random pride of 15 cats.
 2. **Group stage**: 3 matches. A win is worth 3 points, and goblet difference breaks ties. The top 2 of each group go through.
 3. **Knockouts**: quarter-final, semi-final, final. Lose once and you're out.
-4. Before every match the rival sits down at the table and taunts you. Between matches you visit one stall: the **Mews Market**, the **Fortune Teller** (random events) or the **Training Yard**.
-5. After the festival, **the Arena moves on**:
+4. Before every match the rival sits down at the table and taunts you. Between matches you visit one stall: the **Mews Market** (cats, charms and the upholsterer), the **Fortune Teller** (random events) or the **Training Yard**.
+5. The festival's **omen** applies to every match in it. For example, the Midsummer Sun gives Ember cats +1, and Long Naps gives ties to the side that answers.
+6. After the festival, **the Arena moves on**:
    - The festival champion climbs the hierarchy, or takes a seat among the Hands if they were a stray.
    - Slain Hands may return, and recruited Hands may betray you.
    - Hands who beat you train new strengths.
@@ -81,7 +87,7 @@ src/platform.lua       desktop LÖVE vs LÖVE Potion (Switch): shader and mouse 
 src/input.lua          mouse, touchscreen and controller folded into one pointer
 src/core/              pure game logic, no LÖVE: match engine + AI, festival, nemesis, cards, traits, charms, run/meta
 src/ui/                theme (palette, type scale), plates (Figma title cards, dithered plates, serif text), gfx (panels,
-                       text), icons (ASCII pixel sprites), cardview (faces, coat backs), art (dithered cats), shaders (stage
+                       text), icons (ASCII pixel sprites), cardview (faces, coat backs), art (cat illustrations), shaders (stage
                        backdrop, Figma dither, chromatic smear, CRT, dissolve, wipe), widgets, fx, sfx, hud, picker, overlays
 src/scenes/            title, hub (festival grounds), vs, match, result, market, event (fortune teller), summary
 src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots

@@ -1,5 +1,6 @@
 -- Scripted walkthrough for headless verification: `love . --autotest shots`
 -- Drives the real scenes and saves screenshots into the LÖVE save directory.
+local cards = require("src.core.cards")
 local game = require("src.core.game")
 local match = require("src.core.match")
 local overlays = require("src.ui.overlays")
@@ -44,7 +45,12 @@ function M.start(dir)
   end)
   step(1.2, function() M.mx, M.my = 482, 268; end)
   step(0.6, function() shot("01_title"); M.mx = nil end)
-  step(0.2, function() game.startRun(save); G.go("hub", { fresh = true }, true) end)
+  step(0.2, function()
+    game.startRun(save)
+    game.upholster(save.run, 1, "velvet")
+    game.upholster(save.run, 3, "silk")
+    G.go("hub", { fresh = true }, true)
+  end)
   step(1.2, function() shot("02_hub") end)
   step(0.2, function() G.go("vs", {}, true) end)
   step(1.6, function() shot("03_vs") end)
@@ -119,6 +125,13 @@ function M.start(dir)
   step(1.2, function() shot("17_summary") end)
   step(0.2, function() G.scene.news = game.arenaMovesOn(save) end)
   step(1.0, function() shot("18_news") end)
+  step(0.2, function()
+    for i = 1, 30 do game.noteSeen(save, cards.DRAFTABLE[i].id) end
+    G.go("title", {}, true)
+    overlays.cattery()
+    G.overlay.sel = cards.CARDS.merline
+  end)
+  step(1.0, function() shot("19_cattery") end)
   step(0.4, function() print("AUTOTEST DONE"); love.event.quit() end)
 end
 

@@ -16,6 +16,13 @@ M.c = {
   night = hex("#020403"),
 }
 
+-- Cushion upholstery: colour and badge icon (the rules are in match.CUSHION_KINDS).
+M.CUSHION = {
+  velvet = { col = hex("#9e2a20"), icon = "heart" },
+  thistle = { col = hex("#3f7a3a"), icon = "leaf" },
+  silk = { col = hex("#b9a878"), icon = "diamond" },
+}
+
 -- virtual pixel resolution; the canvas is rendered at SCALE x this and post-processed
 M.W, M.H, M.SCALE = 640, 360, 2
 

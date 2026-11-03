@@ -11,6 +11,7 @@ local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
+local lg = love.graphics
 
 local S = {}
 local C = theme.c
@@ -48,6 +49,7 @@ function S:draw()
     end
   end
   gfx.text("Hover a card to read it. Click to buy.", T.body(), 196, 214, C.muted, { align = "center" })
+  self:drawUpholsterer(run)
   gfx.label("Charms (" .. #run.charms .. "/" .. charms.MAX .. ")", 392, 40, C.gold)
   for k, ch in ipairs(self.stock.charms) do
     local info = charms.CHARMS[ch.id]
@@ -97,6 +99,53 @@ function S:draw()
     G.persist()
     G.go("hub")
   end
+end
+
+-- The upholsterer: one cushion upgrade a visit, kept for the rest of the festival.
+function S:drawUpholsterer(run)
+  local offer = self.stock.cushion
+  if not offer then return end
+  local match = require("src.core.match")
+  local ck = match.CUSHION_KINDS[offer.kind]
+  local look = theme.CUSHION[offer.kind]
+  plates.header(8, 236, 376, 22, look.col, "Upholsterer", { size = 16, streak = 0.43 })
+  local have = run.cushions or {}
+  -- your three cushions as they are now
+  for i = 1, 3 do
+    local x, y = 16 + (i - 1) * 30, 266
+    local kind = have[i]
+    local col = kind and theme.CUSHION[kind].col or C.ink2
+    gfx.box(x, y, 24, 30, C.black)
+    gfx.box(x + 1, y + 1, 22, 28, col)
+    if i == offer.slot then
+      theme.set(C.gold)
+      lg.rectangle("line", x - 1.5, y - 1.5, 27, 33)
+    end
+    gfx.text(({ "L", "M", "R" })[i], T.small(), x + 12, y + 30, C.muted, { align = "center" })
+  end
+  if offer.sold then
+    gfx.panel(112, 264, 272, 52, C.deep, { border = C.ink3 })
+    gfx.text("Your " .. match.CUSHION_NAMES[offer.slot]:lower() .. " cushion is now " .. ck.name .. ".", T.body(), 248, 281, C.muted, { align = "center" })
+    return
+  end
+  local title = ck.name .. ": " .. match.CUSHION_NAMES[offer.slot]:lower() .. " cushion"
+  local desc = ck.desc .. (have[offer.slot] and (" Replaces " .. match.CUSHION_KINDS[have[offer.slot]].name .. ".") or "")
+  if widgets.choice("uph", 112, 264, 272, 52, title, desc, { icon = look.icon, iconColor = look.col }) then
+    if run.fish < offer.price then fx.toast("Not enough fish.", "bad")
+    else
+      run.fish = run.fish - offer.price
+      game.upholster(run, offer.slot, offer.kind)
+      offer.sold = true
+      sfx.play("coin")
+      fx.burst(248, 290, look.col, 20, 120)
+      fx.toast("Your " .. match.CUSHION_NAMES[offer.slot]:lower() .. " cushion is now " .. ck.name .. ".", "good")
+      G.persist()
+    end
+  end
+  local label = offer.price .. " fish"
+  local pw = T.body():getWidth(label) + 10
+  gfx.panel(16, 310, pw, 16, C.gold)
+  gfx.text(label, T.body(), 16 + pw / 2, 309, C.black, { align = "center", shadow = false })
 end
 
 return S

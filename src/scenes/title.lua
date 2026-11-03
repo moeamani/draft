@@ -73,7 +73,8 @@ function S:draw()
     if widgets.button("t_new", bx, y, bw, 28, "New festival", { color = live and C.ink3 or C.red }) then startNew() end
     y = y + 33
     if s then
-      if widgets.button("t_hands", bx, y, bw, 28, "The Four Hands") then overlays.hands() end
+      if widgets.button("t_hands", bx, y, bw / 2 - 2, 28, "Four Hands") then overlays.hands() end
+      if widgets.button("t_cattery", bx + bw / 2 + 2, y, bw / 2 - 2, 28, "Cattery") then overlays.cattery() end
       y = y + 33
     end
     if widgets.button("t_help", bx, y, bw / 2 - 2, 24, "Rules") then overlays.help() end

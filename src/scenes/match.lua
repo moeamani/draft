@@ -170,6 +170,10 @@ function S:charge()
   self.busy, self.busyResolve, self.drag = true, true, nil
   self.rec = rec
   for i = 1, 3 do
+    local c = rec.cards[2][i]
+    if c then game.noteSeen(G.save, c.id) end
+  end
+  for i = 1, 3 do
     local uid = slots[i]
     if uid then
       self.board[i] = self.views[uid]
@@ -310,7 +314,7 @@ function S:duel(i, du, rec)
       local swat = du.swats > 1 and ("Swat x" .. du.swats .. "!") or "Swat!"
       fx.float((MY_X[i] + RIVAL_X[i]) / 2, (MY_Y + RIVAL_Y) / 2 - 6, swat, du.winner == 1 and C.gold or C.red, true)
       if du.reason == "duel" then
-        line = ("%s: %s %d beats %s %d%s"):format(where, nameOf(winf), math.max(0, winf.paws), nameOf(linf), math.max(0, linf.paws), du.tie and " (tie)" or "")
+        line = ("%s: %s %d beats %s %d%s"):format(where, nameOf(winf), math.max(0, winf.paws), nameOf(linf), math.max(0, linf.paws), du.tie and (du.silk and " (tie, silk cushion)" or " (tie)") or "")
       else
         line = ("%s: %s walks in unopposed"):format(where, nameOf(winf))
       end
@@ -416,8 +420,10 @@ function S:update(dt)
     self.drag = nil
   end
   -- live numbers for the cards on your cushions
+  self.previewRec = nil
   if not self.busy then
     local pr = match.preview(self.s, self.slots)
+    self.previewRec = pr
     for i = 1, 3 do
       local uid = self.slots[i]
       if uid and self.views[uid] then
@@ -494,12 +500,16 @@ function S:drawRival()
   lg.draw(pile, RDECK_X - 14, RDECK_Y - 18)
 end
 
+local CUSHION_LOOK = theme.CUSHION
+
 -- A cushion is a dithered slot plate; the number shows which key places a card there.
-local function cushion(x, y, col, num, lit)
+-- kind: its upholstery (or false), which tints the plate.
+local function cushion(x, y, col, num, lit, kind)
   local w, h = 62, 84
   local x0, y0 = math.floor(x - w / 2), math.floor(y - h / 2)
   theme.set(C.black, 0.45)
   lg.rectangle("fill", x0 + 1, y0 + 2, w, h)
+  if kind and CUSHION_LOOK[kind] then col = theme.mix(col, CUSHION_LOOK[kind].col, 0.7) end
   plates.draw(plates.plate(w, h, col, { light = 0.06, shade = 0.2 }), x0, y0)
   if lit then
     theme.set(C.gold)
@@ -509,6 +519,41 @@ local function cushion(x, y, col, num, lit)
     lg.rectangle("fill", x0 + w + 1, y0 - 2, 1, h + 4)
   end
   if num then plates.print(num, 26, x, y - 16, theme.mix(col, C.paper, 0.3), { align = "center" }) end
+end
+
+-- A small badge on the corner of every upholstered cushion, drawn over the cards.
+function S:drawCushionBadges()
+  for side = 1, 2 do
+    for i = 1, 3 do
+      local kind = self.s.sides[side].cushions[i]
+      local look = kind and CUSHION_LOOK[kind]
+      if look then
+        local x = (side == 1 and MY_X or RIVAL_X)[i] + 31 - 6
+        local y = (side == 1 and MY_Y or RIVAL_Y) + 42 - 6
+        gfx.box(x - 6, y - 6, 13, 13, C.black)
+        gfx.box(x - 5, y - 5, 11, 11, look.col)
+        icons.draw(look.icon, x, y, C.white)
+      end
+    end
+  end
+end
+
+-- A gold link between bonded cats sitting side by side.
+function S:drawBondLinks()
+  local rec = self.busyResolve and self.rec or self.previewRec
+  if not rec or not rec.bonds then return end
+  for _, b in ipairs(rec.bonds) do
+    if b.side == 1 or self.busyResolve then
+      local x = math.floor(((b.side == 1 and MY_X or RIVAL_X)[b.a] + (b.side == 1 and MY_X or RIVAL_X)[b.b]) / 2)
+      local y = (b.side == 1 and MY_Y or RIVAL_Y)
+      local pulse = 0.75 + 0.25 * math.sin(self.t * 5)
+      for k = -1, 1 do
+        gfx.box(x - 4, y + k * 9 - 3, 9, 7, C.black)
+        gfx.box(x - 3, y + k * 9 - 2, 7, 5, C.gold, pulse)
+        gfx.box(x - 1, y + k * 9, 3, 1, C.black)
+      end
+    end
+  end
 end
 
 function S:drawGoblets(side)
@@ -561,7 +606,22 @@ function S:inspectLines()
   elseif self.hoverUid then v = self.views[self.hoverUid]
   elseif self.hoverR then v, side = self.rviews[self.hoverR], 2
   elseif self.hoverBoard then v = self.board[self.hoverBoard] end
-  if not v then return nil end
+  if not v then
+    local mine = self:cushionAt(widgets.mx, widgets.my)
+    local theirs
+    for i = 1, 3 do
+      if math.abs(widgets.mx - RIVAL_X[i]) <= 31 and math.abs(widgets.my - RIVAL_Y) <= 42 then theirs = i end
+    end
+    local si, i = mine and 1 or (theirs and 2), mine or theirs
+    local kind = si and self.s.sides[si].cushions[i]
+    if kind then
+      local ck = match.CUSHION_KINDS[kind]
+      return { { text = ck.name .. " cushion", font = T.big() },
+        { text = (si == 1 and "Your " or "Their ") .. CUSHION_NAMES[i]:lower() .. " cushion", color = C.muted },
+        { text = ck.desc, color = C.paper } }
+    end
+    return nil
+  end
   if side == 2 and v.flip < 0 then
     local back = v.backKind
     local lines = { { text = "Face-down card", font = T.big() } }
@@ -576,7 +636,7 @@ function S:inspectLines()
     end
     return lines
   end
-  return picker.cardLines(v.def, v.inst, self.rec and self.rec.info and self:infoFor(v) or v.previewInfo)
+  return picker.cardLines(v.def, v.inst, self.rec and self.rec.info and self:infoFor(v) or v.previewInfo), v.def
 end
 
 function S:infoFor(v)
@@ -593,12 +653,20 @@ function S:drawPanel()
   local s = self.s
   gfx.panel(PX, PY, PW, PH, C.deep)
   local x, y, w = PX + 7, PY + 28, PW - 14
-  local lines = self:inspectLines()
+  local lines, def = self:inspectLines()
   if lines then
-    -- the card's name is the panel's title card
+    -- the card's name is the panel's title card, then its illustration
     local first = table.remove(lines, 1)
     local tsize = plates.textWidth(first.text, 18) <= PW - 16 and 18 or 14
     plates.header(PX, PY, PW, 24, C.ink3, first.text, { size = tsize })
+    if def then
+      local pic = art.illustration(def)
+      local iw, ih = pic:getDimensions()
+      local ix = math.floor(PX + (PW - iw) / 2)
+      gfx.box(ix - 1, y - 2, iw + 2, ih + 2, C.black)
+      plates.draw(pic, ix, y - 1)
+      y = y + ih + 2
+    end
     for _, l in ipairs(lines) do
       y = y + gfx.textf(l.text, l.font or T.body(), x, y, w, "left", l.color or C.paper) + (l.gap or 3)
     end
@@ -613,14 +681,18 @@ function S:drawPanel()
   local lead = s.lead
   plates.header(PX, PY, PW, 24, lead == 1 and blue or C.red, "Bout " .. s.bout .. (lead == 1 and ": you lead" or ": you answer"), { size = 16, streak = 0.43 })
   local tip
+  local ties = match.tiesTo(s) == 1 and "Ties go to you." or "Ties go to them."
   if lead == 1 then
-    tip = "Put up to 3 cards on your cushions. The rival sees only their backs, then answers. Ties go to you."
+    tip = "Put up to 3 cards on your cushions. The rival sees only their backs, then answers. " .. ties
   else
-    tip = "The rival has led. A card back shows the cat's coat; a dark back is a Shadow cat or a trick. Ties go to them."
+    tip = "The rival has led. A card back shows the cat's coat; a dark back is a Shadow cat or a trick. " .. ties
   end
   y = y + gfx.textf(tip, T.body(), x, y, w, "left", C.paper) + 6
+  if s.omen then
+    y = y + gfx.textf("Omen: " .. s.omen.name .. ". " .. s.omen.desc, T.body(), x, y, w, "left", C.gold) + 6
+  end
   y = y + gfx.textf("Click a card to place it, drag to choose a cushion. Then Charge!", T.body(), x, y, w, "left", C.paper2) + 6
-  gfx.label("Coat edge: +" .. match.COAT_EDGE .. " Paws", x, y, C.gold)
+  gfx.label("Coat edge: +" .. match.edge(s) .. " Paws", x, y, C.gold)
   y = y + 12
   for _, pair in ipairs({ { "ember", "gilt" }, { "gilt", "tide" }, { "tide", "ember" } }) do
     local a, b = cards.COATS[pair[1]], cards.COATS[pair[2]]
@@ -636,9 +708,9 @@ function S:draw()
   self:drawRival()
   -- cushions
   for i = 1, 3 do
-    cushion(RIVAL_X[i], RIVAL_Y, self.ctx.nemesis and theme.hex("#3a1513") or C.ink, nil, false)
+    cushion(RIVAL_X[i], RIVAL_Y, self.ctx.nemesis and theme.hex("#3a1513") or C.ink, nil, false, s.sides[2].cushions[i])
     local dropTarget = self.drag and self.drag.moved and self:cushionAt(widgets.mx, widgets.my) == i
-    cushion(MY_X[i], MY_Y, C.ink2, (not self.slots[i] and not self.board[i]) and tostring(i) or nil, dropTarget)
+    cushion(MY_X[i], MY_Y, C.ink2, (not self.slots[i] and not self.board[i]) and tostring(i) or nil, dropTarget, s.sides[1].cushions[i])
   end
   -- what the rival's empty cushions mean right now
   if not self.busyResolve and not self.finished then
@@ -674,6 +746,8 @@ function S:draw()
   for _, c in ipairs(list) do if c.uid ~= self.hoverUid then self.views[c.uid]:draw() end end
   if self.hoverUid and self.views[self.hoverUid] and self.hoverFrom == "hand" then self.views[self.hoverUid]:draw() end
   if self.drag and self.drag.moved and self.views[self.drag.uid] then self.views[self.drag.uid]:draw() end
+  self:drawCushionBadges()
+  self:drawBondLinks()
   -- shown rival cards get an eye
   for i = 1, 3 do
     local v = self.rviews[i]

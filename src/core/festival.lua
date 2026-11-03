@@ -8,14 +8,31 @@ local M = {}
 
 M.GROUPS = { "A", "B", "C", "D" }
 M.PLAYER = "you"
-local NAMES = { "Midsummer Festival of Claws", "Harvest Moot", "Feast of Nine Lives", "Winter Yowl", "Tourney of the Gilded Saucer", "Moonlit Mews", "Festival of Long Naps" }
+-- Each festival has an omen: one rule twist for every match in it, matching its name.
+M.OMENS = {
+  midsummer = { name = "Midsummer Sun", short = "Midsummer", coat = "ember", desc = "Ember cats get +1 Paw." },
+  harvest = { name = "Harvest Gold", short = "Harvest", coat = "gilt", desc = "Gilt cats get +1 Paw." },
+  feast = { name = "Feast Day", short = "Feast", hand = 1, desc = "Everyone holds 6 cards." },
+  frost = { name = "Hard Frost", short = "Frost", edge = 1, desc = "The coat edge is +4 Paws." },
+  saucer = { name = "Heavy Goblets", short = "Saucer", goblets = 1, desc = "Everyone starts with 1 more goblet." },
+  moonlit = { name = "New Moon", short = "New Moon", coat = "shadow", desc = "Shadow cats get +1 Paw." },
+  regatta = { name = "Spring Tide", short = "Spring Tide", coat = "tide", desc = "Tide cats get +1 Paw." },
+  naps = { name = "Long Naps", short = "Naps", tiesToAnswer = true, desc = "Ties go to the side that answers." },
+}
+local FESTIVALS = {
+  { "Midsummer Festival of Claws", "midsummer" }, { "Harvest Moot", "harvest" }, { "Feast of Nine Lives", "feast" },
+  { "Winter Yowl", "frost" }, { "Tourney of the Gilded Saucer", "saucer" }, { "Moonlit Mews", "moonlit" },
+  { "Spring Tide Regatta", "regatta" }, { "Festival of Long Naps", "naps" },
+}
+function M.omen(f) return f and f.omen and M.OMENS[f.omen] or nil end
 -- round-robin pairings by group slot
 local ROUNDS = { { { 1, 2 }, { 3, 4 } }, { { 1, 3 }, { 2, 4 } }, { { 1, 4 }, { 2, 3 } } }
 
 function M.create(save, seed)
   local r = rng.new(seed)
+  local fest = FESTIVALS[(save.runs - 1) % #FESTIVALS + 1]
   local f = {
-    name = "The " .. NAMES[(save.runs - 1) % #NAMES + 1], entrants = {}, groups = {}, results = {},
+    name = "The " .. fest[1], omen = fest[2], entrants = {}, groups = {}, results = {},
     stage = "group", round = 1, bracket = { qf = {}, sf = {}, final = {} }, champion = nil,
     eliminated = false, placing = nil, rng = r, withdrawn = {},
   }

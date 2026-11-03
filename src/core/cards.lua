@@ -99,6 +99,49 @@ local guard = u("guard", "Arena Guard", "physical", 3, "none", "common", "shadow
 guard.token = true
 M.LIST[#M.LIST + 1] = guard
 
+-- Bonds: legendary pairs from the old stories. Side by side on your cushions, each gets +2 Paws.
+M.BOND_PAWS = 2
+M.BONDS = {
+  { "artheline", "merline", "The Once and Future" },
+  { "uther", "artheline", "The Pawndragon Line" },
+  { "nimew", "merline", "The Lady of the Lake" },
+  { "galahiss", "purrceval", "The Grail Seekers" },
+  { "lanceline", "galahiss", "Father and Son" },
+  { "elaine", "lanceline", "The Lily Maid" },
+  { "gawpaw", "greenmouser", "The Green Bargain" },
+  { "gawpaw", "gareth", "Brothers of Orkney" },
+  { "agravain", "mordraleus", "The Plotters" },
+  { "morgana", "mordraleus", "Mother of Mischief" },
+  { "mewdred", "uther", "The Contested Crown" },
+  { "lamoracat", "pelliroar", "Pelliroar's Pride" },
+  { "bedimew", "kaytail", "The First Companions" },
+  { "tristripe", "taliesing", "Harp and Song" },
+  { "vivipurr", "merlinus", "The Apprentice's Folly" },
+  { "hedgedruid", "seer", "The Old Ways" },
+  { "squire", "ironpaw", "Drill and Drum" },
+  { "emberadept", "candlewitch", "Kindred Flames" },
+  { "barnbrawler", "alleystray", "Gutter Kin" },
+  { "pikecat", "borscat", "The Tide Watch" },
+  { "purrlinore", "morgelius", "Goblet Thieves" },
+  { "novice", "circaleus", "The Study Circle" },
+}
+local bondIndex = {}
+for _, b in ipairs(M.BONDS) do
+  bondIndex[b[1]] = bondIndex[b[1]] or {}
+  bondIndex[b[2]] = bondIndex[b[2]] or {}
+  bondIndex[b[1]][b[2]] = b[3]
+  bondIndex[b[2]][b[1]] = b[3]
+end
+function M.bonded(a, b) return bondIndex[a] ~= nil and bondIndex[a][b] or nil end
+-- { {partner id, bond name}, ... } for a card id
+function M.bondsOf(id)
+  local out = {}
+  for _, b in ipairs(M.BONDS) do
+    if b[1] == id then out[#out + 1] = { b[2], b[3] } elseif b[2] == id then out[#out + 1] = { b[1], b[3] } end
+  end
+  return out
+end
+
 M.CARDS = {}
 M.DRAFTABLE = {}
 for _, c in ipairs(M.LIST) do

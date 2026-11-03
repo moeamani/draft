@@ -65,9 +65,20 @@ function S:draw()
   if widgets.button("h_stand", 8, ly, 296, 20, f.stage == "group" and "All groups and the bracket" or "Full standings", { font = T.body() }) then overlays.standings(f) end
   ly = ly + 24
   gfx.panel(8, ly, 296, 238 - ly, C.deep)
-  gfx.label("Around the festival", 14, ly + 3, C.gold)
-  local note = self.notes[1 + math.floor(self.t / 4) % math.max(1, #self.notes)] or "The crowd is restless. Fish sellers shout. Somewhere, a bard tunes a sardine tin."
-  gfx.textf(note, T.body(), 14, ly + 13, 284, "left", C.paper)
+  -- the festival's omen: one rule twist for every match here
+  local omen = festival.omen(f)
+  if omen then
+    plates.header(8, ly, 296, 18, C.goldDark, "Omen: " .. omen.name, { size = 14, streak = 0.43, pad = 6 })
+    gfx.text(omen.desc, T.body(), 14, ly + 19, C.gold)
+    ly = ly + 36
+  end
+  if 238 - ly >= 28 then -- the news, when there's room for it
+    gfx.label("Around the festival", 14, ly + 2, C.muted)
+    local note = self.notes[1 + math.floor(self.t / 4) % math.max(1, #self.notes)] or "The crowd is restless. Fish sellers shout. Somewhere, a bard tunes a sardine tin."
+    lg.setScissor(G.scissor(8, ly, 296, 237 - ly))
+    gfx.textf(note, T.body(), 14, ly + 11, 284, "left", C.paper)
+    lg.setScissor()
+  end
 
   -- right: the next match
   local opp = game.nextOpponent(save)

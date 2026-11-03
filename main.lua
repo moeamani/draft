@@ -26,7 +26,10 @@ local SETTINGS_FILE = "settings.lua"
 local SCENES = { "title", "hub", "vs", "match", "result", "market", "event", "summary" }
 
 function G.persist()
-  if G.save then love.filesystem.write(SAVE_FILE, util.serialize(G.save)) end
+  if G.save then
+    require("src.core.game").noteDeck(G.save)
+    love.filesystem.write(SAVE_FILE, util.serialize(G.save))
+  end
 end
 
 function G.wipeSave()

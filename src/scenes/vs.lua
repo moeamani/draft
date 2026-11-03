@@ -60,6 +60,8 @@ function S:draw()
   local t = self.t
   gfx.text(f.name, T.body(), 12, 8, C.paper2)
   gfx.text(festival.stageLabel(f), T.body(), 12, 24, C.gold)
+  local omen = festival.omen(f)
+  if omen then gfx.text("Omen: " .. omen.name .. ". " .. omen.desc, T.body(), 12, 40, C.muted) end
   -- the rival, Figma-mascot style
   local e = ease(t / 0.5)
   local px = math.floor(60 - (1 - e) * 220)

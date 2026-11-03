@@ -138,6 +138,75 @@ test("lead alternates and the rival places when it leads", function()
   if not s.over then eq(s.lead, 1) end
 end)
 
+-- bonds, cushions and omens
+local function setupState(handA, handB, extraA, extraB, omen)
+  local a = { name = "A", deck = deckOf(FILLER) }
+  local b = { name = "B", deck = deckOf(FILLER) }
+  for k, v in pairs(extraA or {}) do a[k] = v end
+  for k, v in pairs(extraB or {}) do b[k] = v end
+  local s = match.create(a, b, 1, nil, omen)
+  s.sides[1].hand, s.sides[2].hand = deckOf(handA), deckOf(handB)
+  return s
+end
+local function modText(inf, text)
+  for _, m in ipairs(inf.mods) do if m.text == text then return m.amount end end
+end
+
+test("bonds: side by side +2 each, apart nothing", function()
+  local s = setupState({ "artheline", "merline", "agravain" }, {})
+  local r = bout(s, { 1, 2 }, {})
+  eq(modText(r.info[1][1], "Bond"), 2, "artheline"); eq(modText(r.info[1][2], "Bond"), 2, "merline")
+  eq(#r.bonds, 1)
+  local r2 = bout(s, { 1, nil, 2 }, {})
+  eq(modText(r2.info[1][1], "Bond"), nil, "not adjacent")
+  eq(cards.bonded("merline", "artheline"), "The Once and Future")
+  for _, b in ipairs(cards.BONDS) do
+    assert(cards.CARDS[b[1]] and cards.CARDS[b[2]], "bond names real cards: " .. b[1] .. "/" .. b[2])
+  end
+end)
+test("cushions: velvet +1, thistle -1 to the facing cat, silk wins ties", function()
+  local s = setupState({ "agravain", "agravain" }, { "barnbrawler", "barnbrawler" }, { cushions = { "velvet", "thistle", false } })
+  local r = bout(s, { 1, 2 }, { 1, 2 })
+  eq(r.info[1][1].paws, 6, "velvet"); eq(r.info[2][2].paws, 4, "thistle")
+  -- 5 vs 5 Steadfast-free tie: circaleus (3) vs merlinus (3); silk on side 1 beats the leader
+  local s2 = setupState({ "circaleus" }, { "merlinus" }, { cushions = { "silk", false, false } })
+  local r2 = bout(s2, { 1 }, { 1 }, 2)
+  eq(r2.duels[1].winner, 1, "silk"); eq(r2.duels[1].silk, true)
+end)
+test("omens: coat bonus, sharper edge, ties to the answerer, bigger hands, more goblets", function()
+  local O = festival.OMENS
+  local s = setupState({ "barnbrawler" }, { "agravain" }, nil, nil, O.midsummer)
+  eq(bout(s, { 1 }, { 1 }).info[1][1].paws, 6, "midsummer")
+  local s2 = setupState({ "pikecat" }, { "barnbrawler" }, nil, nil, O.frost)
+  eq(bout(s2, { 1 }, { 1 }).info[1][1].paws, 7, "frost edge")
+  local s3 = setupState({ "circaleus" }, { "merlinus" }, nil, nil, O.naps)
+  eq(bout(s3, { 1 }, { 1 }, 2).duels[1].winner, 1, "naps: the answerer wins the tie")
+  local s4 = match.create({ name = "A", deck = deckOf(FILLER) }, { name = "B", deck = deckOf(FILLER) }, 1, nil, O.feast)
+  eq(#s4.sides[1].hand, 6, "feast hand")
+  local s5 = match.create({ name = "A", deck = deckOf(FILLER) }, { name = "B", deck = deckOf(FILLER) }, 1, nil, O.saucer)
+  eq(s5.sides[2].goblets, match.GOBLETS + 1, "saucer goblets")
+  local save = game.newSave("T", 5)
+  local run = game.startRun(save)
+  assert(festival.omen(run.festival), "every festival has an omen")
+end)
+test("hands upholster cushions as they level", function()
+  local c3 = game.handCushions({ level = 5, seed = 9 })
+  local c5 = game.handCushions({ level = 7, seed = 9 })
+  local n3, n5 = 0, 0
+  for i = 1, 3 do if c3[i] then n3 = n3 + 1 end; if c5[i] then n5 = n5 + 1 end end
+  eq(n3, 1); eq(n5, 2)
+  eq(#game.handCushions({ level = 1, seed = 2 }), 3)
+end)
+test("market offers an upholstery the player doesn't have", function()
+  local save = game.newSave("T", 6)
+  local run = game.startRun(save)
+  game.upholster(run, 2, "velvet")
+  for _ = 1, 20 do
+    local st = game.makeMarket(run)
+    assert(st.cushion and not (st.cushion.slot == 2 and st.cushion.kind == "velvet"))
+  end
+end)
+
 test("festival: groups, table, knockout", function()
   local save = game.newSave("Fest", 11)
   local run = game.startRun(save)

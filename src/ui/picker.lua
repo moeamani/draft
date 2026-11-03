@@ -96,9 +96,9 @@ function M.cardLines(def, inst, inf)
   local lines = { { text = def.name, font = T.big(), color = def.rarity == "legendary" and C.gold or C.paper } }
   if def.kind == "unit" then
     local coat = cards.COATS[def.coat]
-    lines[#lines + 1] = { text = (def.type == "magic" and "Magic" or "Physical") .. ", " .. def.rarity, color = C.muted }
     local p = inst and cards.paws(inst) or def.power
-    lines[#lines + 1] = { text = p .. " Paws   " .. coat.name .. " coat", color = coat.color }
+    lines[#lines + 1] = { text = p .. " Paws   " .. coat.name .. " coat", color = coat.color, gap = 0 }
+    lines[#lines + 1] = { text = (def.type == "magic" and "Magic" or "Physical") .. ", " .. def.rarity, color = C.muted }
     if coat.beats then
       local by
       for _, cc in pairs(cards.COATS) do if cc.beats == def.coat then by = cc.name end end
@@ -111,6 +111,10 @@ function M.cardLines(def, inst, inf)
   end
   lines[#lines + 1] = { text = ab.name, color = C.cyan, gap = 0 }
   lines[#lines + 1] = { text = ab.desc, color = C.paper }
+  for _, b in ipairs(cards.bondsOf(def.id)) do
+    local partner = cards.CARDS[b[1]]
+    lines[#lines + 1] = { text = "Bond with " .. partner.name .. ": +" .. cards.BOND_PAWS .. " each side by side", color = C.gold }
+  end
   if inf and inf.mods and #inf.mods > 0 and (inf.kind == "cat" or inf.kind == "box") then
     local parts = {}
     for _, m in ipairs(inf.mods) do parts[#parts + 1] = signed(m.amount) .. " " .. m.text end
@@ -129,7 +133,7 @@ function M.cardTooltip(def, inst, x, y)
     if lvl < 3 then lines[#lines + 1] = { text = "XP " .. (inst.xp or 0) .. "/" .. cards.XP_FOR_LEVEL[lvl + 1] .. " to the next level", color = C.pale } end
   end
   lines[#lines + 1] = { text = '"' .. def.flavor .. '"', color = C.muted }
-  widgets.infoBox(x, y, 190, lines)
+  widgets.infoBox(x, y, 190, lines, require("src.ui.art").illustration(def))
 end
 
 return M
