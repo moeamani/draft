@@ -19,7 +19,7 @@ local lg = love.graphics
 local S = {}
 local C = theme.c
 local T = theme.T
-S.bg = { horizon = 0, light = { 0.5, 0.4 }, radius = 0.95, power = 0.95 }
+S.bg = { preset = "menu" }
 
 function S:enter(p)
   self.t = 0

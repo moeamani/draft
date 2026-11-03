@@ -24,19 +24,24 @@ local function ell(x, y, rx, ry, c, rot)
 end
 local function line(pts, c, w) col(c); lg.setLineWidth(w or 1); lg.line(pts); lg.setLineWidth(1) end
 
+-- Gradients from plain primitives, so the same code runs on LÖVE Potion: 1px rows, and a radial
+-- glow made of filled circles whose alphas compound to a linear falloff.
 local function vgrad(w, h, c1, c2)
-  local mesh = lg.newMesh({ { 0, 0, 0, 0, c1[1], c1[2], c1[3], 1 }, { w, 0, 1, 0, c1[1], c1[2], c1[3], 1 },
-    { w, h, 1, 1, c2[1], c2[2], c2[3], 1 }, { 0, h, 0, 1, c2[1], c2[2], c2[3], 1 } }, "fan", "static")
-  lg.setColor(1, 1, 1); lg.draw(mesh); mesh:release()
-end
-local function halo(x, y, r, c, a)
-  local verts = { { x, y, 0, 0, c[1], c[2], c[3], a } }
-  for i = 0, 24 do
-    local t = i / 24 * math.pi * 2
-    verts[#verts + 1] = { x + math.cos(t) * r, y + math.sin(t) * r, 0, 0, c[1], c[2], c[3], 0 }
+  for i = 0, math.ceil(h) - 1 do
+    local t = h > 1 and i / (h - 1) or 0
+    lg.setColor(c1[1] + (c2[1] - c1[1]) * t, c1[2] + (c2[2] - c1[2]) * t, c1[3] + (c2[3] - c1[3]) * t, 1)
+    lg.rectangle("fill", 0, i, w, 1)
   end
-  local mesh = lg.newMesh(verts, "fan", "static")
-  lg.setColor(1, 1, 1); lg.draw(mesh); mesh:release()
+end
+local RINGS = 14
+local function halo(x, y, r, c, a)
+  local prev = 0
+  for k = 1, RINGS do
+    local target = a * k / RINGS
+    lg.setColor(c[1], c[2], c[3], (target - prev) / (1 - prev))
+    lg.circle("fill", x, y, r * (1 - (k - 1) / RINGS), 32)
+    prev = target
+  end
 end
 
 local C = theme.c
@@ -199,7 +204,7 @@ local function render(key, W, H, painter, lw, lh, transparent)
   painter()
   lg.pop()
   local out = plates.dither(raw, W, H, transparent)
-  raw:release()
+  if out ~= raw then raw:release() end -- without the shader the raw canvas is the result
   cache[key] = out
   return out
 end

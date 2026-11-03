@@ -5,6 +5,9 @@
 -- Everything is composed smooth (antialiased type, gradients, the smear) and then quantised once
 -- with the Figma dither (Bayer 16x16, 8 levels per channel), so every surface shares one texture.
 -- Results are cached; the cache is trimmed when it grows.
+-- Without runtime shaders (LÖVE Potion on Switch) the same surfaces are built from the PNGs that
+-- tools/switch/bake_assets.py renders with identical math, plus an ordered-dither tile overlay.
+local bakes = require("src.ui.bakes")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -34,8 +37,55 @@ end
 
 local function colKey(c) return ("%.3f,%.3f,%.3f"):format(c[1], c[2], c[3]) end
 
--- Quantise a canvas with the Figma dither into a fresh canvas (straight alpha).
+-- Canvases that still hold premultiplied colour (only on the shader-free path) and must be drawn
+-- with the premultiplied blend mode.
+local premul = setmetatable({}, { __mode = "k" })
+M.premultiplied = premul
+
+-- Bayer 16x16, the same threshold matrix as the shader (src/ui/shaders.lua).
+local function fract(x) return x - math.floor(x) end
+local function b2(x, y) x, y = math.floor(x), math.floor(y); return fract(x / 2 + y * y * 0.75) end
+local function bayer4(x, y) return b2(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
+local function bayer8(x, y) return bayer4(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
+function M.bayer16(x, y) return bayer8(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
+
+-- Shader-free stand-in for the dither: a 16x16 tile of light and dark dots that gives flat colours
+-- the same fine texture.
+local tile
+local function ditherTile()
+  if tile then return tile end
+  tile = newCanvas(16, 16)
+  lg.push("all")
+  lg.origin()
+  lg.setScissor()
+  lg.setCanvas(tile)
+  lg.clear(0, 0, 0, 0)
+  for y = 0, 15 do
+    for x = 0, 15 do
+      local t = M.bayer16(x, y)
+      if t >= 0.5 then lg.setColor(1, 1, 1, (t - 0.5) * 0.16) else lg.setColor(0, 0, 0, (0.5 - t) * 0.22) end
+      lg.rectangle("fill", x, y, 1, 1)
+    end
+  end
+  lg.pop()
+  return tile
+end
+
+local function texture(w, h)
+  local t = ditherTile()
+  lg.setColor(1, 1, 1, 1)
+  for y = 0, h - 1, 16 do
+    for x = 0, w - 1, 16 do lg.draw(t, x, y) end
+  end
+end
+
+-- Quantise a canvas with the Figma dither into a fresh canvas (straight alpha). Without the shader
+-- the canvas is kept as it is (premultiplied) and flagged for drawing.
 local function dither(src, w, h, alphaCut)
+  if not shaders.fdither then
+    premul[src] = true
+    return src, true
+  end
   local out = newCanvas(w, h)
   lg.push("all")
   lg.origin()
@@ -63,14 +113,33 @@ local function begin(canvas, r, g, b, a)
   lg.clear(r or 0, g or 0, b or 0, a or 0)
 end
 
+-- A vertical gradient, one row at a time (no custom meshes, which LÖVE Potion lacks).
 local function vgrad(x, y, w, h, top, bottom)
-  local mesh = lg.newMesh({
-    { x, y, 0, 0, top[1], top[2], top[3], 1 }, { x + w, y, 1, 0, top[1], top[2], top[3], 1 },
-    { x + w, y + h, 1, 1, bottom[1], bottom[2], bottom[3], 1 }, { x, y + h, 0, 1, bottom[1], bottom[2], bottom[3], 1 },
-  }, "fan", "static")
-  lg.setColor(1, 1, 1)
-  lg.draw(mesh)
-  mesh:release()
+  for i = 0, h - 1 do
+    local t = h > 1 and i / (h - 1) or 0
+    lg.setColor(top[1] + (bottom[1] - top[1]) * t, top[2] + (bottom[2] - top[2]) * t, top[3] + (bottom[3] - top[3]) * t, 1)
+    lg.rectangle("fill", x, y + i, w, 1)
+  end
+end
+M.vgrad = vgrad
+
+-- The baked smear PNG closest to a tint (shader-free path).
+local smearImages = {}
+local function bakedSmear(tint, aberration)
+  local best, bestD
+  for _, sm in ipairs(bakes.SMEARS) do
+    local c = theme.hex(sm.tint)
+    local d = (c[1] - tint[1]) ^ 2 + (c[2] - tint[2]) ^ 2 + (c[3] - tint[3]) ^ 2
+    if (aberration >= 0.9) == (sm.aberration >= 0.9) then d = d * 0.5 end
+    if not bestD or d < bestD then best, bestD = sm, d end
+  end
+  local file = bakes.smearFile(best.name)
+  if smearImages[file] == nil then
+    local ok, img = pcall(lg.newImage, file)
+    smearImages[file] = ok and img or false
+    if ok then img:setFilter("linear", "linear") end
+  end
+  return smearImages[file] or nil
 end
 
 -- The mascot silhouette in `tint`, smeared sideways by the chromatic lens, premultiplied.
@@ -79,7 +148,20 @@ end
 local function smear(side, tint, aberration, band)
   band = math.min(side, band or side)
   local key = ("smear:%d:%d:%s:%.2f"):format(side, band, colKey(tint), aberration)
-  if cache[key] then return cache[key].canvas end
+  if cache[key] then return cache[key].canvas, cache[key].pm end
+  if not shaders.smear then
+    -- straight-alpha PNG baked offline with the same lens math, scaled to this card
+    local img = bakedSmear(tint, aberration)
+    local out = newCanvas(side, band)
+    begin(out)
+    if img then
+      lg.setColor(1, 1, 1, 1)
+      lg.draw(img, 0, -math.floor((side - band) / 2), 0, side / img:getWidth(), side / img:getHeight())
+    end
+    lg.pop()
+    remember(key, { canvas = out, pm = false })
+    return out, false
+  end
   local sil = newCanvas(side, side)
   sil:setFilter("linear", "linear")
   local img = G.images["mascot-silhouette"]
@@ -100,8 +182,8 @@ local function smear(side, tint, aberration, band)
   lg.draw(sil, 0, -math.floor((side - band) / 2))
   lg.pop()
   sil:release()
-  remember(key, { canvas = out })
-  return out
+  remember(key, { canvas = out, pm = true })
+  return out, true
 end
 
 -- A plain plate. opts: outline (colour or false), light (0..1 top highlight), shade (0..1 bottom shade)
@@ -119,9 +201,10 @@ function M.plate(w, h, color, opts)
     lg.rectangle("fill", 0, 0, w, h)
   end
   vgrad(inset, inset, w - inset * 2, h - inset * 2, theme.mix(color, C.paper, opts.light or 0.08), theme.darken(color, 1 - (opts.shade or 0.12)))
+  if not shaders.fdither then texture(w, h) end
   lg.pop()
   local out = dither(raw, w, h, false)
-  raw:release()
+  if out ~= raw then raw:release() end
   remember(key, { canvas = out })
   return out
 end
@@ -143,12 +226,13 @@ function M.titleCard(w, h, color, opts)
     vgrad(0, 0, w, h, theme.mix(color, C.paper, 0.05), theme.darken(color, 0.9))
   end
   if opts.streak then
-    local sm = smear(w, opts.streakTint or color, opts.streak, h)
-    lg.setBlendMode("alpha", "premultiplied")
+    local sm, pm = smear(w, opts.streakTint or color, opts.streak, h)
+    if pm then lg.setBlendMode("alpha", "premultiplied") end
     lg.setColor(1, 1, 1, 1)
     lg.draw(sm, 0, 0)
     lg.setBlendMode("alpha", "alphamultiply")
   end
+  if not shaders.fdither then texture(w, h) end
   if opts.label and opts.label ~= "" then
     local f = theme.serif(size, opts.italic)
     lg.setFont(f)
@@ -167,7 +251,7 @@ function M.titleCard(w, h, color, opts)
   end
   lg.pop()
   local out = dither(raw, w, h, false)
-  raw:release()
+  if out ~= raw then raw:release() end
   remember(key, { canvas = out })
   return out
 end
@@ -193,7 +277,7 @@ function M.text(str, size, color, opts)
   lg.print(str, 0, 0)
   lg.pop()
   local out = dither(raw, w, h, false)
-  raw:release()
+  if out ~= raw then raw:release() end
   remember(key, { canvas = out, w = w, h = h })
   return out, w, h
 end
@@ -217,13 +301,14 @@ function M.image(img, w, alphaCut)
   lg.draw(img, 0, 0, 0, w / img:getWidth(), h / img:getHeight())
   lg.pop()
   local out = dither(raw, w, h, alphaCut ~= false)
-  raw:release()
+  if out ~= raw then raw:release() end
   remember(key, { canvas = out })
   return out
 end
 
 -- Smeared silhouette of any image (used for portraits on the VS screen).
 function M.smearImage(img, side, aberration)
+  if not shaders.smear then return nil end -- needs the live lens shader
   local key = ("smearimg:%s:%d:%.2f"):format(tostring(img), side, aberration)
   if cache[key] then return cache[key].canvas end
   local src = newCanvas(side, side)
@@ -246,15 +331,42 @@ function M.smearImage(img, side, aberration)
   lg.pop()
   src:release()
   local d = dither(out, side, side, false)
-  out:release()
+  if d ~= out then out:release() end
   remember(key, { canvas = d })
   return d
 end
 
 -- Draw helpers -----------------------------------------------------------------
 
+-- Draw a baked canvas multiplied by a colour (used for the console stand-in for the VS smear).
+-- blend "add" makes it glow.
+function M.drawTint(canvas, x, y, color, alpha, blend)
+  if not canvas then return end
+  local a = alpha or 1
+  local mode, am = lg.getBlendMode()
+  if premul[canvas] then
+    lg.setBlendMode(blend or "alpha", "premultiplied")
+    lg.setColor(color[1] * a, color[2] * a, color[3] * a, a)
+  else
+    lg.setBlendMode(blend or "alpha")
+    lg.setColor(color[1], color[2], color[3], a)
+  end
+  lg.draw(canvas, math.floor(x), math.floor(y))
+  lg.setBlendMode(mode, am)
+end
+
 function M.draw(canvas, x, y, alpha)
-  lg.setColor(1, 1, 1, alpha or 1)
+  if not canvas then return end
+  local a = alpha or 1
+  if premul[canvas] then
+    local mode, am = lg.getBlendMode()
+    lg.setBlendMode("alpha", "premultiplied")
+    lg.setColor(a, a, a, a)
+    lg.draw(canvas, math.floor(x), math.floor(y))
+    lg.setBlendMode(mode, am)
+    return
+  end
+  lg.setColor(1, 1, 1, a)
   lg.draw(canvas, math.floor(x), math.floor(y))
 end
 

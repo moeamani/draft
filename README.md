@@ -37,6 +37,18 @@ tools/build-love.sh
 | F3 | sound on/off |
 | Esc | menu |
 
+A controller works too: the stick or d-pad moves a paw cursor, A clicks and drags, X charges, Y clears your cushions, B closes panels, and + opens the menu.
+
+## Nintendo Switch (homebrew)
+
+Draft runs on modded Switch consoles through [LÖVE Potion](https://github.com/lovebrew/lovepotion). There's a shader-free render path with pre-baked art, controller and touchscreen input, and a packer that builds `Draft.nro` from a LÖVE Potion release:
+
+```bash
+python3 tools/switch/build.py --lovepotion path/to/lovepotion.nro
+```
+
+It can also build an `.nsp` forwarder on your machine with hacBrewPack and keys from your own console. Steps, controls and limits are in [docs/SWITCH.md](docs/SWITCH.md). To try the console code paths on a desktop, run `love . --console`.
+
 ## How a match plays
 
 1. You hold 5 cards. The rival leads the first bout: three face-down cards slide onto their cushions.
@@ -65,6 +77,8 @@ tools/build-love.sh
 
 ```
 main.lua, conf.lua     boot, 640x360 virtual canvas (rendered 2x), scene manager, table backdrop, screen pass, input
+src/platform.lua       desktop LÖVE vs LÖVE Potion (Switch): shader and mouse stand-ins, which render path to use
+src/input.lua          mouse, touchscreen and controller folded into one pointer
 src/core/              pure game logic, no LÖVE: match engine + AI, festival, nemesis, cards, traits, charms, run/meta
 src/ui/                theme (palette, type scale), plates (Figma title cards, dithered plates, serif text), gfx (panels,
                        text), icons (ASCII pixel sprites), cardview (faces, coat backs), art (dithered cats), shaders (stage
@@ -72,7 +86,8 @@ src/ui/                theme (palette, type scale), plates (Figma title cards, d
 src/scenes/            title, hub (festival grounds), vs, match, result, market, event (fortune teller), summary
 src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots
 tests/run.lua          duel-rule tests + 90-festival AI simulation: luajit tests/run.lua
-assets/                fonts (OFL) and images from the Figma file
+assets/                fonts (OFL) and images from the Figma file; assets/switch holds the baked shader art
+tools/switch/          Switch build: bake_assets.py (shader art to PNG), nro.py (NRO packer), build.py, icon.jpg
 ```
 
 To tweak the look, start with `src/ui/theme.lua` (palette, type scale), `src/ui/plates.lua` (title cards and plates), and the `stage`, `fdither` and `smear` shaders in `src/ui/shaders.lua`. Design notes and balance knobs are in [docs/DESIGN.md](docs/DESIGN.md).

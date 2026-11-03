@@ -20,7 +20,7 @@ function S:enter()
   self.news = nil
   local run = G.save.run
   self.victory = run and run.outcome == "victory"
-  S.bg = { horizon = 0, light = { 0.5, 0.35 }, radius = 0.9, power = 1.0, ramp = self.victory and "felt" or "blood" }
+  S.bg = { preset = "menu", ramp = self.victory and "felt" or "blood" }
   self.logo = plates.image(G.images.logo, 220)
   self.flames = plates.image(G.images.shadow, 480)
   sfx.play(self.victory and "win" or "lose")

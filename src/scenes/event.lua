@@ -13,7 +13,7 @@ local widgets = require("src.ui.widgets")
 local S = {}
 local C = theme.c
 local T = theme.T
-S.bg = { horizon = 0, light = { 0.5, 0.35 }, radius = 0.75, power = 1.0 }
+S.bg = { preset = "menu" }
 
 function S:enter(p)
   self.t = 0

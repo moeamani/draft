@@ -9,6 +9,6 @@ function love.conf(t)
   t.window.minheight = 360
   t.window.vsync = 1
   t.window.highdpi = true
-  t.modules.joystick = false
+  t.modules.joystick = true -- controllers (and the Switch Joy-Cons)
   t.modules.physics = false
 end

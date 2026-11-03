@@ -291,7 +291,11 @@ function M.help()
       head("The Four Hands")
       para("The Arena's four Warlords enter every festival and remember you. Their traits start hidden: beat strays, pay the rat, carry a Spyglass, or watch a trait fire mid-match to learn them.")
       para("A Hand who beats you grows stronger. Beat one and choose their fate: Slay (they forfeit, and may return), Recruit if you never lost a bout (they join your pride, and may betray you), or Brand (a weakness, and a grudge).")
-      para("Keys: Enter to charge, 1 2 3 to place the card under the mouse, F11 fullscreen, F2 screen style, F3 sound, Esc menu.", C.muted)
+      if G.platform and G.platform.console then
+        para("Controls: stick or d-pad moves the paw, A picks up and places, X charges, Y takes your cards back, B closes, + opens the menu, L and R scroll. You can also tap and drag on the touchscreen.", C.muted)
+      else
+        para("Keys: Enter to charge, 1 2 3 to place the card under the mouse, F11 fullscreen, F2 screen style, F3 sound, Esc menu.", C.muted)
+      end
     end
   end
   G.openOverlay(ov)

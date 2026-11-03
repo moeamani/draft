@@ -17,7 +17,7 @@ local lg = love.graphics
 local S = {}
 local C = theme.c
 local T = theme.T
-S.bg = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0 }
+S.bg = { preset = "vs" }
 
 function S:enter()
   local save = G.save
@@ -25,7 +25,7 @@ function S:enter()
   self.opp = game.nextOpponent(save)
   self.n = self.opp.kind == "hand" and game.findNemesis(save, self.opp.id) or nil
   self.rank = self.n and game.rankOf(save, self.n) or 0
-  S.bg = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0, ramp = self.n and "blood" or "felt" }
+  S.bg = { preset = "vs", ramp = self.n and "blood" or "felt" }
   local r = { s = math.floor(love.math.random() * 2 ^ 30) + 1 }
   if self.n then
     self.line = nemesis.speak(r, self.n, nemesis.situation(self.n), save.playerName, self.rank)
@@ -63,7 +63,13 @@ function S:draw()
   -- the rival, Figma-mascot style
   local e = ease(t / 0.5)
   local px = math.floor(60 - (1 - e) * 220)
-  plates.draw(self.smear, px + 14, 66)
+  if self.smear then
+    plates.draw(self.smear, px + 14, 66)
+  else -- no lens shader (consoles): colour ghosts trail the portrait like the smear does
+    plates.drawTint(self.them, px + 30, 66, C.gold, 0.3, "add")
+    plates.drawTint(self.them, px + 20, 66, C.red, 0.45, "add")
+    plates.drawTint(self.them, px + 10, 66, C.cyan, 0.6, "add")
+  end
   plates.draw(self.them, px, 66)
   if t > 0.35 then
     local k = ease((t - 0.35) / 0.3)

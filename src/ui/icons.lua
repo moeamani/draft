@@ -86,6 +86,8 @@ S.goblet = {
   "kkkkkkkkk", "kwwxxxxdk", "kwxxxxxdk", "kxxxxxxdk", ".kxxxxdk.", "..kxxdk..", "...kxk...", "...kxk...", "..kxxxk..", ".kxxxxdk.", ".kkkkkkk." }
 S.zzz = {
   "kkkkk....", "kwwwk....", "kkwkk....", ".kwk.kkkk", "kwkkkkwwk", "kwwwkkkwk", "kkkkkkwkk", ".....kwwk", ".....kkkk" }
+S.pointer = {
+  "k........", "kwk......", "kwwk.....", "kwwwk....", "kwwwwk...", "kwwwwwk..", "kwwwwwwk.", "kwwwwkkkk", "kwkkwk...", "kk..kwk..", ".....kk.." }
 S.dagger = S.sword
 S.market, S.shrine, S.training = S.fish, S.star, S.shield
 
@@ -103,18 +105,36 @@ local function bake(name, tint)
   local key = name .. ":" .. tint[1] .. tint[2] .. tint[3]
   if cache[key] then return cache[key] end
   local h, w = #rows, #rows[1]
-  local data = love.image.newImageData(w, h)
   local dark = theme.darken(tint, 0.55)
-  for y = 1, h do
-    for x = 1, w do
-      local ch = rows[y]:sub(x, x)
-      local c
-      if ch == "x" then c = tint elseif ch == "d" then c = dark elseif ch == "w" then c = theme.mix(tint, theme.c.paper, 0.75)
-      elseif ch == "k" then c = theme.c.black end
-      if c then data:setPixel(x - 1, y - 1, c[1], c[2], c[3], 1) else data:setPixel(x - 1, y - 1, 0, 0, 0, 0) end
-    end
+  local function colour(ch)
+    if ch == "x" then return tint elseif ch == "d" then return dark elseif ch == "w" then return theme.mix(tint, theme.c.paper, 0.75)
+    elseif ch == "k" then return theme.c.black end
   end
-  local img = lg.newImage(data)
+  local ok, img = pcall(function()
+    local data = love.image.newImageData(w, h)
+    for y = 1, h do
+      for x = 1, w do
+        local c = colour(rows[y]:sub(x, x))
+        if c then data:setPixel(x - 1, y - 1, c[1], c[2], c[3], 1) else data:setPixel(x - 1, y - 1, 0, 0, 0, 0) end
+      end
+    end
+    return lg.newImage(data)
+  end)
+  if not ok then -- no ImageData on this platform: paint the pixels into a canvas instead
+    img = lg.newCanvas(w, h)
+    lg.push("all")
+    lg.origin()
+    lg.setScissor()
+    lg.setCanvas(img)
+    lg.clear(0, 0, 0, 0)
+    for y = 1, h do
+      for x = 1, w do
+        local c = colour(rows[y]:sub(x, x))
+        if c then lg.setColor(c[1], c[2], c[3], 1); lg.rectangle("fill", x - 1, y - 1, 1, 1) end
+      end
+    end
+    lg.pop()
+  end
   img:setFilter("nearest", "nearest")
   cache[key] = img
   return img

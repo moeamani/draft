@@ -36,7 +36,7 @@ local RDECK_X, RDECK_Y = 448, 74
 local PX, PY, PW, PH = 468, 32, 164, 270
 local CUSHION_NAMES = { "Left", "Middle", "Right" }
 
-S.bg = { horizon = HORIZON / 360, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0 }
+S.bg = { preset = "match" }
 
 function S:enter()
   local save = G.save
@@ -55,7 +55,7 @@ function S:enter()
   self.blink = 3
   local n = self.ctx.nemesis
   self.portrait, self.eyes = art.entrant(save, self.ctx.opp, 128, true)
-  S.bg = { horizon = HORIZON / theme.H, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0, ramp = n and "blood" or "felt" }
+  S.bg = { preset = "match", ramp = n and "blood" or "felt" }
   fx.banner(festival.stageLabel(save.run.festival), "Knock all of their goblets off the table", n and C.red or C.gold, 0, 160)
   self:at(1.0, function() self:beginBout() end)
 end

@@ -1,7 +1,7 @@
 -- Pixel cards in the Figma title-card style: a 56x78 face built from dithered palette plates,
 -- baked once. At rest a card is drawn 1:1 on whole pixels (no wobble, no tilt, no resampling),
 -- so its pixels never shimmer. Only transient motion (dealing, flipping, a lean while moving)
--- goes through the projected mesh.
+-- is drawn scaled and rotated.
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
 local gfx = require("src.ui.gfx")
@@ -142,7 +142,6 @@ end
 
 local View = {}
 View.__index = View
-local GRID = 3
 
 function M.new(inst, x, y, scale)
   local def = cards.getDef(inst)
@@ -152,16 +151,6 @@ function M.new(inst, x, y, scale)
     hovered = false, faceDown = false, flip = 1, tflip = 1, selected = false, bounce = 0, dim = 0,
     backKind = "plain",
   }, View)
-  v.mesh = lg.newMesh((GRID + 1) * (GRID + 1), "triangles", "stream")
-  local map = {}
-  for j = 0, GRID - 1 do
-    for i = 0, GRID - 1 do
-      local a = j * (GRID + 1) + i + 1
-      local b, c, d = a + 1, a + GRID + 1, a + GRID + 2
-      for _, k in ipairs({ a, b, c, b, d, c }) do map[#map + 1] = k end
-    end
-  end
-  v.mesh:setVertexMap(map)
   return v
 end
 
@@ -222,6 +211,7 @@ function View:draw(opts)
   local showBack = self.faceDown or self.flip < 0
   local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1)
   local alpha = self.alpha
+  if self.dying and not shaders.dissolve then alpha = alpha * (1 - self.dying) end -- no shader: fade out
   local k = 1 - self.dim * 0.6
   local lift = (self.hovered or self.selected) and 3 or 2
   local rest = self:atRest()
@@ -252,20 +242,26 @@ function View:draw(opts)
     lg.setColor(k, k, k, alpha)
     lg.draw(tex, x0, y0)
   else
-    local verts = {}
-    for j = 0, GRID do
-      for i = 0, GRID do
-        local u, v = i / GRID, j / GRID
-        local px, py = self:project(u - 0.5, v - 0.5)
-        verts[#verts + 1] = { px, py, u, v, k, k, k, alpha }
-      end
-    end
-    self.mesh:setVertices(verts)
-    self.mesh:setTexture(tex)
-    lg.setColor(1, 1, 1, alpha)
-    lg.draw(self.mesh)
+    local s = self.s * (1 + self.bounce * 0.12)
+    lg.setColor(k, k, k, alpha)
+    lg.draw(tex, self.x, self.y, self.rot, s * math.abs(self.flip), s, M.W / 2, M.H / 2)
   end
   lg.setShader()
+  if self.flash > 0 and not shaders.flash then -- no shader: a white wash over the card
+    lg.setBlendMode("add")
+    lg.setColor(self.flash * alpha, self.flash * alpha, self.flash * alpha, 1)
+    if rest then
+      lg.rectangle("fill", x0, y0, M.W, M.H)
+    else
+      local s = self.s * (1 + self.bounce * 0.12)
+      lg.push()
+      lg.translate(self.x, self.y)
+      lg.rotate(self.rot)
+      lg.rectangle("fill", -M.W * s * math.abs(self.flip) / 2, -M.H * s / 2, M.W * s * math.abs(self.flip), M.H * s)
+      lg.pop()
+    end
+    lg.setBlendMode("alpha")
+  end
   if self.selected and not self.dying then
     theme.set(C.gold, alpha)
     if rest then

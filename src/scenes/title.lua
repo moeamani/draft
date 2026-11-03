@@ -10,7 +10,7 @@ local S = {}
 local C = theme.c
 local T = theme.T
 -- The title is the Figma title frame: the two-tone logo centred on dithered ink green.
-S.bg = { horizon = 0, light = { 0.5, 0.34 }, radius = 0.85, power = 0.9 }
+S.bg = { preset = "menu" }
 
 function S:enter()
   self.t = 0
@@ -32,6 +32,7 @@ end
 local function startNew()
   if not G.save then
     S.naming = true
+    S:openKeyboard()
     return
   end
   if G.save.run and G.save.run.phase ~= "over" then
@@ -55,9 +56,11 @@ function S:draw()
     gfx.panel(bx - 30, 214, bw + 60, 120, C.ink2)
     plates.print("Name your champion", 20, cx, 218, C.white, { align = "center" })
     gfx.text("The Four Hands will learn this name.", T.body(), cx, 242, C.paper2, { align = "center" })
-    gfx.panel(bx - 16, 262, bw + 32, 26, C.deep, { shadow = false })
+    local edit, over = widgets.click("name_box", bx - 16, 262, bw + 32, 26)
+    gfx.panel(bx - 16, 262, bw + 32, 26, over and C.ink3 or C.deep, { shadow = false })
     local cursor = (math.floor(self.t * 2) % 2 == 0) and "_" or ""
     gfx.text(self.name .. cursor, T.big(), cx, 264, C.paper, { align = "center" })
+    if edit then self:openKeyboard() end
     if widgets.button("name_go", bx - 16, 296, bw + 32, 30, "Enter the Festival", { color = C.red }) then self:confirmName() end
   else
     local y = 214
@@ -79,7 +82,8 @@ function S:draw()
       gfx.text(("%s, %d festivals, %d crowns"):format(s.playerName, s.runs, s.victories), T.body(), 12, 340, C.muted)
     end
   end
-  gfx.text("F11 fullscreen   F2 CRT   F3 sound", T.body(), 628, 340, C.muted, { align = "right" })
+  local hint = G.platform.console and "A select   B back   X charge   + menu" or "F11 fullscreen   F2 CRT   F3 sound"
+  gfx.text(hint, T.body(), 628, 340, C.muted, { align = "right" })
 end
 
 function S:confirmName()
@@ -89,8 +93,22 @@ function S:confirmName()
   begin()
 end
 
+-- On a console the name box opens the system keyboard, which hands back the whole name at once.
+function S:openKeyboard()
+  if not G.platform.console then return end
+  self.swkbd = true
+  pcall(love.keyboard.setTextInput, true)
+end
+
 function S:textinput(t)
-  if self.naming and #self.name < 16 then self.name = self.name .. t end
+  if not self.naming then return end
+  if self.swkbd then
+    self.swkbd = false
+    pcall(love.keyboard.setTextInput, false)
+    if t:match("%S") then self.name = t:sub(1, 16) end
+  elseif #self.name < 16 then
+    self.name = self.name .. t
+  end
 end
 
 function S:keypressed(k)

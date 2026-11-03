@@ -1,7 +1,7 @@
 -- Synthesised sound effects and a generated ambient loop (no audio files needed).
 local M = { muted = false, music = nil, enabled = true }
 
-local RATE = 22050
+local RATE = 22050 -- lowered on consoles, where synthesising at load is slower
 local sounds = {}
 
 local function wave(kind, ph)
@@ -68,8 +68,9 @@ local function ambient()
   end
 end
 
-function M.load()
+function M.load(console)
   if not love.audio then M.enabled = false; return end
+  if console then RATE = 11025 end
   local ok = pcall(function()
     make("click", { { 880, 0, 0.05, "sine", 0.25 } }, 0.06)
     make("hover", { { 1320, 0, 0.03, "sine", 0.08 } }, 0.04)
@@ -99,7 +100,8 @@ function M.play(name, pitch, vol)
   if M.muted or not M.enabled then return end
   local s = sounds[name]
   if not s then return end
-  local c = s:clone()
+  local ok, c = pcall(s.clone, s)
+  if not ok or not c then c = s; pcall(s.stop, s) end
   c:setPitch((pitch or 1) * (0.96 + love.math.random() * 0.08))
   c:setVolume(vol or 1)
   c:play()

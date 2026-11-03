@@ -28,8 +28,18 @@ every screen uses the same handful of parts:
 - **No shimmer.** Nothing animates the dither:
   - The light never moves.
   - Resting cards draw 1:1 on whole pixels, with no idle wobble, tilt or foil.
-  - Cards only go through the projected mesh while dealing, flipping or moving fast.
+  - Cards are only drawn scaled or rotated while dealing, flipping or moving fast.
   - The CRT filter is optional (F2) and off by default.
+
+### Without shaders (Switch)
+
+LÖVE Potion can't compile GLSL, so `src/platform.lua` switches to a shader-free path that keeps the same look:
+
+- The backdrops and the mascot smears are baked to PNG by `tools/switch/bake_assets.py`, a numpy port of the `stage` and `smear` shaders. It reads the presets, ramps and tints from `src/ui/bakes.lua`, so the game and the baker share one source.
+- Plates and title cards get a 16x16 Bayer dot tile in place of the `fdither` pass.
+- Nothing uses custom meshes. Gradients are 1px rows, glows are stacked circles, and moving cards are drawn scaled and rotated.
+
+See [SWITCH.md](SWITCH.md).
 
 ### Readable type
 
