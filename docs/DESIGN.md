@@ -2,38 +2,45 @@
 
 ## Art direction
 
-One look everywhere: **a candle-lit card table in a dark room**, drawn in Draft's own pixel art and palette.
+Everything follows the Figma file (the title frames and the "title cards" of the card sheet), so
+every screen uses the same handful of parts:
 
-- **Full pixel art.** Everything is drawn in a 640x360 virtual pixel space, rendered at 2x with nearest filtering.
-- **One palette**, taken from the Figma file:
-  - `#0e2119` ink, `#e8483b` red, `#2378f7` blue, `#d3a200` gold, `#47e7fd` cyan and `#f4f1e8` paper (`src/ui/theme.lua`).
-  - The table adds a walnut rim and a candle tone. Hand matches and defeats swap the green baize for blood red.
-- **One backdrop** (`table` shader in `src/ui/shaders.lua`) behind every scene:
-  - A dark room, a green baize table and one flickering candle.
-  - Light is worked out per virtual pixel and quantised with ordered dithering, so it has the same chunky grain as the art.
-  - The match, VS and title screens tilt the table into perspective, so the rival (or the mascot) looms in the dark beyond its far edge. Menus look straight down at the table top.
-- **The rival is a presence, not a panel.** In a match their portrait is a cut-out silhouette in the darkness, with glowing eyes that blink.
-- **Diegetic state on the table**:
-  - Goblets stand on each side. Swats knock them off with a crash and a splash.
-  - Three velvet cushions per side hold the cards.
-  - Draw piles sit on the table.
-  - Taunts and fortunes are parchment notes.
-- **Screen pass**: "lamplight" by default, a soft vignette and film grain with no blur, so text stays crisp. F2 switches to CRT (scanlines, slight curve) or plain.
+- **One dither.** Figma's Dither effect is Bayer 16x16 at 8 levels per channel, with 2px cells.
+  - It is ported as `fdither` in `src/ui/shaders.lua`, at one cell per virtual pixel (2 screen pixels, as in Figma).
+  - Every surface goes through it: the backdrop, plates, title cards, serif text, card faces and backs, portraits, and the Figma art.
+  - That gives one consistent dot texture on every flat colour.
+- **Title cards** (`src/ui/plates.lua`):
+  - A palette plate with a white Ancizar Serif label.
+  - Featured cards add the mascot silhouette run through a port of Figma's **Lens distortion** effect (anamorphic chromatic mode). That paints the cyan, pink and white streaks of the "Ability" card, or the full spectrum of the black "Power" card.
+  - They're used for screen titles, panel headers, the HUD, banners, plaques and stalls.
+- **Plates.** Panels, buttons, cushions and the bars on a card face are dithered palette plates with a 1px outline. Buttons carry serif labels that shrink to fit.
+- **Two type families.**
+  - Ancizar Serif (static Regular and Italic) for display type. It is always baked and dithered, like the Figma cards.
+  - Jersey 10/15/20/25 at their native pixel sizes for everything you need to read.
+- **One palette** from Figma: `#0e2119` ink, `#e8483b` red, `#2471fc` / `#2378f7` blue, `#d3a200` gold, `#47e7fd` cyan and `#f4f1e8` cream, plus black for the Power plate.
+- **The logo** is the two-tone Figma lockup: a red "D" and cream "raft", with the red cat, and the tagline "Four Hands." in cream with *One Arena* in red italic. The title screen is the Figma title frame.
+- **Card backs** are small title cards:
+  - Ember, Tide and Gilt use their coat's plate with the mascot smear.
+  - Shadow cats and tricks share the black Power plate with its spectrum smear.
+- **The backdrop** (`stage` shader) is dithered ink green with a soft, static pool of light.
+  - The match and the VS screen add a table top in perspective, with the rival looming beyond it.
+  - Hand matches and defeats use the blood-red stage.
+- **No shimmer.** Nothing animates the dither:
+  - The light never moves.
+  - Resting cards draw 1:1 on whole pixels, with no idle wobble, tilt or foil.
+  - Cards only go through the projected mesh while dealing, flipping or moving fast.
+  - The CRT filter is optional (F2) and off by default.
 
 ### Readable type
 
-Every font is drawn **at the size it was designed for**, so letters sit on the art's pixel grid. Nothing is blown up 2x or 3x.
-
 | Role | Font | Size |
 | --- | --- | --- |
+| Titles, names, buttons (baked and dithered) | Ancizar Serif | 13–34 px |
 | Anything you need to read (rules, card text, logs) | Jersey 15 | 15 px |
-| Buttons, names, numbers | Jersey 20 | 20 px |
-| Headline numbers | Jersey 25 | 25 px |
-| Names on cards, chips | Jersey 10 | 10 px |
-| Screen titles, champion names | Jacquard 24 | 24 px |
-| Short all-caps labels only | Tiny5 | 8 px |
+| Numbers | Jersey 20 / 25 | 20 / 25 px |
+| Names on cards, chips, short labels | Jersey 10 | 10 px |
 
-Secondary text uses `paper2`/`muted`, both lifted for contrast against the dark baize. The match has an **inspect panel** on the right in place of tiny tooltips. Hover any card and its full text appears there in Jersey 15. With nothing hovered, it explains the current bout.
+The match has an **inspect panel** on the right in place of tiny tooltips. Hover any card and its full text appears there in Jersey 15. With nothing hovered, it explains the current bout.
 
 ## The match: three cushions
 
@@ -153,10 +160,12 @@ Tuning knobs:
 
 | Figma | In game |
 | --- | --- |
-| "Draft" wordmark and tagline | title and victory screens (baked to pixels) |
-| Red/blue cat mascot | looms over the table on the title screen; window icon |
+| Title frame: two-tone "Draft" lockup and tagline | title screen, victory summary (`assets/img/logo.png`) |
+| Title cards: Card Name, Type, Ability, Power, Rarity | `plates.titleCard`, used for every heading, banner, plaque, stall and card back |
+| Dither effect (Bayer 16x16, 8 levels, 2px) | `fdither` shader, applied to every surface |
+| Lens distortion effect (anamorphic, chromatic) | `smear` shader: title-card streaks, card backs, the VS portrait |
+| Red/blue cat mascot | window icon; its silhouette drives the smear (`assets/img/mascot-silhouette.png`) |
 | Shadow creature with flames | defeat summary |
-| "In development" badge | title screen |
 | Card sheet (Artheline, Merline, the Black Cats) | the first entries in `src/core/cards.lua` |
 
 ## Ideas for later

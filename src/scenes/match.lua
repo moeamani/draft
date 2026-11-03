@@ -1,4 +1,4 @@
--- The Arena table. The rival looms in the dark across a candle-lit table. Each bout one side
+-- The Arena table. The rival looms in the dark beyond the table's far edge. Each bout one side
 -- leads (cards face-down on its three cushions) and the other answers, seeing only the backs.
 -- Then every cushion duels, and the winners swat goblets off the loser's side of the table.
 local art = require("src.ui.art")
@@ -14,6 +14,7 @@ local match = require("src.core.match")
 local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
+local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local traits = require("src.core.traits")
@@ -26,10 +27,10 @@ local C = theme.c
 local T = theme.T
 
 local HORIZON = 100
-local RIVAL_Y, MY_Y, HAND_Y = 152, 236, 338
-local RIVAL_X = { 258, 320, 382 }
-local MY_X = { 246, 320, 394 }
-local RIVAL_SCALE = 0.86
+local RIVAL_Y, MY_Y, HAND_Y = 150, 238, 338
+local RIVAL_X = { 248, 320, 392 }
+local MY_X = { 248, 320, 392 }
+local RIVAL_SCALE = 1 -- cards are only ever drawn 1:1 at rest
 local DECK_X, DECK_Y = 186, 328
 local RDECK_X, RDECK_Y = 448, 74
 local PX, PY, PW, PH = 468, 32, 164, 270
@@ -269,9 +270,9 @@ function S:gobletPos(side, k)
   local max = self.s.sides[side].maxGoblets
   local sp = max > 8 and 9 or 11
   if side == 2 then
-    return 226 - (max - k) * sp, 150
+    return 208 - (max - k) * sp, 150
   end
-  return 210 - (max - k) * sp, 248
+  return 208 - (max - k) * sp, 250
 end
 
 function S:knock(side, n)
@@ -437,7 +438,7 @@ function S:update(dt)
     v.hovered = hov
     v.selected = false
     v.paws, v.previewInfo = nil, nil
-    v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 22 or 0), hov and 1.05 or 1, off * 0.05)
+    v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 22 or 0), 1, 0)
   end
   for i = 1, 3 do
     local uid = self.slots[i]
@@ -450,7 +451,7 @@ function S:update(dt)
   end
   if self.drag and self.drag.moved then
     local v = self.views[self.drag.uid]
-    if v then v.hovered = true; v:setTarget(mx, my, 1.08, 0) end
+    if v then v.hovered = true; v:setTarget(mx, my, 1, 0) end
   end
   for _, v in pairs(self.views) do v:update(dt) end
   for i = 1, 3 do
@@ -488,34 +489,26 @@ function S:drawRival()
   end
   lg.setScissor()
   -- the rival's draw pile
-  local back = cardview.back("plain")
-  for k = 0, 2 do
-    lg.setColor(1, 1, 1)
-    lg.draw(back, RDECK_X + k, RDECK_Y - k, 0.1, 0.42, 0.42, cardview.W / 2, cardview.H / 2)
-  end
+  local pile = cardview.pile()
+  lg.setColor(1, 1, 1)
+  lg.draw(pile, RDECK_X - 14, RDECK_Y - 18)
 end
 
-local function cushion(x, y, scale, col, num, lit)
-  local w, h = math.floor(62 * scale), math.floor(84 * scale)
+-- A cushion is a dithered slot plate; the number shows which key places a card there.
+local function cushion(x, y, col, num, lit)
+  local w, h = 62, 84
   local x0, y0 = math.floor(x - w / 2), math.floor(y - h / 2)
-  gfx.box(x0 + 1, y0 + 3, w, h, C.black, 0.5)
-  gfx.box(x0, y0, w, h, C.black)
-  gfx.box(x0 + 1, y0 + 1, w - 2, h - 2, col)
-  theme.set(theme.mix(col, C.paper, 0.18))
-  lg.rectangle("fill", x0 + 3, y0 + 1, w - 6, 1)
-  theme.set(theme.darken(col, 0.7))
-  lg.rectangle("fill", x0 + 4, y0 + 4, w - 8, h - 8)
-  theme.set(col)
-  lg.rectangle("fill", x0 + 5, y0 + 5, w - 10, h - 10)
-  -- gold tassels
-  for _, p in ipairs({ { x0 - 1, y0 - 1 }, { x0 + w - 2, y0 - 1 }, { x0 - 1, y0 + h - 2 }, { x0 + w - 2, y0 + h - 2 } }) do
-    gfx.box(p[1], p[2], 3, 3, C.gold)
-  end
+  theme.set(C.black, 0.45)
+  lg.rectangle("fill", x0 + 1, y0 + 2, w, h)
+  plates.draw(plates.plate(w, h, col, { light = 0.06, shade = 0.2 }), x0, y0)
   if lit then
     theme.set(C.gold)
-    lg.rectangle("line", x0 - 1.5, y0 - 1.5, w + 3, h + 3)
+    lg.rectangle("fill", x0 - 2, y0 - 2, w + 4, 1)
+    lg.rectangle("fill", x0 - 2, y0 + h + 1, w + 4, 1)
+    lg.rectangle("fill", x0 - 2, y0 - 2, 1, h + 4)
+    lg.rectangle("fill", x0 + w + 1, y0 - 2, 1, h + 4)
   end
-  if num then gfx.text(num, T.big(), x, y - 11, theme.mix(col, C.paper, 0.35), { align = "center", shadow = false }) end
+  if num then plates.print(num, 26, x, y - 16, theme.mix(col, C.paper, 0.3), { align = "center" }) end
 end
 
 function S:drawGoblets(side)
@@ -531,7 +524,7 @@ function S:drawGoblets(side)
     end
   end
   local x0 = self:gobletPos(side, 1)
-  gfx.text(tostring(self.gob[side]), T.big(), x0 - 10, (side == 1 and 248 or 150) - 12, col, { align = "right" })
+  gfx.text(tostring(self.gob[side]), T.big(), x0 - 10, (side == 1 and 250 or 150) - 12, col, { align = "right" })
 end
 
 function S:drawPlaques()
@@ -543,22 +536,23 @@ function S:drawPlaques()
   local opp = self.ctx.opp
   local sub = n and nemesis.RANK_TITLES[game.rankOf(save, n)] or ("the " .. (opp.title or "Stray"))
   if n and game.rankOf(save, n) == 0 then sub = n.epithet end
-  local ph = 66 + (n and 30 or 0)
-  gfx.panel(8, 8, 176, ph, C.deep, { border = n and C.redDark or C.ink3 })
-  gfx.text(sd.name, T.big(), 14, 9, C.paper)
-  gfx.text(sub, T.body(), 14, 29, n and C.red or C.muted)
+  local ph = 76 + (n and 30 or 0)
+  gfx.panel(8, 8, 180, ph, C.deep)
+  local nsize = plates.textWidth(sd.name, 22) <= 160 and 22 or 18
+  plates.header(8, 8, 180, 30, n and C.night or C.red, sd.name, { size = nsize, streak = n and 1.0 or 0.43 })
+  gfx.text(sub, T.body(), 14, 40, n and C.red or C.paper2)
   local coat = cards.COATS[opp.coat]
   local onTable = 0
   if not self.busyResolve then for i = 1, 3 do if sd.placed[i] then onTable = onTable + 1 end end end
-  gfx.text(coat.name .. " coat", T.body(), 14, 45, coat.color)
-  gfx.text(("Hand %d  Deck %d"):format(#sd.hand - onTable, #sd.deck), T.body(), 178, 45, C.paper2, { align = "right" })
-  if n then overlays.traitChips(n, 14, 64, 166, s.revealed) end
+  gfx.text(coat.name .. " coat", T.body(), 14, 56, coat.color)
+  gfx.text(("Hand %d  Deck %d"):format(#sd.hand - onTable, #sd.deck), T.body(), 182, 56, C.paper2, { align = "right" })
+  if n then overlays.traitChips(n, 14, 76, 170, s.revealed) end
   -- you
   local me = s.sides[1]
-  gfx.panel(8, 296, 160, 56, C.deep, { border = C.goldDark })
-  gfx.text(me.name, T.big(), 14, 297, C.gold)
-  gfx.text(("Deck %d  Discard %d"):format(#me.deck, #me.discard), T.body(), 14, 317, C.muted)
-  hud.charmRow(save.run, 14, 334)
+  gfx.panel(8, 292, 168, 60, C.deep)
+  plates.header(8, 292, 168, 26, C.ink3, me.name, { size = 18 })
+  gfx.text(("Deck %d  Discard %d"):format(#me.deck, #me.discard), T.body(), 14, 318, C.paper2)
+  hud.charmRow(save.run, 14, 335)
 end
 
 function S:inspectLines()
@@ -597,24 +591,27 @@ end
 
 function S:drawPanel()
   local s = self.s
-  gfx.panel(PX, PY, PW, PH, C.deep, { border = C.goldDark })
-  local x, y, w = PX + 7, PY + 5, PW - 14
+  gfx.panel(PX, PY, PW, PH, C.deep)
+  local x, y, w = PX + 7, PY + 28, PW - 14
   local lines = self:inspectLines()
   if lines then
+    -- the card's name is the panel's title card
+    local first = table.remove(lines, 1)
+    local tsize = plates.textWidth(first.text, 18) <= PW - 16 and 18 or 14
+    plates.header(PX, PY, PW, 24, C.ink3, first.text, { size = tsize })
     for _, l in ipairs(lines) do
       y = y + gfx.textf(l.text, l.font or T.body(), x, y, w, "left", l.color or C.paper) + (l.gap or 3)
     end
     return
   end
+  local blue = theme.hex("#2471fc")
   if self.busyResolve or (self.busy and #self.log > 0) then
-    gfx.label("Bout " .. (self.rec and self.rec.bout or s.bout), x, y, C.gold)
-    y = y + 12
+    plates.header(PX, PY, PW, 24, C.night, "Bout " .. (self.rec and self.rec.bout or s.bout), { size = 18, streak = 1.0 })
     for _, l in ipairs(self.log) do y = y + gfx.textf(l.text, T.body(), x, y, w, "left", l.col) + 4 end
     return
   end
   local lead = s.lead
-  gfx.label("Bout " .. s.bout .. (lead == 1 and " - you lead" or " - you answer"), x, y, lead == 1 and C.gold or C.red)
-  y = y + 13
+  plates.header(PX, PY, PW, 24, lead == 1 and blue or C.red, "Bout " .. s.bout .. (lead == 1 and ": you lead" or ": you answer"), { size = 16, streak = 0.43 })
   local tip
   if lead == 1 then
     tip = "Put up to 3 cards on your cushions. The rival sees only their backs, then answers. Ties go to you."
@@ -627,15 +624,10 @@ function S:drawPanel()
   y = y + 12
   for _, pair in ipairs({ { "ember", "gilt" }, { "gilt", "tide" }, { "tide", "ember" } }) do
     local a, b = cards.COATS[pair[1]], cards.COATS[pair[2]]
-    local cw = gfx.chip(a.name, x, y, nil)
-    gfx.box(x + 1, y + 1, cw - 2, gfx.CHIP_H - 2, a.color)
-    gfx.text(a.name, T.small(), x + 4, y + 1, pair[1] == "gilt" and C.black or C.paper, { shadow = false })
-    gfx.text("beats", T.body(), x + cw + 5, y - 2, C.paper2)
-    local bx = x + cw + 40
-    local bw = gfx.chip(b.name, bx, y, nil)
-    gfx.box(bx + 1, y + 1, bw - 2, gfx.CHIP_H - 2, b.color)
-    gfx.text(b.name, T.small(), bx + 4, y + 1, pair[2] == "gilt" and C.black or C.paper, { shadow = false })
-    y = y + 16
+    plates.draw(plates.titleCard(50, 15, a.color, { label = a.name, size = 13, outline = C.black }), x, y)
+    gfx.text("beats", T.body(), x + 56, y - 1, C.paper2)
+    plates.draw(plates.titleCard(50, 15, b.color, { label = b.name, size = 13, outline = C.black }), x + 96, y)
+    y = y + 19
   end
 end
 
@@ -644,18 +636,18 @@ function S:draw()
   self:drawRival()
   -- cushions
   for i = 1, 3 do
-    cushion(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, theme.hex("#4a1712"), nil, false)
+    cushion(RIVAL_X[i], RIVAL_Y, self.ctx.nemesis and theme.hex("#3a1513") or C.ink, nil, false)
     local dropTarget = self.drag and self.drag.moved and self:cushionAt(widgets.mx, widgets.my) == i
-    cushion(MY_X[i], MY_Y, 1, theme.hex("#5a1f19"), (not self.slots[i] and not self.board[i]) and tostring(i) or nil, dropTarget)
+    cushion(MY_X[i], MY_Y, C.ink2, (not self.slots[i] and not self.board[i]) and tostring(i) or nil, dropTarget)
   end
   -- what the rival's empty cushions mean right now
   if not self.busyResolve and not self.finished then
     for i = 1, 3 do
       if not self.rviews[i] then
         if s.lead == 1 then
-          gfx.text("?", T.big(), RIVAL_X[i], RIVAL_Y - 12, theme.hex("#7a3a30"), { align = "center", shadow = false })
+          plates.print("?", 26, RIVAL_X[i], RIVAL_Y - 16, C.ink3, { align = "center" })
         elseif not self.busy and not s.sides[2].placed[i] then
-          gfx.text("Empty", T.body(), RIVAL_X[i], RIVAL_Y - 9, theme.hex("#c08070"), { align = "center", shadow = false })
+          gfx.text("Empty", T.body(), RIVAL_X[i], RIVAL_Y - 9, C.paper2, { align = "center", shadow = false })
         end
       end
     end
@@ -667,11 +659,8 @@ function S:draw()
     icons.draw("goblet", f.x, f.y, theme.mix(f.side == 1 and C.gold or C.steel, C.black, 1 - a), 1, f.rot)
   end
   -- my draw pile
-  local back = cardview.back("plain")
-  for k = 0, 2 do
-    lg.setColor(1, 1, 1)
-    lg.draw(back, DECK_X + k, DECK_Y - k, -0.1, 0.5, 0.5, cardview.W / 2, cardview.H / 2)
-  end
+  lg.setColor(1, 1, 1)
+  lg.draw(cardview.pile(), DECK_X - 14, DECK_Y - 18)
   gfx.text(tostring(#s.sides[1].deck), T.body(), DECK_X, DECK_Y + 18, C.paper, { align = "center" })
   -- cards
   for i = 1, 3 do if self.rviews[i] then self.rviews[i]:draw() end end

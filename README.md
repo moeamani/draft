@@ -3,7 +3,8 @@
 A pixel-art roguelike card duel about medieval cats, built in **LÖVE 11 (Lua)**.
 
 - Each run is an **Arena Festival**: 16 cats, four groups of four, a live points table, then an 8-cat knockout bracket.
-- Every match is played on a **candle-lit table**. The rival looms in the dark across from you. Both of you have three cushions, and the cats on facing cushions duel. A winner swats a goblet off the loser's side. Knock all of their goblets off the table to win.
+- Every match is played across a table, with the rival looming in the dark on the far side. Both of you have three cushions, and the cats on facing cushions duel. A winner swats a goblet off the loser's side. Knock all of their goblets off the table to win.
+- The look comes straight from the Figma file. The two-tone logo, Ancizar Serif title cards, the chromatic mascot smear and one ordered dither are used on every screen.
 - **Lead and answer.** Each bout one side leads, placing its cards face-down. The other side answers, seeing only the card backs. A back shows the cat's coat, but Shadow cats and tricks share the same dark back. The lead swaps every bout.
 - The **Four Hands** are persistent nemesis Warlords. They enter every festival, remember you, hide strengths and weaknesses, and scheme between festivals.
 
@@ -32,7 +33,7 @@ tools/build-love.sh
 | Enter / Space | Charge! (reveal and duel) |
 | Backspace | clear your cushions |
 | F11 / Alt+Enter | fullscreen |
-| F2 | screen style: lamplight / CRT / plain |
+| F2 | CRT filter on/off |
 | F3 | sound on/off |
 | Esc | menu |
 
@@ -65,13 +66,13 @@ tools/build-love.sh
 ```
 main.lua, conf.lua     boot, 640x360 virtual canvas (rendered 2x), scene manager, table backdrop, screen pass, input
 src/core/              pure game logic, no LÖVE: match engine + AI, festival, nemesis, cards, traits, charms, run/meta
-src/ui/                theme (palette, type scale), gfx (panels, parchment, text), icons (ASCII pixel sprites), cardview
-                       (faces, coat backs), art (dithered cats), shaders (table, lamplight/CRT, foil, dissolve, dither, bake),
-                       widgets, fx, sfx, hud, picker, overlays
+src/ui/                theme (palette, type scale), plates (Figma title cards, dithered plates, serif text), gfx (panels,
+                       text), icons (ASCII pixel sprites), cardview (faces, coat backs), art (dithered cats), shaders (stage
+                       backdrop, Figma dither, chromatic smear, CRT, dissolve, wipe), widgets, fx, sfx, hud, picker, overlays
 src/scenes/            title, hub (festival grounds), vs, match, result, market, event (fortune teller), summary
 src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots
 tests/run.lua          duel-rule tests + 90-festival AI simulation: luajit tests/run.lua
-assets/                pixel fonts (OFL) and images from the Figma file
+assets/                fonts (OFL) and images from the Figma file
 ```
 
-To tweak the look, start with `src/ui/theme.lua` (palette, type scale), the `table` shader in `src/ui/shaders.lua` (room, baize and lamplight), and `src/ui/gfx.lua` (panel and parchment styles). Design notes and balance knobs are in [docs/DESIGN.md](docs/DESIGN.md).
+To tweak the look, start with `src/ui/theme.lua` (palette, type scale), `src/ui/plates.lua` (title cards and plates), and the `stage`, `fdither` and `smear` shaders in `src/ui/shaders.lua`. Design notes and balance knobs are in [docs/DESIGN.md](docs/DESIGN.md).

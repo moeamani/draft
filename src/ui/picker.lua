@@ -47,7 +47,7 @@ function M:update(dt)
     if v.deal and v.deal > 0 then v.deal = v.deal - dt
     else
       local lift = v.hovered and -6 or 0
-      v:setTarget(v.baseX, v.baseY - self.scroll + lift + math.floor(math.sin(self.t * 1.6 + i) * 1.5 + 0.5), v.baseS * (v.hovered and 1.1 or 1), 0)
+      v:setTarget(v.baseX, v.baseY - self.scroll + lift, v.baseS, 0)
     end
     v:update(dt)
   end

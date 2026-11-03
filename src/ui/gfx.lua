@@ -15,24 +15,22 @@ function M.box(x, y, w, h, col, a)
   lg.rectangle("fill", x + w - 1, y + 1, 1, h - 2)
 end
 
--- The one panel style: drop shadow, black outline, fill, 1px top highlight.
+-- The one panel style: a dithered palette plate (Figma texture) with a 1px outline and a drop
+-- shadow. opts.accent (or the older opts.border) adds a 2px coloured strip along the top.
 function M.panel(x, y, w, h, col, opts)
   opts = opts or {}
   local a = opts.alpha or 1
   x, y, w, h = floor(x), floor(y), floor(w), floor(h)
-  if opts.shadow ~= false then M.box(x + 1, y + 2, w, h, C.black, 0.55 * a) end
-  M.box(x, y, w, h, opts.outline or C.black, a)
-  M.box(x + 1, y + 1, w - 2, h - 2, col, a)
-  if opts.border then
-    theme.set(opts.border, a)
-    lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
-    lg.rectangle("fill", x + 2, y + h - 2, w - 4, 1)
-    lg.rectangle("fill", x + 1, y + 2, 1, h - 4)
-    lg.rectangle("fill", x + w - 2, y + 2, 1, h - 4)
-  elseif opts.highlight ~= false then
-    local hl = theme.mix(col, C.paper, 0.18)
-    theme.set(hl, a)
-    lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
+  if opts.shadow ~= false then
+    theme.set(C.black, 0.5 * a)
+    lg.rectangle("fill", x + 1, y + 2, w, h)
+  end
+  local plates = require("src.ui.plates")
+  plates.draw(plates.plate(w, h, col, { outline = opts.outline }), x, y, a)
+  local accent = opts.accent or opts.border
+  if accent then
+    theme.set(accent, a)
+    lg.rectangle("fill", x + 1, y + 1, w - 2, 2)
   end
 end
 
@@ -106,36 +104,6 @@ end
 -- Short all-caps label (section headings, small tags).
 function M.label(str, x, y, col, align)
   return M.text(str:upper(), theme.T.label(), x, y, col or C.pale, { align = align })
-end
-
--- A parchment note lying on the table: warm paper, dark ink, torn-looking dark edge.
-function M.paper(x, y, w, h, opts)
-  opts = opts or {}
-  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
-  M.box(x + 1, y + 2, w, h, C.black, 0.5)
-  M.box(x, y, w, h, C.parchDark)
-  M.box(x + 1, y + 1, w - 2, h - 2, C.parch)
-  theme.set(C.paper)
-  lg.rectangle("fill", x + 2, y + 1, w - 4, 1)
-  if opts.pin then
-    M.box(x + floor(w / 2) - 2, y - 1, 5, 5, C.black)
-    M.box(x + floor(w / 2) - 1, y, 3, 3, opts.pin)
-  end
-end
-
--- Horizontal bar (Pride, progress).
-function M.bar(x, y, w, h, frac, col, back)
-  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
-  M.box(x, y, w, h, C.black)
-  theme.set(back or C.deep)
-  lg.rectangle("fill", x + 1, y + 1, w - 2, h - 2)
-  local fw = floor((w - 2) * math.max(0, math.min(1, frac)) + 0.5)
-  if fw > 0 then
-    theme.set(col)
-    lg.rectangle("fill", x + 1, y + 1, fw, h - 2)
-    theme.set(theme.mix(col, C.paper, 0.35))
-    lg.rectangle("fill", x + 1, y + 1, fw, 1)
-  end
 end
 
 M.CHIP_H = 13

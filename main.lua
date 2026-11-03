@@ -11,7 +11,7 @@ local lg = love.graphics
 
 G = {
   save = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
-  scenes = {}, trans = nil, settings = { screen = "lamp", music = true },
+  scenes = {}, trans = nil, settings = { screen = "plain", music = true },
 }
 
 local W, H, SC = theme.W, theme.H, theme.SCALE
@@ -37,15 +37,15 @@ local function loadSave()
   return nil
 end
 
--- Screen modes: lamplight (default) -> CRT -> plain
-local SCREEN_MODES = { lamp = "crt", crt = "off", off = "lamp" }
+-- Screen modes: plain (default, the crisp Figma dither) <-> CRT
+local SCREEN_MODES = { plain = "crt", crt = "plain" }
 function G.cycleScreen()
-  G.settings.screen = SCREEN_MODES[G.settings.screen] or "lamp"
+  G.settings.screen = SCREEN_MODES[G.settings.screen] or "plain"
   G.saveSettings()
 end
 
 function G.screenLabel()
-  return ({ lamp = "lamplight", crt = "CRT", off = "plain" })[G.settings.screen] or "lamplight"
+  return G.settings.screen == "crt" and "CRT" or "plain"
 end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
@@ -89,7 +89,7 @@ function love.load(args)
   love.keyboard.setKeyRepeat(true)
   shaders.load()
   sfx.load()
-  for _, n in ipairs({ "logo-lockup", "wordmark", "tagline", "mascot", "shadow", "badge" }) do
+  for _, n in ipairs({ "logo", "mascot", "mascot-silhouette", "shadow" }) do
     G.images[n] = lg.newImage("assets/img/" .. n .. ".png", { mipmaps = true })
     G.images[n]:setFilter("linear", "linear")
     G.images[n]:setMipmapFilter("linear")
@@ -104,7 +104,7 @@ function love.load(args)
   if love.filesystem.getInfo(SETTINGS_FILE) then
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
-    if not SCREEN_MODES[G.settings.screen] then G.settings.screen = "lamp" end
+    if not SCREEN_MODES[G.settings.screen] then G.settings.screen = "plain" end
   end
   if G.settings.muted then sfx.toggleMute() end
   for _, n in ipairs(SCENES) do G.scenes[n] = require("src.scenes." .. n) end
@@ -151,35 +151,36 @@ function love.update(dt)
 end
 
 local hex = theme.hex
-local RAMPS = {
-  felt = { hex("#08140f"), hex("#0e2119"), hex("#16352a"), hex("#24503c"), hex("#3e7552") },
-  blood = { hex("#120809"), hex("#220c0c"), hex("#3a1513"), hex("#5a1f19"), hex("#7c2c22") },
+local function rgb(c) return { c[1], c[2], c[3] } end
+-- Backdrop colours, all from the palette: ink green for the room and the table, blood red for Hands.
+local STAGES = {
+  felt = { voidc = hex("#08140f"), baseA = hex("#0e2119"), baseB = hex("#1d4434"), edge = hex("#2f6a4f") },
+  blood = { voidc = hex("#120809"), baseA = hex("#2a0f0d"), baseB = hex("#5a1f19"), edge = hex("#9e2a20") },
 }
-local WOOD = { hex("#120c07"), hex("#1f150c"), hex("#3b2a1a"), hex("#6b4a2a") }
-local VOID = { hex("#050807"), hex("#0a110d"), hex("#141c16") }
-local function rgb(list) local out = {} for i, c in ipairs(list) do out[i] = { c[1], c[2], c[3] } end return out end
-local RAMP_RGB, WOOD_RGB, VOID_RGB = { felt = rgb(RAMPS.felt), blood = rgb(RAMPS.blood) }, rgb(WOOD), rgb(VOID)
 
--- Every scene sits on the same candle-lit table. A scene's bg table can move the light,
--- tilt the table into perspective (horizon) or switch the baize to blood red.
-local DEFAULT_BG = { horizon = 0, light = { 0.5, 0.42 }, radius = 0.95, power = 0.95 }
+-- Every scene sits on the same backdrop. A scene's bg table can move the light, tilt a table top
+-- into perspective (horizon) or switch to the blood-red stage.
+local DEFAULT_BG = { horizon = 0, light = { 0.5, 0.42 }, radius = 0.95, power = 0.9 }
 local function drawBackground()
   local bg = (G.scene and G.scene.bg) or DEFAULT_BG
-  local sh = shaders.table
+  local pal = STAGES[bg.ramp or "felt"] or STAGES.felt
+  local sh = shaders.stage
   if sh then
-    sh:send("time", G.time)
     sh:send("res", { W * SC, H * SC })
     sh:send("pix", SC)
     sh:send("horizon", bg.horizon or 0)
     sh:send("light", bg.light or DEFAULT_BG.light)
     sh:send("radius", bg.radius or DEFAULT_BG.radius)
     sh:send("power", bg.power or DEFAULT_BG.power)
-    sh:send("felt", unpack(RAMP_RGB[bg.ramp or "felt"]))
-    sh:send("wood", unpack(WOOD_RGB))
-    sh:send("voidc", unpack(VOID_RGB))
+    sh:send("voidc", rgb(pal.voidc))
+    sh:send("baseA", rgb(pal.baseA))
+    sh:send("baseB", rgb(pal.baseB))
+    sh:send("edge", rgb(pal.edge))
     lg.setShader(sh)
+    lg.setColor(1, 1, 1)
+  else
+    theme.set(pal.baseA)
   end
-  lg.setColor(1, 1, 1)
   lg.rectangle("fill", 0, 0, W * SC, H * SC)
   lg.setShader()
 end
@@ -216,12 +217,9 @@ function love.draw()
 
   lg.clear(0, 0, 0)
   local s, ox, oy = viewport()
-  local mode = G.settings.screen
-  if mode ~= "off" and shaders.post then
+  if G.settings.screen == "crt" and shaders.post then
     shaders.post:send("res", { W * SC, H * SC })
     shaders.post:send("rows", H)
-    shaders.post:send("time", G.time)
-    shaders.post:send("mode", mode == "crt" and 1 or 0)
     shaders.post:send("curvature", 0.6)
     shaders.post:send("flash", fx.flash * 0.2)
     lg.setShader(shaders.post)

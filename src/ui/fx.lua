@@ -26,8 +26,11 @@ function M.float(x, y, text, color, big)
   M.floats[#M.floats + 1] = { x = x, y = y, text = text, color = color or C.paper, age = 0, life = 1.1, big = big }
 end
 
+-- color picks the plate: red, gold, blue or the black Power plate (default)
 function M.banner(text, sub, color, delay, y)
-  M.banners[#M.banners + 1] = { text = text, sub = sub, color = color or C.paper, age = -(delay or 0), life = 1.5, y = y }
+  local plate = C.night
+  if color == C.red then plate = C.red elseif color == C.gold then plate = C.goldDark elseif color == C.blue then plate = C.blue end
+  M.banners[#M.banners + 1] = { text = text, sub = sub, plate = plate, age = -(delay or 0), life = 1.6, y = y }
 end
 
 function M.toast(text, kind)
@@ -76,20 +79,22 @@ function M.draw()
   end
   for _, b in ipairs(M.banners) do
     if b.age >= 0 then
+      -- a Figma title card slides across the screen
+      local plates = require("src.ui.plates")
       local t = b.age / b.life
-      local open = math.min(1, b.age / 0.12)
       local a = t > 0.8 and (1 - (t - 0.8) / 0.2) or 1
-      local h = math.floor(60 * open)
+      local w, h = 360, 40
+      local enter = math.min(1, b.age / 0.18)
+      local slide = math.floor((1 - enter) ^ 3 * 420)
       local cy = b.y or 150
-      lg.setColor(0.02, 0.03, 0.03, 0.9 * a)
-      lg.rectangle("fill", 0, cy - h / 2, theme.W, h)
-      theme.set(b.color, a)
-      lg.rectangle("fill", 0, cy - h / 2, theme.W, 1)
-      lg.rectangle("fill", 0, cy + h / 2 - 1, theme.W, 1)
-      if open >= 1 then
-        local slide = math.floor((1 - math.min(1, (b.age - 0.12) / 0.2)) ^ 3 * 120)
-        gfx.wavy(b.text, theme.T.title(), theme.W / 2 + slide, cy - 22, b.color, M.time, 1, { alpha = a })
-        if b.sub then gfx.text(b.sub, theme.T.body(), theme.W / 2 - slide, cy + 8, C.paper2, { align = "center", alpha = a }) end
+      local card = plates.titleCard(w, h, b.plate or C.night, { label = b.text, size = 28, streak = b.streak or 0.6, outline = C.black })
+      theme.set(C.black, 0.5 * a)
+      lg.rectangle("fill", theme.W / 2 - w / 2 + slide + 2, cy - h / 2 + 3, w, h)
+      plates.draw(card, theme.W / 2 - w / 2 + slide, cy - h / 2, a)
+      if b.sub then
+        local sw = math.min(440, theme.T.body():getWidth(b.sub) + 16)
+        gfx.panel(theme.W / 2 - sw / 2 - slide, cy + h / 2 + 4, sw, 20, C.deep, { alpha = a })
+        gfx.text(b.sub, theme.T.body(), theme.W / 2 - slide, cy + h / 2 + 5, C.paper, { align = "center", alpha = a })
       end
     end
   end
@@ -99,8 +104,8 @@ function M.draw()
     local font = theme.T.body()
     local w = math.min(420, font:getWidth(t.text) + 16)
     local h = gfx.wrapHeight(t.text, font, w - 12) + 6
-    local col = t.kind == "good" and C.gold or t.kind == "bad" and C.red or C.paper
-    local fg = t.kind == "bad" and C.paper or C.ink
+    local col = t.kind == "good" and C.goldDark or t.kind == "bad" and C.redDark or C.ink3
+    local fg = C.paper
     local dy = math.floor((1 - math.min(1, t.age / 0.15)) * -8)
     gfx.panel(theme.W / 2 - w / 2, y + dy, w, h, col, { alpha = a })
     gfx.textf(t.text, font, theme.W / 2 - w / 2 + 6, y + dy + 2, w - 12, "center", fg, { alpha = a, shadow = false })

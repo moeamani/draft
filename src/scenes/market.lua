@@ -7,6 +7,7 @@ local hud = require("src.ui.hud")
 local icons = require("src.ui.icons")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
+local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -18,7 +19,7 @@ local T = theme.T
 function S:enter()
   self.t = 0
   self.stock = game.makeMarket(G.save.run)
-  self.picker = picker.new(self.stock.cards, { x = 196, y = 150, scale = 1.2, gap = 12, dealFrom = { 196, 420 } })
+  self.picker = picker.new(self.stock.cards, { x = 196, y = 142, scale = 1, gap = 16, dealFrom = { 196, 420 } })
 end
 
 function S:update(dt)
@@ -29,8 +30,8 @@ end
 function S:draw()
   local run = G.save.run
   hud.draw(run)
-  gfx.wavy("Mews Market", T.title(), 196, 38, C.gold, self.t, 1)
-  gfx.text('"Fresh cats! Slightly used charms! No refunds!"', T.body(), 196, 64, C.paper2, { align = "center" })
+  plates.header(8, 40, 376, 40, C.gold, "Mews Market", { size = 28, streak = 0.43, align = "center" })
+  gfx.text('"Fresh cats! Slightly used charms! No refunds!"', T.body(), 196, 86, C.paper2, { align = "center" })
   local i = self.picker:draw()
   if i then
     local c = self.stock.cards[i]
@@ -46,7 +47,7 @@ function S:draw()
       G.persist()
     end
   end
-  gfx.text("Hover a card to read it. Click to buy.", T.body(), 196, 230, C.muted, { align = "center" })
+  gfx.text("Hover a card to read it. Click to buy.", T.body(), 196, 214, C.muted, { align = "center" })
   gfx.label("Charms (" .. #run.charms .. "/" .. charms.MAX .. ")", 392, 40, C.gold)
   for k, ch in ipairs(self.stock.charms) do
     local info = charms.CHARMS[ch.id]

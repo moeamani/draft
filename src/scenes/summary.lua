@@ -5,6 +5,7 @@ local fx = require("src.ui.fx")
 local game = require("src.core.game")
 local gfx = require("src.ui.gfx")
 local overlays = require("src.ui.overlays")
+local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -20,8 +21,8 @@ function S:enter()
   local run = G.save.run
   self.victory = run and run.outcome == "victory"
   S.bg = { horizon = 0, light = { 0.5, 0.35 }, radius = 0.9, power = 1.0, ramp = self.victory and "felt" or "blood" }
-  self.logo = art.bake(G.images["logo-lockup"], 200)
-  self.flames = art.bake(G.images.shadow, 480)
+  self.logo = plates.image(G.images.logo, 220)
+  self.flames = plates.image(G.images.shadow, 480)
   sfx.play(self.victory and "win" or "lose")
 end
 
@@ -37,23 +38,22 @@ function S:draw()
   if not run then return end
   local f = run.festival
   if self.victory then
-    lg.setColor(1, 1, 1)
-    lg.draw(self.logo, 220, 10)
+    plates.draw(self.logo, 320 - self.logo:getWidth() / 2, 8)
   else
-    lg.setColor(0.55, 0.55, 0.6)
-    lg.draw(self.flames, 80, 360 - self.flames:getHeight() + 40 + math.floor(math.sin(self.t * 5) * 2))
+    plates.draw(self.flames, 80, 360 - self.flames:getHeight() + 40, 0.6)
   end
-  local ty = self.victory and 124 or 40
+  local ty = self.victory and 136 or 40
   local placing = festival.PLACING_NAMES[f.placing or "group"]
-  gfx.wavy(self.victory and "Champion of the Festival" or placing, T.title(), 320, ty, self.victory and C.gold or C.paper, self.t, 2)
+  plates.header(140, ty - 4, 360, 40, self.victory and C.goldDark or C.night, self.victory and "Champion of the Festival" or placing,
+    { size = 28, streak = self.victory and 0.43 or 1.0, align = "center" })
   local champ = f.champion and f.entrants[f.champion]
   local sub = self.victory and ("The crowd chants " .. save.playerName .. "'s name.") or (champ and (champ.name .. " won " .. f.name .. ".") or "The festival ends.")
-  gfx.text(sub, T.big(), 320, ty + 32, C.paper2, { align = "center" })
+  gfx.text(sub, T.big(), 320, ty + 42, C.paper2, { align = "center" })
   local stats = { { run.stats.won, "Wins" }, { run.stats.lost, "Losses" }, { run.stats.slain, "Slain" }, { run.stats.recruited, "Recruited" }, { run.stats.branded, "Branded" } }
-  local sy = ty + 64
+  local sy = ty + 72
   for i, st in ipairs(stats) do
     local x = 320 + (i - 3) * 78
-    gfx.panel(x - 36, sy, 72, 52, C.deep, { border = C.goldDark })
+    gfx.panel(x - 36, sy, 72, 52, C.ink2)
     gfx.text(tostring(st[1]), T.huge(), x, sy + 2, C.paper, { align = "center" })
     gfx.text(st[2], T.body(), x, sy + 31, C.paper2, { align = "center" })
   end
@@ -68,11 +68,11 @@ end
 
 function S:drawNews()
   local save = G.save
-  gfx.wavy("The Arena Moves On", T.title(), 320, 8, C.gold, self.t, 1)
-  local y = 40
+  plates.header(150, 6, 340, 36, C.night, "The Arena Moves On", { size = 26, streak = 1.0, align = "center" })
+  local y = 48
   for _, t in ipairs(self.news) do
     local h = gfx.wrapHeight(t, T.body(), 560)
-    if y + h > 122 then break end
+    if y + h > 124 then break end
     gfx.textf(t, T.body(), 40, y, 560, "center", C.paper)
     y = y + h + 2
   end

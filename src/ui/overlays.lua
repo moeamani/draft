@@ -7,6 +7,7 @@ local icons = require("src.ui.icons")
 local match = require("src.core.match")
 local nemesis = require("src.core.nemesis")
 local picker = require("src.ui.picker")
+local plates = require("src.ui.plates")
 local theme = require("src.ui.theme")
 local traits = require("src.core.traits")
 local util = require("src.core.util")
@@ -23,10 +24,11 @@ local function fit(font, str, w)
 end
 M.fit = fit
 
-function M.frame(x, y, w, h, title)
-  gfx.panel(x, y, w, h, C.ink, { border = C.goldDark })
-  if title then gfx.text(title, T.title(), x + 10, y + 3, C.gold) end
-  if widgets.button("ov_close", x + w - 24, y + 6, 18, 18, "x", { font = T.body(), color = C.redDark }) then G.closeOverlay() end
+-- Overlay frame: an ink panel with a title card across the top (blue, with the mascot smear).
+function M.frame(x, y, w, h, title, color)
+  gfx.panel(x, y, w, h, C.ink)
+  plates.header(x, y, w, 30, color or theme.hex("#2471fc"), title or "", { size = 22, streak = 0.43, pad = 12 })
+  if widgets.button("ov_close", x + w - 26, y + 5, 20, 20, "x", { color = C.redDark }) then G.closeOverlay() end
 end
 
 -- ---------------------------------------------------------------- shared nemesis pieces
@@ -58,23 +60,23 @@ function M.traitChips(n, x, y, maxW, revealed)
 end
 
 function M.nemesisCard(n, rank, x, y, w, h)
-  gfx.panel(x, y, w, h, C.deep, { border = C.redDark })
-  gfx.label(rank > 0 and nemesis.RANK_TITLES[rank] or n.status, x + 6, y + 4, C.red)
+  gfx.panel(x, y, w, h, C.deep)
+  plates.header(x, y, w, 16, C.night, rank > 0 and nemesis.RANK_TITLES[rank] or n.status, { size = 13, streak = 1.0, pad = 6 })
   local p = art.nemesis(n, rank, 48)
-  gfx.box(x + 5, y + 15, 50, 50, C.black)
+  gfx.box(x + 5, y + 19, 50, 50, C.black)
   lg.setColor(1, 1, 1)
-  lg.draw(p, x + 6, y + 16)
-  local nf = T.big():getWidth(n.name) <= w - 64 and T.big() or T.body()
-  gfx.text(n.name, nf, x + 60, y + 13, C.paper)
-  gfx.textf(n.epithet, T.body(), x + 60, y + 34, w - 64, "left", C.muted)
+  lg.draw(p, x + 6, y + 20)
+  local size = plates.textWidth(n.name, 20) <= w - 64 and 20 or 16
+  plates.print(n.name, size, x + 60, y + 18, C.white)
+  gfx.textf(n.epithet, T.body(), x + 60, y + 40, w - 64, "left", C.muted)
   local coat = cards.COATS[n.coat]
-  gfx.text("Level " .. n.level, T.body(), x + 6, y + 68, C.paper)
-  gfx.text(coat.name .. " coat", T.body(), x + 62, y + 68, coat.color)
+  gfx.text("Level " .. n.level, T.body(), x + 6, y + 71, C.paper)
+  gfx.text(coat.name .. " coat", T.body(), x + 62, y + 71, coat.color)
   icons.draw("skull", x + w - 40, y + 8, C.paper)
-  gfx.text(tostring(n.wins), T.small(), x + w - 33, y + 2, C.paper)
+  gfx.text(tostring(n.wins), T.small(), x + w - 33, y + 2, C.paper, { shadow = false })
   icons.draw("sword", x + w - 18, y + 8, C.paper)
-  gfx.text(tostring(n.losses), T.small(), x + w - 11, y + 2, C.paper)
-  local cy = M.traitChips(n, x + 6, y + 88, w - 12)
+  gfx.text(tostring(n.losses), T.small(), x + w - 11, y + 2, C.paper, { shadow = false })
+  local cy = M.traitChips(n, x + 6, y + 90, w - 12)
   if h > 130 then
     local hy = cy + 4
     for i = #n.history, math.max(1, #n.history - 2), -1 do
@@ -98,13 +100,13 @@ function M.deck(deck, opts)
     if da.coat ~= db.coat then return da.coat < db.coat end
     return cards.paws(a) > cards.paws(b)
   end)
-  local pk = picker.new(list, { x = 320, y = 92, scale = 1, gap = 4, cols = 10, rowGap = 6, dealFrom = { 320, 420 } })
+  local pk = picker.new(list, { x = 320, y = 82, scale = 1, gap = 4, cols = 10, rowGap = 6, dealFrom = { 320, 420 } })
   local ov = {}
   function ov:update(dt) pk:update(dt) end
   function ov:draw()
     M.frame(12, 12, theme.W - 24, theme.H - 24, opts.title or ("Your Pride (" .. #deck .. ")"))
-    if opts.hint then gfx.text(opts.hint, T.body(), theme.W - 44, 17, C.paper2, { align = "right" }) end
-    lg.setScissor(G.scissor(14, 44, theme.W - 28, theme.H - 58))
+    if opts.hint then gfx.text(opts.hint, T.body(), theme.W - 46, 19, C.white, { align = "right" }) end
+    lg.setScissor(G.scissor(14, 43, theme.W - 28, theme.H - 57))
     local i = pk:draw()
     lg.setScissor()
     if i and opts.onPick then
@@ -130,11 +132,11 @@ function M.hands()
   if not save then return end
   local ov = {}
   function ov:draw()
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Four Hands")
-    gfx.text("They enter every festival and remember every match.", T.body(), 230, 13, C.paper2)
-    for i, h in ipairs(save.hands) do M.nemesisCard(h, i, 14 + (i - 1) * 154, 38, 150, 196) end
-    gfx.label("Chronicle", 16, 242, C.gold)
-    local y = 252
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Four Hands", C.night)
+    gfx.text("They enter every festival and remember every match.", T.body(), 600, 15, C.white, { align = "right" })
+    for i, h in ipairs(save.hands) do M.nemesisCard(h, i, 14 + (i - 1) * 154, 44, 150, 194) end
+    gfx.label("Chronicle", 16, 244, C.gold)
+    local y = 254
     for i = #save.chronicle, math.max(1, #save.chronicle - 5), -1 do
       local c = save.chronicle[i]
       local th = gfx.wrapHeight(c.text, T.body(), 400)
@@ -143,8 +145,8 @@ function M.hands()
       gfx.textf(c.text, T.body(), 62, y, 400, "left", C.paper)
       y = y + th + 1
     end
-    gfx.label("Fallen and gone", 476, 242, C.gold)
-    local fy, shown = 252, 0
+    gfx.label("Fallen and gone", 476, 244, C.gold)
+    local fy, shown = 254, 0
     for i = #save.fallen, 1, -1 do
       local n = save.fallen[i]
       if shown >= 5 then break end
@@ -167,10 +169,10 @@ M.GROUP_H = 22 + 4 * 17
 function M.groupTable(f, gi, x, y, w)
   local rows = festival.table(f, gi)
   local myGroup = festival.groupOf(f, festival.PLAYER) == gi
-  gfx.panel(x, y, w, M.GROUP_H, myGroup and C.ink2 or C.deep, { border = myGroup and C.goldDark or C.ink3 })
-  gfx.label("Group " .. festival.GROUPS[gi], x + 6, y + 5, myGroup and C.gold or C.pale)
+  gfx.panel(x, y, w, M.GROUP_H, myGroup and C.ink2 or C.deep)
+  plates.header(x, y, w, 18, myGroup and C.red or C.ink3, "Group " .. festival.GROUPS[gi], { size = 14, pad = 6 })
   local cols = { w - 70, w - 54, w - 30, w - 7 }
-  for k, h in ipairs({ "W", "L", "PD", "PTS" }) do gfx.label(h, x + cols[k], y + 5, C.muted, "right") end
+  for k, h in ipairs({ "W", "L", "PD", "PTS" }) do gfx.text(h, T.small(), x + cols[k], y + 3, C.white, { align = "right", shadow = false }) end
   local font = T.body()
   for i, r in ipairs(rows) do
     local e = f.entrants[r.id]
@@ -191,7 +193,7 @@ end
 
 function M.bracket(f, x, y, w, h, font)
   font = font or T.small()
-  gfx.panel(x, y, w, h, C.deep, { border = C.ink3 })
+  gfx.panel(x, y, w, h, C.deep)
   local colW = math.floor((w - 12) / 3)
   local stages = { "qf", "sf", "final" }
   local labels = { "Quarters", "Semis", "Final" }
@@ -228,10 +230,10 @@ function M.standings(f)
   local ov = {}
   function ov:draw()
     M.frame(8, 8, theme.W - 16, theme.H - 16, f.name)
-    for gi = 1, 4 do M.groupTable(f, gi, 14 + ((gi - 1) % 2) * 194, 42 + math.floor((gi - 1) / 2) * (M.GROUP_H + 6), 190) end
-    M.bracket(f, 404, 42, 222, 300, T.small())
+    for gi = 1, 4 do M.groupTable(f, gi, 14 + ((gi - 1) % 2) * 194, 44 + math.floor((gi - 1) / 2) * (M.GROUP_H + 6), 190) end
+    M.bracket(f, 404, 44, 222, 298, T.small())
     gfx.textf("The top two of each group (green bar) reach the knockouts. A win is worth 3 points; goblet difference (PD) breaks ties.",
-      T.body(), 16, 42 + 2 * (M.GROUP_H + 6) + 4, 378, "left", C.paper2)
+      T.body(), 16, 44 + 2 * (M.GROUP_H + 6) + 4, 378, "left", C.paper2)
   end
   G.openOverlay(ov)
 end
@@ -247,11 +249,11 @@ function M.help()
   function ov:draw()
     M.frame(8, 8, theme.W - 16, theme.H - 16, "How to play")
     for i, name in ipairs(TABS) do
-      if widgets.button("h_t" .. i, 200 + (i - 1) * 84, 10, 80, 20, name, { font = T.body(), color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
+      if widgets.button("h_t" .. i, 250 + (i - 1) * 82, 11, 78, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
     end
-    local x, y, w = 20, 42, 600
+    local x, y, w = 20, 46, 600
     local function para(t, col) y = y + gfx.textf(t, T.body(), x, y, w, "left", col or C.paper) + 5 end
-    local function head(t) gfx.text(t, T.big(), x, y, C.gold); y = y + 22 end
+    local function head(t) plates.print(t, 20, x, y - 2, C.gold); y = y + 22 end
     local function list(ids, cols)
       local colW = math.floor(w / cols)
       local ys = {}
@@ -301,7 +303,7 @@ function M.pause()
   local ov = {}
   function ov:draw()
     M.frame(210, 60, 220, 240, "Paused")
-    local y = 98
+    local y = 100
     local bx, bw = 226, 188
     if widgets.button("p_resume", bx, y, bw, 28, "Resume", { color = C.red }) then G.closeOverlay() end
     if widgets.button("p_help", bx, y + 34, bw, 28, "How to play") then M.help() end
@@ -320,8 +322,8 @@ end
 function M.confirm(title, body, yes, onYes)
   local ov = {}
   function ov:draw()
-    M.frame(160, 96, 320, 164, title)
-    gfx.textf(body, T.body(), 174, 132, 292, "left", C.paper)
+    M.frame(160, 96, 320, 164, title, C.red)
+    gfx.textf(body, T.body(), 174, 136, 292, "left", C.paper)
     if widgets.button("c_yes", 174, 220, 140, 28, yes, { color = C.red }) then G.closeOverlay(); onYes() end
     if widgets.button("c_no", 326, 220, 140, 28, "Cancel") then G.closeOverlay() end
   end
@@ -331,15 +333,15 @@ end
 function M.message(title, body, onClose, portrait)
   local ov = { dismissable = false }
   function ov:draw()
-    M.frame(120, 80, 400, 200, title)
+    M.frame(120, 80, 400, 200, title, C.night)
     local x = 134
     if portrait then
-      gfx.box(133, 115, 98, 98, C.black)
+      gfx.box(133, 119, 98, 98, C.black)
       lg.setColor(1, 1, 1)
-      lg.draw(portrait, 134, 116)
+      lg.draw(portrait, 134, 120)
       x = 242
     end
-    gfx.textf(body, T.body(), x, 116, 506 - x, "left", C.paper)
+    gfx.textf(body, T.body(), x, 120, 506 - x, "left", C.paper)
     if widgets.button("m_ok", 256, 240, 128, 28, "Continue", { color = C.red }) then
       G.closeOverlay()
       if onClose then onClose() end

@@ -5,6 +5,7 @@ local gfx = require("src.ui.gfx")
 local hud = require("src.ui.hud")
 local icons = require("src.ui.icons")
 local rng = require("src.core.rng")
+local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -33,11 +34,11 @@ end
 function S:draw()
   local run = G.save.run
   hud.draw(run)
-  icons.draw("star", 320, 62, C.cyan, 3, math.sin(self.t * 1.5) * 0.15)
-  gfx.text("The Fortune Teller sees...", T.body(), 320, 78, C.paper2, { align = "center" })
-  gfx.wavy(self.ev.title, T.title(), 320, 96, C.gold, self.t, 1)
-  gfx.paper(110, 132, 420, 84, { pin = C.cyan })
-  gfx.textf(self.result or self.text, T.body(), 122, 140, 396, "center", C.parchInk, { shadow = false })
+  gfx.text("The Fortune Teller sees...", T.body(), 320, 46, C.paper2, { align = "center" })
+  local tsize = plates.textWidth(self.ev.title, 28) <= 380 and 28 or 22
+  plates.header(110, 66, 420, 44, theme.hex("#2471fc"), self.ev.title, { size = tsize, streak = 0.43, align = "center" })
+  gfx.panel(110, 118, 420, 98, C.ink2)
+  gfx.textf(self.result or self.text, T.body(), 122, 126, 396, "center", C.paper)
   if self.result then
     if widgets.button("ev_go", 230, 236, 180, 32, "Back to the grounds", { color = C.red, font = T.body() }) then back() end
     return

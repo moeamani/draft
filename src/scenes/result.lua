@@ -10,6 +10,7 @@ local icons = require("src.ui.icons")
 local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
+local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -44,7 +45,7 @@ end
 function S:makeCards()
   local items = {}
   for i, id in ipairs(self.out.cardChoices) do items[i] = { id = id } end
-  self.picker = picker.new(items, { x = 320, y = 248, scale = 1.2, gap = 24, dealFrom = { 320, 420 } })
+  self.picker = picker.new(items, { x = 320, y = 244, scale = 1, gap = 30, dealFrom = { 320, 420 } })
 end
 
 function S:update(dt)
@@ -72,11 +73,11 @@ function S:header()
   local out = self.out
   local f = G.save.run.festival
   local title = out.won and "Victory" or "Defeat"
-  gfx.wavy(title, T.title(), 320, 8, out.won and C.gold or C.red, self.t, 2)
+  plates.header(170, 8, 300, 40, out.won and C.goldDark or C.night, title, { size = 30, streak = out.won and 0.43 or 1.0, align = "center" })
   local cons = consequence(out, f)
-  gfx.text(cons, T.big(), 320, 38, out.champion and C.gold or C.paper, { align = "center" })
-  gfx.text(out.won and ("+" .. out.fish .. " fish" .. (out.flawless and ", never lost a bout!" or "")) or "+5 fish for showing up", T.body(), 320, 60, C.gold, { align = "center" })
-  local y = 82
+  gfx.text(cons, T.big(), 320, 52, out.champion and C.gold or C.paper, { align = "center" })
+  gfx.text(out.won and ("+" .. out.fish .. " fish" .. (out.flawless and ", never lost a bout!" or "")) or "+5 fish for showing up", T.body(), 320, 74, C.gold, { align = "center" })
+  local y = 94
   if out.line ~= "" then
     gfx.box(125, y, 34, 34, C.black)
     lg.setColor(1, 1, 1)
@@ -103,14 +104,14 @@ function S:draw()
   elseif self.step == "fate" then
     local n = self.n
     local ty = math.max(y + 6, 150)
-    gfx.text(n.name .. " is at your mercy.", T.title(), 320, ty, C.paper, { align = "center" })
+    plates.print(n.name .. " is at your mercy.", 24, 320, ty, C.white, { align = "center" })
     local opts = {
       { "slay", "Slay", "They forfeit the festival. They might not stay dead.", C.redDark, false },
       { "recruit", "Recruit", self.out.flawless and "They join your pride as a Legendary card." or "Only if you never lost a bout.", C.blueDark, not self.out.flawless },
       { "brand", "Brand", "Spare them, but leave a weakness and a grudge.", C.ink2, false },
     }
     for i, o in ipairs(opts) do
-      if widgets.choice("fate_" .. o[1], 24 + (i - 1) * 200, ty + 40, 192, 84, o[2], o[3], { color = o[4], disabled = o[5] }) then
+      if widgets.choice("fate_" .. o[1], 24 + (i - 1) * 200, ty + 36, 192, 84, o[2], o[3], { color = o[4], disabled = o[5] }) then
         local txt = game.decideFate(G.save, n, o[1])
         local sit = o[1] == "slay" and "slain" or o[1] == "recruit" and "recruit" or "brand"
         local line = nemesis.speak({ s = math.floor(love.math.random() * 2 ^ 30) + 1 }, n, sit, G.save.playerName)
@@ -121,7 +122,7 @@ function S:draw()
       end
     end
   elseif self.step == "cards" then
-    gfx.text("Choose a cat to join your pride", T.big(), 320, math.max(y + 4, 166), C.gold, { align = "center" })
+    plates.print("Choose a cat to join your pride", 20, 320, math.max(y + 2, 168), C.white, { align = "center" })
     local i = self.picker and self.picker:draw()
     if i then
       local v = self.picker.views[i]
@@ -136,7 +137,7 @@ function S:draw()
       self:nextAfterCards()
     end
   elseif self.step == "charms" then
-    gfx.text("A charm from the festival judges", T.big(), 320, math.max(y + 4, 150), C.gold, { align = "center" })
+    plates.print("A charm from the festival judges", 20, 320, math.max(y + 2, 150), C.white, { align = "center" })
     for i, id in ipairs(self.out.charmChoices) do
       local info = charms.CHARMS[id]
       local x = 320 - (#self.out.charmChoices * 220) / 2 + (i - 1) * 220 + 10

@@ -1,9 +1,12 @@
--- Pixel cards: a 56x78 face baked once, drawn through a projected mesh for tilt,
--- with spring motion, hover lift, legendary foil, play flash and dissolve.
+-- Pixel cards in the Figma title-card style: a 56x78 face built from dithered palette plates,
+-- baked once. At rest a card is drawn 1:1 on whole pixels (no wobble, no tilt, no resampling),
+-- so its pixels never shimmer. Only transient motion (dealing, flipping, a lean while moving)
+-- goes through the projected mesh.
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
 local gfx = require("src.ui.gfx")
 local icons = require("src.ui.icons")
+local plates = require("src.ui.plates")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -27,53 +30,53 @@ local function fit(font, str, w)
   return str
 end
 
+local function begin(cv)
+  lg.push("all")
+  lg.origin()
+  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
+  lg.setShader()
+  lg.setCanvas(cv)
+  lg.clear(0, 0, 0, 0)
+end
+
+-- Face layout: rarity frame, art window, then three plates: name (ink), ability (blue), coat.
 local function renderFace(def, level)
   local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
   if faceCache[key] then return faceCache[key] end
   local W, H = M.W, M.H
+  -- build the plates before switching canvases (they bake into their own canvases)
+  local namePlate = plates.plate(W - 6, 12, C.ink, { outline = false, light = 0.1 })
+  local abilCol = def.kind == "special" and C.ink3 or (def.ability == "none" and theme.hex("#3b4a5e") or C.blue)
+  local abilPlate = plates.plate(W - 6, 11, abilCol, { outline = false, light = 0.14 })
+  local coatCol = def.kind == "unit" and cards.COATS[def.coat].color or C.ink2
+  local coatPlate = plates.plate(W - 6, 11, coatCol, { outline = false, light = 0.14 })
+  local frame = plates.plate(W, H, rarityCol(def), { outline = C.black, light = 0.25 })
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
-  lg.push("all")
-  lg.origin()
-  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
-  lg.setCanvas(cv)
-  lg.clear(0, 0, 0, 0)
-  local rc = rarityCol(def)
-  gfx.box(0, 0, W, H, C.black)
-  gfx.box(1, 1, W - 2, H - 2, rc)
-  theme.set(theme.mix(rc, C.paper, 0.45))
-  lg.rectangle("fill", 2, 1, W - 4, 1)
-  gfx.box(3, 3, W - 6, H - 6, C.paper)
-  -- art window
-  theme.set(C.black)
-  lg.rectangle("fill", 3, 3, W - 6, art.CARD_H + 2)
+  begin(cv)
   lg.setColor(1, 1, 1)
-  lg.draw(art.card(def), 3, 4)
-  -- name
+  lg.draw(frame, 0, 0)
+  theme.set(C.black)
+  lg.rectangle("fill", 2, 2, W - 4, H - 4)
+  lg.setColor(1, 1, 1)
+  lg.draw(art.card(def), 3, 3)
+  lg.draw(namePlate, 3, 40)
+  lg.draw(abilPlate, 3, 53)
+  lg.draw(coatPlate, 3, 65)
   local f10 = theme.T.small()
-  local name = fit(f10, cards.shortName(def), W - 6)
-  gfx.text(name, f10, W / 2, 40, C.ink, { align = "center", shadow = false })
-  -- ability: icon + short label
-  local f8 = theme.T.label()
+  gfx.text(fit(f10, cards.shortName(def), W - 8), f10, W / 2, 40, C.paper, { align = "center", shadow = false })
   local label = M.SHORT[def.ability] or ""
-  local iconCol = def.kind == "special" and C.cyan or (def.ability == "none" and C.steel or C.blue)
-  local lw = f8:getWidth(label) + 11
+  local lw = f10:getWidth(label) + 11
   local lx = math.floor(W / 2 - lw / 2)
-  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 57, iconCol)
-  gfx.text(label, f8, lx + 10, 53, C.blueDark, { shadow = false })
-  -- footer: coat bar with class icon
-  gfx.box(3, H - 15, W - 6, 12, C.black)
+  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 58, C.white)
+  gfx.text(label, f10, lx + 10, 53, C.white, { shadow = false })
   if def.kind == "unit" then
     local coat = cards.COATS[def.coat]
-    gfx.box(4, H - 14, W - 8, 10, coat.color)
-    theme.set(theme.mix(coat.color, C.paper, 0.35))
-    lg.rectangle("fill", 5, H - 14, W - 10, 1)
-    local dark = def.coat == "gilt" or def.coat == "shadow"
-    icons.draw(def.type == "magic" and "orb" or "sword", 10, H - 9, C.paper)
-    gfx.text(coat.name:upper(), f8, W / 2 + 4, H - 14, dark and C.black or C.paper, { align = "center", shadow = false })
+    local dark = def.coat == "gilt"
+    icons.draw(def.type == "magic" and "orb" or "sword", 10, 70, C.white)
+    gfx.text(coat.name:upper(), f10, W / 2 + 4, 65, dark and C.black or C.white, { align = "center", shadow = false })
   else
-    gfx.box(4, H - 14, W - 8, 10, C.ink3)
-    gfx.text("TRICK", f8, W / 2, H - 14, C.cyan, { align = "center", shadow = false })
+    gfx.text("TRICK", f10, W / 2, 65, C.cyan, { align = "center", shadow = false })
   end
   if level > 1 then
     for i = 1, level - 1 do icons.draw("star", W - 9 - (i - 1) * 8, 9, C.gold) end
@@ -84,14 +87,14 @@ local function renderFace(def, level)
 end
 M.face = renderFace
 
--- Card backs show the coat: Ember, Tide and Gilt cats have coloured backs, while Shadow cats and
--- tricks share the same dark back.
+-- Card backs are little title cards: the coat's plate with the smeared mascot. Shadow cats and
+-- tricks share the black "Power" plate with its full spectrum smear.
 M.BACKS = {
-  ember = { field = C.red, hatch = C.redDark, icon = "paw" },
-  tide = { field = C.blue, hatch = C.blueDark, icon = "paw" },
-  gilt = { field = C.gold, hatch = C.goldDark, icon = "paw" },
-  dark = { field = theme.hex("#1b2420"), hatch = C.black, icon = "moon" },
-  plain = { field = C.ink3, hatch = C.ink2, icon = "paw" },
+  ember = { plate = C.red, streak = 0.43, icon = "paw" },
+  tide = { plate = theme.hex("#2471fc"), streak = 0.43, icon = "paw" },
+  gilt = { plate = C.gold, streak = 0.43, icon = "paw" },
+  dark = { plate = C.night, streak = 1.0, icon = "moon" },
+  plain = { plate = C.ink3, streak = 0.43, icon = "paw" },
 }
 local backs = {}
 function M.back(kind)
@@ -99,28 +102,40 @@ function M.back(kind)
   if backs[kind] then return backs[kind] end
   local spec = M.BACKS[kind] or M.BACKS.plain
   local W, H = M.W, M.H
+  local inner = plates.titleCard(W - 4, H - 4, spec.plate, { streak = spec.streak })
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
-  lg.push("all")
-  lg.origin()
-  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
-  lg.setCanvas(cv)
-  lg.clear(0, 0, 0, 0)
-  gfx.box(0, 0, W, H, C.black)
-  gfx.box(1, 1, W - 2, H - 2, C.paper)
-  gfx.box(3, 3, W - 6, H - 6, spec.field)
-  theme.set(spec.hatch)
-  for y = 3, H - 4 do
-    for x = 3, W - 4 do
-      if (x + y) % 6 < 2 then lg.rectangle("fill", x, y, 1, 1) end
-    end
-  end
-  gfx.box(13, 24, W - 26, 30, C.black)
-  gfx.box(14, 25, W - 28, 28, spec.field)
-  icons.draw(spec.icon, W / 2, H / 2 + 1, C.paper, 2)
+  begin(cv)
+  theme.set(C.black)
+  lg.rectangle("fill", 0, 0, W, H)
+  theme.set(C.paper)
+  lg.rectangle("fill", 1, 1, W - 2, H - 2)
+  lg.setColor(1, 1, 1)
+  lg.draw(inner, 2, 2)
   lg.pop()
   backs[kind] = cv
   return cv
+end
+
+-- A small draw-pile sprite (three stacked backs), drawn 1:1.
+local pile
+function M.pile()
+  if pile then return pile end
+  local w, h = 24, 32
+  local inner = plates.titleCard(w - 4, h - 4, C.ink3, { streak = 0.43 })
+  pile = lg.newCanvas(w + 4, h + 4)
+  pile:setFilter("nearest", "nearest")
+  begin(pile)
+  for k = 2, 0, -1 do
+    theme.set(C.black)
+    lg.rectangle("fill", k * 2, 4 - k * 2, w, h)
+    theme.set(C.paper)
+    lg.rectangle("fill", k * 2 + 1, 5 - k * 2, w - 2, h - 2)
+  end
+  lg.setColor(1, 1, 1)
+  lg.draw(inner, 2, 4)
+  lg.pop()
+  return pile
 end
 
 -- ---------------------------------------------------------------- views
@@ -133,9 +148,9 @@ function M.new(inst, x, y, scale)
   local def = cards.getDef(inst)
   local v = setmetatable({
     inst = inst, def = def, x = x, y = y, vx = 0, vy = 0, tx = x, ty = y, s = scale or 1, ts = scale or 1,
-    rot = 0, trot = 0, tiltX = 0, tiltY = 0, flash = 0, alpha = 1, dying = nil, phase = love.math.random() * 6.28,
+    rot = 0, trot = 0, flash = 0, alpha = 1, dying = nil,
     hovered = false, faceDown = false, flip = 1, tflip = 1, selected = false, bounce = 0, dim = 0,
-    backKind = "plain", lunge = 0,
+    backKind = "plain",
   }, View)
   v.mesh = lg.newMesh((GRID + 1) * (GRID + 1), "triangles", "stream")
   local map = {}
@@ -167,21 +182,19 @@ function View:update(dt)
   self.vx, self.vy = self.vx + ax * dt, self.vy + ay * dt
   self.x, self.y = self.x + self.vx * dt, self.y + self.vy * dt
   self.s = self.s + (self.ts - self.s) * math.min(1, dt * 16)
-  local lean = math.max(-0.3, math.min(0.3, self.vx / 1400))
+  -- lean into fast moves only; slow drifts stay upright so they keep drawing 1:1
+  local lean = math.abs(self.vx) > 120 and math.max(-0.3, math.min(0.3, self.vx / 1400)) or 0
   self.rot = self.rot + (self.trot + lean - self.rot) * math.min(1, dt * 14)
   self.flash = math.max(0, self.flash - dt * 3)
   self.bounce = math.max(0, self.bounce - dt * 4)
   self.flip = self.flip + (self.tflip - self.flip) * math.min(1, dt * 12)
   if self.dying then self.dying = self.dying + dt * 1.4 end
-  local tX, tY = 0, 0
-  if self.hovered then
-    local widgets = require("src.ui.widgets")
-    local w, h = M.W * self.s, M.H * self.s
-    tX = math.max(-1, math.min(1, (widgets.mx - self.x) / (w / 2)))
-    tY = math.max(-1, math.min(1, (widgets.my - self.y) / (h / 2)))
-  end
-  self.tiltX = self.tiltX + (tX - self.tiltX) * math.min(1, dt * 12)
-  self.tiltY = self.tiltY + (tY - self.tiltY) * math.min(1, dt * 12)
+  -- settle exactly, so resting cards land on whole pixels with no rotation
+  if math.abs(self.tx - self.x) < 0.3 and math.abs(self.vx) < 2 then self.x, self.vx = self.tx, 0 end
+  if math.abs(self.ty - self.y) < 0.3 and math.abs(self.vy) < 2 then self.y, self.vy = self.ty, 0 end
+  if math.abs(self.ts - self.s) < 0.01 then self.s = self.ts end
+  if math.abs(self.trot - self.rot) < 0.004 then self.rot = self.trot end
+  if math.abs(self.tflip - self.flip) < 0.01 then self.flip = self.tflip end
 end
 
 function View:contains(px, py)
@@ -190,20 +203,16 @@ function View:contains(px, py)
 end
 
 function View:project(u, v)
-  local s = self.s * (1 + self.bounce * 0.25)
+  local s = self.s * (1 + self.bounce * 0.12)
   local w, h = M.W * s * math.abs(self.flip), M.H * s
-  local t = love.timer.getTime()
-  local ay = self.tiltX * 0.4 + math.sin(t * 1.3 + self.phase) * 0.04
-  local ax = -self.tiltY * 0.35 + math.cos(t * 1.1 + self.phase) * 0.03
-  local x, y, z = u * w, v * h, 0
-  local cy, sy = math.cos(ay), math.sin(ay)
-  x, z = x * cy + z * sy, -x * sy + z * cy
-  local cx, sx = math.cos(ax), math.sin(ax)
-  y, z = y * cx - z * sx, y * sx + z * cx
-  local p = 300 / (300 + z)
-  x, y = x * p, y * p
+  local x, y = u * w, v * h
   local cr, sr = math.cos(self.rot), math.sin(self.rot)
   return self.x + x * cr - y * sr, self.y + x * sr + y * cr
+end
+
+-- True when the card can be drawn 1:1 on whole pixels.
+function View:atRest()
+  return self.rot == 0 and self.s == 1 and math.abs(self.flip) == 1 and self.bounce < 0.02 and not self.dying
 end
 
 function View:draw(opts)
@@ -213,26 +222,22 @@ function View:draw(opts)
   local showBack = self.faceDown or self.flip < 0
   local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1)
   local alpha = self.alpha
-  local s = self.s * (1 + self.bounce * 0.25)
+  local k = 1 - self.dim * 0.6
+  local lift = (self.hovered or self.selected) and 3 or 2
+  local rest = self:atRest()
+  local x0, y0 = math.floor(self.x - M.W / 2 + 0.5), math.floor(self.y - M.H / 2 + 0.5)
   -- shadow
-  local lift = (self.hovered or self.selected) and 4 or 2
   lg.setColor(0, 0, 0, 0.45 * alpha)
-  lg.push()
-  lg.translate(math.floor(self.x + lift * 0.5), math.floor(self.y + lift))
-  lg.rotate(self.rot)
-  lg.rectangle("fill", -M.W * s * math.abs(self.flip) / 2, -M.H * s / 2, M.W * s * math.abs(self.flip), M.H * s)
-  lg.pop()
-  local verts = {}
-  for j = 0, GRID do
-    for i = 0, GRID do
-      local u, v = i / GRID, j / GRID
-      local px, py = self:project(u - 0.5, v - 0.5)
-      local k = 1 - self.dim * 0.6
-      verts[#verts + 1] = { px, py, u, v, k, k, k, alpha }
-    end
+  if rest then
+    lg.rectangle("fill", x0 + 1, y0 + lift, M.W, M.H)
+  else
+    local s = self.s
+    lg.push()
+    lg.translate(math.floor(self.x + 1), math.floor(self.y + lift))
+    lg.rotate(self.rot)
+    lg.rectangle("fill", -M.W * s * math.abs(self.flip) / 2, -M.H * s / 2, M.W * s * math.abs(self.flip), M.H * s)
+    lg.pop()
   end
-  self.mesh:setVertices(verts)
-  self.mesh:setTexture(tex)
   local sh
   if self.dying and shaders.dissolve then
     sh = shaders.dissolve
@@ -241,36 +246,50 @@ function View:draw(opts)
   elseif self.flash > 0 and shaders.flash then
     sh = shaders.flash
     sh:send("amount", self.flash)
-  elseif def.rarity == "legendary" and not showBack and shaders.foil then
-    sh = shaders.foil
-    sh:send("time", love.timer.getTime())
-    sh:send("tilt", { self.tiltX, self.tiltY })
   end
   lg.setShader(sh)
-  lg.setColor(1, 1, 1, alpha)
-  lg.draw(self.mesh)
+  if rest then
+    lg.setColor(k, k, k, alpha)
+    lg.draw(tex, x0, y0)
+  else
+    local verts = {}
+    for j = 0, GRID do
+      for i = 0, GRID do
+        local u, v = i / GRID, j / GRID
+        local px, py = self:project(u - 0.5, v - 0.5)
+        verts[#verts + 1] = { px, py, u, v, k, k, k, alpha }
+      end
+    end
+    self.mesh:setVertices(verts)
+    self.mesh:setTexture(tex)
+    lg.setColor(1, 1, 1, alpha)
+    lg.draw(self.mesh)
+  end
   lg.setShader()
   if self.selected and not self.dying then
-    local x1, y1 = self:project(-0.5, -0.5)
-    local x2, y2 = self:project(0.5, 0.5)
     theme.set(C.gold, alpha)
-    lg.setLineWidth(1)
-    lg.rectangle("line", math.floor(math.min(x1, x2)) - 1.5, math.floor(math.min(y1, y2)) - 1.5, math.floor(math.abs(x2 - x1)) + 3, math.floor(math.abs(y2 - y1)) + 3)
+    if rest then
+      lg.rectangle("fill", x0 - 2, y0 - 2, M.W + 4, 1)
+      lg.rectangle("fill", x0 - 2, y0 + M.H + 1, M.W + 4, 1)
+      lg.rectangle("fill", x0 - 2, y0 - 2, 1, M.H + 4)
+      lg.rectangle("fill", x0 + M.W + 1, y0 - 2, 1, M.H + 4)
+    end
   end
   if showBack or self.dying or (def.kind ~= "unit" and not self.paws) then return end
-  -- paws badge (dynamic, so buffs and hexes can show)
-  local bx, by = self:project(-0.5 + 9 / M.W, -0.5 + 9 / M.H)
+  -- Paws badge: a little black "Power" plate (green when buffed, red when hexed)
+  local bx, by
+  if rest then bx, by = x0 + 9, y0 + 9 else bx, by = self:project(-0.5 + 9 / M.W, -0.5 + 9 / M.H) end
   local base = def.ability == "box" and 4 or cards.paws(self.inst)
   local p = opts.paws or self.paws or base
   local font = theme.T.body()
   local str = tostring(p)
   local bw = math.max(14, font:getWidth(str) + 5)
   local bxl, byt = math.floor(bx - bw / 2), math.floor(by - 7)
-  local bg = def.rarity == "legendary" and C.gold or C.ink
+  local bg = def.rarity == "legendary" and C.goldDark or C.night
   if p > base then bg = theme.hex("#1f6b45") elseif p < base then bg = C.redDark end
   gfx.box(bxl, byt, bw, 14, C.black, alpha)
   gfx.box(bxl + 1, byt + 1, bw - 2, 12, bg, alpha)
-  gfx.text(str, font, bxl + bw / 2, byt - 2, (bg == C.gold) and C.black or C.paper, { align = "center", shadow = false, alpha = alpha })
+  gfx.text(str, font, bxl + bw / 2, byt - 2, C.white, { align = "center", shadow = false, alpha = alpha })
 end
 
 return M

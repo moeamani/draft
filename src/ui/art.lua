@@ -1,5 +1,5 @@
--- Procedural cat portraits: drawn with primitives at low resolution, then ordered-dithered
--- to the Draft palette on the GPU. Results are cached per seed.
+-- Procedural cat portraits: drawn with primitives at low resolution, then quantised with the
+-- Figma dither (Bayer 16x16, 8 levels) on the GPU. Results are cached per seed.
 local rngm = require("src.core.rng")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
@@ -14,19 +14,6 @@ local FUR = {
   gilt = { hex("#d9b56a"), hex("#f3deaa"), hex("#8c6a2c") },
   shadow = { hex("#1a1d22"), hex("#343a42"), hex("#050807") },
 }
-local PALETTE = { "#0e2119", "#16352a", "#24503c", "#050807", "#f4f1e8", "#e8483b", "#2378f7", "#d3a200", "#47e7fd", "#8a96a8", "#4a5563",
-  "#d0602a", "#f39a4a", "#7a2c12", "#647a93", "#a7bccf", "#36465a", "#d9b56a", "#f3deaa", "#8c6a2c", "#1a1d22", "#343a42", "#b07a3a" }
-
-local palUniform
-local function palette()
-  if not palUniform then
-    palUniform = {}
-    for i, h in ipairs(PALETTE) do local c = hex(h); palUniform[i] = { c[1], c[2], c[3] } end
-    while #palUniform < 24 do palUniform[#palUniform + 1] = palUniform[1] end
-  end
-  return palUniform
-end
-
 local function col(c, a) lg.setColor(c[1], c[2], c[3], a or c[4] or 1) end
 local function tri(pts, c) col(c); lg.polygon("fill", pts) end
 local function ell(x, y, rx, ry, c, rot)
@@ -195,32 +182,23 @@ end
 local cache = {}
 
 -- Paint at a logical size (lw x lh), output at W x H real pixels, then dither 1:1.
+-- Paint at a logical size (lw x lh), output at W x H real pixels, then quantise with the same
+-- Figma dither as every other surface.
 local function render(key, W, H, painter, lw, lh, transparent)
   if cache[key] then return cache[key] end
+  local plates = require("src.ui.plates")
   local raw = lg.newCanvas(W, H)
-  local out = lg.newCanvas(W, H)
   raw:setFilter("nearest", "nearest")
-  out:setFilter("nearest", "nearest")
   lg.push("all")
   lg.origin()
   lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
+  lg.setShader()
   lg.setCanvas(raw)
   lg.clear(0, 0, 0, transparent and 0 or 1)
   lg.scale(W / (lw or W), H / (lh or H))
   painter()
-  lg.origin()
-  lg.setCanvas(out)
-  lg.clear(0, 0, 0, transparent and 0 or 1)
-  if shaders.dither then
-    lg.setShader(shaders.dither)
-    shaders.dither:send("pal", unpack(palette()))
-    shaders.dither:send("count", #PALETTE)
-    shaders.dither:send("spread", 0.16)
-  end
-  lg.setColor(1, 1, 1)
-  lg.draw(raw)
-  lg.setShader()
   lg.pop()
+  local out = plates.dither(raw, W, H, transparent)
   raw:release()
   cache[key] = out
   return out
@@ -278,36 +256,9 @@ function M.entrant(save, e, size, cutout)
   return M.stray(e.foe or { seed = e.seed or 1, coat = e.coat or "shadow" }, size, cutout)
 end
 
--- Turn a smooth image (Figma export) into crisp palette pixels at the given width.
-local baked = {}
+-- Turn a smooth image (Figma export) into dithered pixels at the given width.
 function M.bake(img, w)
-  local key = tostring(img) .. w
-  if baked[key] then return baked[key] end
-  local h = math.floor(img:getHeight() * w / img:getWidth() + 0.5)
-  local tmp = lg.newCanvas(w, h)
-  local out = lg.newCanvas(w, h)
-  out:setFilter("nearest", "nearest")
-  lg.push("all")
-  lg.origin()
-  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
-  lg.setCanvas(tmp)
-  lg.clear(0, 0, 0, 0)
-  lg.setColor(1, 1, 1)
-  lg.draw(img, 0, 0, 0, w / img:getWidth(), h / img:getHeight())
-  lg.setCanvas(out)
-  lg.clear(0, 0, 0, 0)
-  lg.setBlendMode("alpha", "premultiplied")
-  if shaders.bake then
-    lg.setShader(shaders.bake)
-    shaders.bake:send("pal", unpack(palette()))
-    shaders.bake:send("count", #PALETTE)
-  end
-  lg.draw(tmp)
-  lg.setShader()
-  lg.pop()
-  tmp:release()
-  baked[key] = out
-  return out
+  return require("src.ui.plates").image(img, w)
 end
 
 return M

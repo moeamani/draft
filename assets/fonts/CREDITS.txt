@@ -1,12 +1,15 @@
 All fonts are from Google Fonts and licensed under the SIL Open Font License 1.1 (https://openfontlicense.org).
-Every font is drawn at its native pixel size, so all text shares the art's pixel grid.
 
-Jacquard24-Regular.ttf  https://fonts.google.com/specimen/Jacquard+24   (titles, 24px)
-Jacquard12-Regular.ttf  https://fonts.google.com/specimen/Jacquard+12   (small decorative titles, 12px)
-Jersey15-Regular.ttf    https://fonts.google.com/specimen/Jersey+15     (body text, 15px)
-Jersey20-Regular.ttf    https://fonts.google.com/specimen/Jersey+20     (buttons, names, numbers, 20px)
-Jersey25-Regular.ttf    https://fonts.google.com/specimen/Jersey+25     (big numbers, 25px)
-Jersey10-Regular.ttf    https://fonts.google.com/specimen/Jersey+10     (small text on cards, 10px)
-Tiny5-Regular.ttf       https://fonts.google.com/specimen/Tiny5         (short all-caps labels, 8px)
+AncizarSerif-Regular.ttf  https://fonts.google.com/specimen/Ancizar+Serif  (display type, as in the Figma file)
+AncizarSerif-Italic.ttf   https://fonts.google.com/specimen/Ancizar+Serif  (static weight-400 instances of the variable font)
+Jersey15-Regular.ttf      https://fonts.google.com/specimen/Jersey+15      (body text, 15px)
+Jersey20-Regular.ttf      https://fonts.google.com/specimen/Jersey+20      (numbers, 20px)
+Jersey25-Regular.ttf      https://fonts.google.com/specimen/Jersey+25      (big numbers, 25px)
+Jersey10-Regular.ttf      https://fonts.google.com/specimen/Jersey+10      (small text on cards and chips, 10px)
 
-The "Draft" logo artwork (assets/img) comes from the project's Figma file and uses Ancizar Serif.
+The Jersey cuts are drawn at their native pixel sizes. Ancizar Serif is only drawn into baked
+surfaces that go through the same dither as the Figma title cards.
+
+The logo, mascot and shadow-creature artwork (assets/img) comes from the project's Figma file.
+logo.png is the two-tone "Draft" lockup from the Figma title frame; mascot-silhouette.png is the
+mascot's alpha mask, used for the chromatic smear on title cards.
