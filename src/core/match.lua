@@ -17,6 +17,10 @@ M.MAX_BOUTS = 12
 M.COAT_EDGE = 3
 -- Stolen Lives: losing a duel costs a life; losing it by this many Paws or more costs two
 M.CRUSH = 5
+-- Hold the Cushion: a cat that wins its duel stays seated, gaining a point of Warmth (+1 Paw)
+-- for every bout it holds on. At HOT Warmth every swat knocks off one more goblet.
+M.WARMTH_MAX = 5
+M.HOT = 3
 
 -- Cushion upholstery, bought at the market and kept for the festival (the Hands bring their own).
 M.CUSHION_KINDS = {
@@ -47,7 +51,7 @@ local function newSide(setup)
   for i = 1, M.CUSHIONS do cushions[i] = setup.cushions and setup.cushions[i] or false end
   return {
     name = setup.name, deck = deck, discard = {}, hand = {}, mods = mods, goblets = g, maxGoblets = g,
-    cushions = cushions, omenHand = omen.hand or 0, lost = {}, taken = {},
+    cushions = cushions, omenHand = omen.hand or 0, lost = {}, taken = {}, seated = { false, false, false },
     nineUsed = {}, counts = counts, vengeance = false, secondWindUsed = false, boutsWon = 0, duelsWon = 0,
     scored = {}, placed = { false, false, false }, shown = {},
   }
@@ -186,6 +190,7 @@ local function compute(s, P, lead, soft)
         if m.lazy and s.bout == 1 then add(si, i, -2, "Lazy", "trait:lazy") end
         if s.omen and s.omen.coat == d.coat then add(si, i, s.omen.bonus or 1, s.omen.short, "omen") end
         if sd.cushions[i] == "velvet" then add(si, i, 1, "Velvet", "cushion:velvet") end
+        if (inf.inst.warmth or 0) > 0 then add(si, i, inf.inst.warmth, "Warmth", "warmth") end
       end
     end
     -- Bonds: named pairs sitting side by side
@@ -302,6 +307,7 @@ local function compute(s, P, lead, soft)
       local ab = inf.def and inf.def.ability
       if ab == "smite" then n = 2 end
       if unopposed and ab == "stray" then n = 2 end
+      if inf.inst and (inf.inst.warmth or 0) >= M.HOT then n = n + 1 end -- the Hot Seat
       return n
     end
     local pa, pb = math.max(0, a.paws), math.max(0, b.paws)
@@ -440,11 +446,32 @@ local function apply(s, rec)
       end
     end
   end
+  -- Hold the Cushion: winning cats stay seated and warm up; everyone else leaves the table
+  rec.stays = { {}, {} }
   for si = 1, 2 do
     local sd = s.sides[si]
     for i = 1, N do
       local c = rec.cards[si][i]
-      if c then
+      local inf = rec.info[si][i]
+      if c and rec.duels[i].winner == si and inf.kind == "cat" and not captured[c.uid] then
+        c.warmth = math.min(M.WARMTH_MAX, (c.warmth or 0) + 1)
+        c.held = (c.held or 0) + 1
+        sd.seated[i] = c
+        rec.stays[si][i] = c.warmth
+      else
+        if c then c.warmth, c.held = nil, nil end
+        sd.seated[i] = false
+      end
+    end
+  end
+  for si = 1, 2 do
+    local sd = s.sides[si]
+    for i = 1, N do
+      local c = rec.cards[si][i]
+      if c and rec.stays[si][i] then
+        local _, idx = findInHand(sd, c.uid)
+        if idx then table.remove(sd.hand, idx) end
+      elseif c then
         local _, idx = findInHand(sd, c.uid)
         if idx then table.remove(sd.hand, idx) end
         if captured[c.uid] then
@@ -473,12 +500,12 @@ end
 -- ---------------------------------------------------------------- AI
 
 M.STYLES = {
-  brute = { noise = 0.6, conserve = 0.0, caution = 0.8 },
-  schemer = { noise = 0.1, conserve = 0.05, caution = 1.0 },
-  zealot = { noise = 0.4, conserve = 0.02, caution = 0.9 },
-  coward = { noise = 0.8, conserve = 0.06, caution = 1.3 },
-  trickster = { noise = 0.7, conserve = 0.03, caution = 1.0 },
-  default = { noise = 0.5, conserve = 0.03, caution = 1.0 },
+  brute = { noise = 0.35, conserve = 0.0, caution = 0.8 },
+  schemer = { noise = 0.08, conserve = 0.05, caution = 1.0 },
+  zealot = { noise = 0.25, conserve = 0.02, caution = 0.9 },
+  coward = { noise = 0.5, conserve = 0.06, caution = 1.3 },
+  trickster = { noise = 0.45, conserve = 0.03, caution = 1.0 },
+  default = { noise = 0.3, conserve = 0.03, caution = 1.0 },
 }
 
 local phantomN = 0
@@ -511,44 +538,53 @@ local function estimates(sd)
 end
 
 -- Every way to put up to 3 hand cards on the cushions, filling as many cushions as the hand allows.
-local function placements(hand)
+-- Every way to put hand cards on the free cushions (those keep[] doesn't hold), filling as many
+-- free cushions as the hand allows.
+local function placements(hand, keep)
+  keep = keep or { false, false, false }
+  local free = 0
+  for i = 1, N do if not keep[i] then free = free + 1 end end
   local out = {}
-  local k = math.min(N, #hand)
-  local cur = { false, false, false }
+  local k = math.min(free, #hand)
+  local cur = { keep[1], keep[2], keep[3] }
   local used = {}
-  local function rec(slot, placed)
+  local function rec(slot, placed, freeLeft)
     if slot > N then
       if placed == k then out[#out + 1] = { cur[1], cur[2], cur[3] } end
       return
     end
-    if placed + (N - slot + 1) > k then
+    if keep[slot] then return rec(slot + 1, placed, freeLeft) end
+    if placed + freeLeft - 1 >= k then
       cur[slot] = false
-      rec(slot + 1, placed)
+      rec(slot + 1, placed, freeLeft - 1)
     end
     for i, c in ipairs(hand) do
       if not used[i] and placed < k then
         used[i] = true
         cur[slot] = c
-        rec(slot + 1, placed + 1)
+        rec(slot + 1, placed + 1, freeLeft - 1)
         used[i] = false
       end
     end
     cur[slot] = false
   end
-  rec(1, 0)
+  rec(1, 0, free)
   return out
 end
 
--- What side `si` can see of the other side's cushions, as cards or phantoms.
+-- What side `si` can see of the other side's cushions, as cards or phantoms. Seated cats are
+-- face-up, so they're always known.
 local function visibleFoe(s, si, foePlaced)
   local o = other(si)
-  local est = estimates(s.sides[o])
+  local fs = s.sides[o]
+  local est = estimates(fs)
   local view = {}
   for i = 1, N do
     local c = foePlaced and foePlaced[i]
-    if not foePlaced then view[i] = phantom(nil, est.all)
+    if fs.seated[i] then view[i] = fs.seated[i]
+    elseif not foePlaced then view[i] = phantom(nil, est.all)
     elseif not c then view[i] = false
-    elseif s.sides[o].shown[i] then view[i] = c
+    elseif fs.shown[i] then view[i] = c
     else
       local back = M.backOf(c)
       view[i] = phantom(back == "dark" and "shadow" or back, est[back])
@@ -557,69 +593,121 @@ local function visibleFoe(s, si, foePlaced)
   return view
 end
 
+-- A cold copy of a seated cat (as it would be back in hand: no Warmth).
+local function cold(c)
+  return { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, lives = c.lives, captive = c.captive, owner = c.owner }
+end
+
+-- The best placement for side si, deciding too which seated cats to pull back to hand.
+-- Returns the placement (real card objects) and the list of cushions to retreat.
 local function choose(s, si, foeView, style, leading)
   style = style or M.STYLES.default
   local sd = s.sides[si]
-  local best, bestV
-  for _, pl in ipairs(placements(sd.hand)) do
-    local P = si == 1 and { pl, foeView } or { foeView, pl }
-    local r = compute(s, P, s.lead, true)
-    local v = r.deal[si] - r.deal[other(si)] * style.caution + r.restore[si] * 0.8
-    for i = 1, N do
-      local c = pl[i]
-      if c then
-        local d = defOf(c)
-        local du = r.duels[i]
-        -- a cat that could run out of lives risks capture: weigh that chance
-        local lives = c.lives or cards.maxLives(d)
-        if d.kind == "unit" and lives <= 2 and d.ability ~= "ninelives" and du.reason == "duel" then
-          local capP
-          if du.pCrush then
-            local loseP = si == 1 and (1 - du.p) or du.p
-            capP = lives <= 1 and loseP or du.pCrush[si]
-          else
-            local lost = du.winner ~= si
-            capP = (lost and (lives <= 1 or (du.margin or 0) >= M.CRUSH)) and 1 or 0
-          end
-          v = v - (style.guard or 1.2) * capP
-        end
-        if d.kind == "unit" then
-          v = v - style.conserve * cards.paws(c)
-          if leading and M.backOf(c) ~= "dark" then v = v - 0.15 end
-          if d.ability == "ninelives" then v = v + 0.2 end
-        end
+  local seatIdx = {}
+  for i = 1, N do if sd.seated[i] then seatIdx[#seatIdx + 1] = i end end
+  local best, bestV, bestRetreat
+  for mask = 0, 2 ^ #seatIdx - 1 do
+    local keep = { false, false, false }
+    local pool, retreat, real = {}, {}, {}
+    for _, c in ipairs(sd.hand) do pool[#pool + 1] = c end
+    for b, i in ipairs(seatIdx) do
+      if math.floor(mask / 2 ^ (b - 1)) % 2 == 1 then
+        local cc = cold(sd.seated[i])
+        real[cc] = sd.seated[i]
+        pool[#pool + 1] = cc
+        retreat[#retreat + 1] = i
+      else
+        keep[i] = sd.seated[i]
       end
     end
-    v = v + (rng.next(s.rng) - 0.5) * style.noise
-    if not bestV or v > bestV then best, bestV = pl, v end
+    for _, pl in ipairs(placements(pool, keep)) do
+      local P = si == 1 and { pl, foeView } or { foeView, pl }
+      local r = compute(s, P, s.lead, true)
+      local v = r.deal[si] - r.deal[other(si)] * style.caution + r.restore[si] * 0.8
+      for i = 1, N do
+        local c = pl[i]
+        if c then
+          local d = defOf(c)
+          local du = r.duels[i]
+          -- a cat that could run out of lives risks capture: weigh that chance
+          local lives = c.lives or cards.maxLives(d)
+          if d.kind == "unit" and lives <= 2 and d.ability ~= "ninelives" and du.reason == "duel" then
+            local capP
+            if du.pCrush then
+              local loseP = si == 1 and (1 - du.p) or du.p
+              capP = lives <= 1 and loseP or du.pCrush[si]
+            else
+              local lost = du.winner ~= si
+              capP = (lost and (lives <= 1 or (du.margin or 0) >= M.CRUSH)) and 1 or 0
+            end
+            v = v - (style.guard or 1.2) * capP
+          end
+          if d.kind == "unit" then
+            if not keep[i] then v = v - style.conserve * cards.paws(c) end
+            if leading and not keep[i] and M.backOf(c) ~= "dark" then v = v - 0.15 end
+            if d.ability == "ninelives" then v = v + 0.2 end
+            -- a warm seat is worth keeping: it only gets hotter
+            if keep[i] then v = v + 0.12 * (c.warmth or 0) end
+          end
+        end
+      end
+      v = v + (rng.next(s.rng) - 0.5) * style.noise
+      if not bestV or v > bestV then
+        local resolved = {}
+        for i = 1, N do resolved[i] = pl[i] and (real[pl[i]] or pl[i]) or false end
+        best, bestV, bestRetreat = resolved, v, retreat
+      end
+    end
   end
-  return best or { false, false, false }
+  return best or { sd.seated[1], sd.seated[2], sd.seated[3] }, bestRetreat or {}
 end
 
--- Place side si's cards (AI). Leading: nothing is known about the other side yet.
+-- Pull a seated cat back to its side's hand. It loses its Warmth.
+function M.retreat(s, si, i)
+  local sd = s.sides[si]
+  local c = sd.seated[i]
+  if not c then return false end
+  c.warmth, c.held = nil, nil
+  sd.seated[i] = false
+  if sd.placed[i] == c then sd.placed[i] = false end
+  sd.hand[#sd.hand + 1] = c
+  return true
+end
+
+-- Place side si's cards (AI). Leading: nothing is known about the other side's new cards yet.
 function M.aiPlace(s, si, style)
   local leading = s.lead == si
   local view = visibleFoe(s, si, (not leading) and s.sides[other(si)].placed or nil)
-  local pl = choose(s, si, view, style, leading)
+  local pl, retreat = choose(s, si, view, style, leading)
+  for _, i in ipairs(retreat) do M.retreat(s, si, i) end
   s.sides[si].placed = { pl[1], pl[2], pl[3] }
   return pl
 end
 
--- A suggested placement for the player (used by the autotest and the balance simulation).
+-- A suggested move for the player (the autotest and the balance simulation): the slots to
+-- commit (uids, or false) and the seated cushions to pull back first.
 function M.suggest(s, si, noise)
   local leading = s.lead == si
   local view = visibleFoe(s, si, (not leading) and s.sides[other(si)].placed or nil)
   local style = { noise = noise or 0, conserve = 0.03, caution = 1.0 }
-  local pl = choose(s, si, view, style, leading)
-  return util.map({ 1, 2, 3 }, function(i) return pl[i] and pl[i].uid or false end)
+  local pl, retreat = choose(s, si, view, style, leading)
+  return util.map({ 1, 2, 3 }, function(i) return pl[i] and pl[i].uid or false end), retreat
+end
+
+-- Play the player's suggested move: pull back, then commit. Returns the bout record.
+function M.autoplay(s, noise)
+  local slots, retreat = M.suggest(s, 1, noise)
+  for _, i in ipairs(retreat) do M.retreat(s, 1, i) end
+  return M.commit(s, slots)
 end
 
 -- ---------------------------------------------------------------- bouts
 
 local function startBout(s)
   for si = 1, 2 do
-    s.sides[si].placed = { false, false, false }
-    s.sides[si].shown = {}
+    local sd = s.sides[si]
+    sd.placed = { sd.seated[1], sd.seated[2], sd.seated[3] }
+    sd.shown = {}
   end
   if s.lead == 2 then
     local b = s.sides[2]
@@ -660,7 +748,8 @@ end
 -- guesses of their back's coat, so the coat edge shows up before the reveal.
 function M.preview(s, slots)
   local P1 = {}
-  for i = 1, N do P1[i] = slots[i] and findInHand(s.sides[1], slots[i]) or false end
+  local seated = s.sides[1].seated
+  for i = 1, N do P1[i] = seated[i] or (slots[i] and findInHand(s.sides[1], slots[i])) or false end
   local P2 = s.lead == 2 and visibleFoe(s, 1, s.sides[2].placed) or { false, false, false }
   return compute(s, { P1, P2 }, s.lead, true)
 end
@@ -671,11 +760,15 @@ function M.commit(s, slots)
   local a, b = s.sides[1], s.sides[2]
   local P1, seen = {}, {}
   for i = 1, N do
-    local uid = slots[i]
-    local c = uid and findInHand(a, uid)
-    if uid and (not c or seen[uid]) then return nil end
-    if uid then seen[uid] = true end
-    P1[i] = c or false
+    if a.seated[i] then
+      P1[i] = a.seated[i] -- a seated cat holds its cushion (pull it back first to replace it)
+    else
+      local uid = slots[i]
+      local c = uid and findInHand(a, uid)
+      if uid and (not c or seen[uid]) then return nil end
+      if uid then seen[uid] = true end
+      P1[i] = c or false
+    end
   end
   a.placed = P1
   if s.lead == 1 then M.aiPlace(s, 2, s.aiStyle) end

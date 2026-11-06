@@ -23,7 +23,7 @@ local lg = love.graphics
 G = {
   save = nil, saves = {}, mode = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
   scenes = {}, trans = nil,
-  settings = { muted = false, fullscreen = false, shake = true },
+  settings = { muted = false, fullscreen = false, shake = true, crt = true },
   -- the visible virtual area and where the 640x360 safe area sits in it
   VW = 640, VH = 360, OX = 0, OY = 0, K = 2,
 }
@@ -72,6 +72,18 @@ end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
 
+-- The CRT screen (on by default; needs shaders, so never on LÖVE Potion).
+local CRT_CURVE = 0.07
+function G.crtOn() return G.settings.crt ~= false and shaders.crt ~= nil end
+function G.cycleScreen()
+  G.settings.crt = not G.crtOn()
+  G.saveSettings()
+end
+function G.screenLabel()
+  if not shaders.crt then return "plain" end
+  return G.crtOn() and "CRT" or "plain"
+end
+
 -- ---------------------------------------------------------------- the window
 
 local canvas
@@ -93,7 +105,7 @@ local function layout()
     local ok, cv = pcall(lg.newCanvas, cw, ch, { dpiscale = 1 })
     canvas = ok and cv or lg.newCanvas(cw, ch)
   end
-  canvas:setFilter(math.abs(k - s) < 0.001 and "nearest" or "linear", "linear")
+  view.exact = math.abs(k - s) < 0.001
   view.s, view.k, view.dpi = s, k, dpi
 end
 
@@ -107,9 +119,15 @@ function G.toggleFullscreen(on)
   layout()
 end
 
--- window units (mouse, touch) -> virtual safe-area coordinates
+-- window units (mouse, touch) -> virtual safe-area coordinates (through the CRT's curve)
 function G.toVirtual(x, y)
-  return x * view.dpi / view.s - G.OX, y * view.dpi / view.s - G.OY
+  local px, py = x * view.dpi, y * view.dpi
+  if G.crtOn() then
+    local pw, ph = lg.getPixelDimensions()
+    local u, v = shaders.warp(px / pw, py / ph, CRT_CURVE)
+    px, py = u * pw, v * ph
+  end
+  return px / view.s - G.OX, py / view.s - G.OY
 end
 
 -- scissor rectangles are in canvas pixels
@@ -175,7 +193,46 @@ function love.load(args)
   end
 end
 
-function love.update(dt)
+-- ---------------------------------------------------------------- the safety net
+-- An error inside a frame doesn't end the game: it's written to crash.log (in the save folder),
+-- progress is saved, and you're taken back to the menu with a message. Only an error that keeps
+-- repeating falls through to LÖVE's error screen.
+local crashes = {}
+function G.recover(err)
+  print("[crash] " .. tostring(err))
+  pcall(function()
+    local old = love.filesystem.getInfo("crash.log") and love.filesystem.read("crash.log") or ""
+    local entry = os.date("%Y-%m-%d %H:%M:%S") .. "  scene=" .. tostring(G.sceneName) .. "\n" .. tostring(err) .. "\n\n"
+    love.filesystem.write("crash.log", (old .. entry):sub(-60000))
+  end)
+  local now = love.timer.getTime()
+  crashes[#crashes + 1] = now
+  while crashes[1] and now - crashes[1] > 3 do table.remove(crashes, 1) end
+  if #crashes >= 4 then error(err, 0) end
+  for _ = 1, 64 do if not pcall(lg.pop) then break end end
+  pcall(lg.setCanvas)
+  pcall(lg.setShader)
+  pcall(lg.setScissor)
+  pcall(lg.setBlendMode, "alpha")
+  pcall(G.persist)
+  G.overlay, G.trans = nil, nil
+  widgets.pressed, widgets.released, widgets.down = false, false, false
+  local ok = pcall(G.go, "menu", {}, true)
+  if not ok then error(err, 0) end
+  fx.toast("Something went wrong, so you're back at the menu. Your progress is saved (details in crash.log).", "bad")
+end
+
+local function safely(fn, ...)
+  local ok, err = xpcall(fn, debug.traceback, ...)
+  if not ok then G.recover(err) end
+end
+
+local update, draw
+
+function love.update(dt) safely(update, dt) end
+function love.draw() safely(draw) end
+
+function update(dt)
   dt = math.min(dt, 1 / 30)
   G.time = G.time + dt
   input.update(dt)
@@ -266,7 +323,7 @@ local function drawWipe(p, cw, ch)
   end
 end
 
-function love.draw()
+function draw()
   local cw, ch = canvas:getWidth(), canvas:getHeight()
   lg.setCanvas(canvas)
   lg.clear(theme.c.ink)
@@ -295,7 +352,19 @@ function love.draw()
   lg.setCanvas()
   lg.clear(0, 0, 0)
   lg.setColor(1, 1, 1)
+  local crt = G.crtOn() and shaders.crt
+  canvas:setFilter((view.exact and not crt) and "nearest" or "linear", "linear")
+  if crt then
+    local pw, ph = lg.getPixelDimensions()
+    crt:send("screen", { pw, ph })
+    crt:send("rows", G.VH)
+    crt:send("time", G.time % 1000)
+    crt:send("curve", CRT_CURVE)
+    crt:send("amount", 1)
+    lg.setShader(crt)
+  end
   lg.draw(canvas, 0, 0, 0, view.s / view.k / view.dpi)
+  lg.setShader()
   widgets.endFrame()
   if G.autotest then G.autotest.afterDraw() end
 end
@@ -359,6 +428,11 @@ function love.keypressed(k)
   local mac = love.keyboard.isDown("lgui", "rgui") and love.keyboard.isDown("lctrl", "rctrl") and k == "f"
   if k == "f11" or mac or (k == "return" and love.keyboard.isDown("lalt", "ralt")) then
     G.toggleFullscreen()
+    return
+  end
+  if k == "f2" then
+    G.cycleScreen()
+    fx.toast("Screen: " .. G.screenLabel())
     return
   end
   if k == "f3" then

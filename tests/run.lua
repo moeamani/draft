@@ -119,7 +119,7 @@ test("match runs to a result and goblets fall", function()
   while not s.over do
     guard = guard + 1
     if guard > 20 then error("match did not end") end
-    local rec = match.commit(s, match.suggest(s, 1, 0))
+    local rec = match.autoplay(s, 0)
     if not rec then error("commit failed") end
   end
   eq(type(s.result), "string")
@@ -134,7 +134,7 @@ test("lead alternates and the rival places when it leads", function()
   local any = false
   for i = 1, 3 do if s.sides[2].placed[i] then any = true end end
   eq(any, true, "rival placed")
-  match.commit(s, match.suggest(s, 1, 0))
+  match.autoplay(s, 0)
   if not s.over then eq(s.lead, 1) end
 end)
 
@@ -352,7 +352,7 @@ test("full festival simulation", function()
         while not s.over do
           g2 = g2 + 1
           if g2 > 20 then error("match stuck") end
-          match.commit(s, match.suggest(s, 1, 0.3))
+          match.autoplay(s, 0.3)
         end
         t.matches = t.matches + 1
         t.exch = t.exch + s.bout

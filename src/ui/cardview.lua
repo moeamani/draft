@@ -12,6 +12,8 @@ local lg = love.graphics
 
 local M = {}
 M.W, M.H = 56, 78
+local HOT = require("src.core.match").HOT
+local warmthBadge
 
 local C = theme.c
 local faceCache = {}
@@ -222,6 +224,28 @@ local function hearts(x, y, left, max, alpha)
 end
 M.hearts = hearts
 
+-- A seated cat's Warmth: a flame and the number, on the top-right corner.
+local FLAME = { "..o..", ".oyo.", "oyyyo", "oyyyo", ".ooo." }
+warmthBadge = function(self, alpha)
+  local w = self.inst.warmth or 0
+  if w <= 0 then return false end
+  local hot = w >= HOT
+  local x, y = M.W - 21, 2
+  gfx.box(x, y, 19, 13, C.black, alpha)
+  gfx.box(x + 1, y + 1, 17, 11, hot and theme.hex("#7e2018") or theme.hex("#5a3410"), alpha)
+  for j, row in ipairs(FLAME) do
+    for c = 1, #row do
+      local ch = row:sub(c, c)
+      if ch ~= "." then
+        theme.set(ch == "y" and C.goldText or theme.hex("#ff6a2a"), alpha)
+        lg.rectangle("fill", x + 2 + c - 1, y + 4 + j - 1, 1, 1)
+      end
+    end
+  end
+  gfx.text(tostring(w), theme.font("bold", 8.5), x + 13, y + 1.5, C.white, { align = "center", alpha = alpha, bg = C.black })
+  return true
+end
+
 function View:draw(opts)
   opts = opts or {}
   if self.dying and self.dying >= 1 then return end
@@ -255,7 +279,16 @@ function View:draw(opts)
     lg.rectangle("fill", 0, 0, M.W, M.H)
     lg.setBlendMode("alpha")
   end
-  if self.selected and not self.dying then
+  local warm = self.inst.warmth or 0
+  if warm >= HOT and not showBack and not self.dying then
+    -- the Hot Seat: a flickering ring of fire around the card
+    local t = love.timer.getTime()
+    for k = 0, 2 do
+      local a = (0.55 + 0.45 * math.sin(t * 9 + k * 2.1)) * alpha
+      theme.set(k == 1 and C.goldText or theme.hex("#ff6a2a"), a)
+      lg.rectangle("line", -1.5 - k, -1.5 - k, M.W + 3 + 2 * k, M.H + 3 + 2 * k)
+    end
+  elseif self.selected and not self.dying then
     theme.set(C.goldText, alpha)
     lg.rectangle("line", -1.5, -1.5, M.W + 3, M.H + 3)
   end
@@ -302,6 +335,7 @@ function View:drawText(opts, alpha, k)
       lg.rectangle("fill", 3, 44, max * 6 + 2, 7)
       hearts(4, 45, left, max, alpha)
     end
+    if warmthBadge(self, alpha) then end
     if self.risk then
       -- placed here, it could be captured
       gfx.box(M.W - 15, 16, 12, 12, C.black, alpha)

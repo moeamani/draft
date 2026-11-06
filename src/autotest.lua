@@ -19,7 +19,7 @@ local function autoMatch(limit)
     local sc = G.scene
     if G.sceneName ~= "match" then return true end
     if not sc.busy and not sc.finished then
-      sc.slots = match.suggest(sc.s, 1, 0)
+      sc:applySuggestion()
       sc:charge()
     end
     return limit and elapsed > limit
@@ -58,7 +58,7 @@ function M.start(dir)
   step(0.2, function() G.go("match", {}, true) end)
   step(2.6, function()
     local sc = G.scene
-    sc.slots = match.suggest(sc.s, 1, 0)
+    sc:applySuggestion()
     local hand = sc:handList()
     local v = hand[1] and sc.views[hand[1].uid]
     if v then M.mx, M.my = v.x, v.y - 10 end
@@ -71,7 +71,7 @@ function M.start(dir)
   step(0.3, function()
     local sc = G.scene
     if G.sceneName ~= "match" then return end
-    sc.slots = match.suggest(sc.s, 1, 0)
+    sc:applySuggestion()
     local v = sc.slots[2] and sc.views[sc.slots[2]]
     if v then M.mx, M.my = v.x, v.y end
   end)
@@ -108,7 +108,7 @@ function M.start(dir)
       guard = guard + 1
       local ctx = game.setupMatch(save)
       local s = ctx.state
-      while not s.over do match.commit(s, match.suggest(s, 1, 0)) end
+      while not s.over do match.autoplay(s, 0) end
       local out = game.resolveMatch(save, ctx)
       if out.won and ctx.nemesis then game.decideFate(save, ctx.nemesis, "brand") end
       game.afterMatch(save)

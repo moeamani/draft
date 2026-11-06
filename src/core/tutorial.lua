@@ -66,7 +66,9 @@ M.STEPS = {
   { text = "See the hearts on each card? Those are its lives. A lost duel costs one; lose by 5 or more and it costs two. You crushed my Squire Kitten, so you captured it.", next = true },
   { text = "Out of lives, a cat changes sides. In the Arena, the Four Hands keep the cats they capture, and send them back at you. Mind your hearts.", next = true },
   { text = "And my Sunbeam put your Agravain to sleep. Tricks don't fight, but they spoil the cat facing them.", next = true },
-  { text = "Now you lead. I'll only see your card backs. Put down any cats you like and Charge!", target = { "charge" }, charge = true,
+  { text = "And see? Your winners stayed on their cushions. A cat that wins stays seated and gains Warmth: +1 Paw for every bout it holds on.", next = true },
+  { text = "At 3 Warmth it's a Hot Seat, and every swat knocks off an extra goblet. But a seated cat is face-up, so I can aim at it. Click one to pull it back to your hand.", next = true },
+  { text = "Now you lead. I'll only see your card backs. Fill your free cushion and Charge!", target = { "charge" }, charge = true,
     done = function(sc) return sc.s.bout >= 3 or sc.s.over end },
   { text = "That's the whole game. Hover any card to read it in full. Now knock off my last goblets!", next = true, last = true },
 }

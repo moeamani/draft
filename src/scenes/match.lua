@@ -97,6 +97,9 @@ function S:cushionAt(x, y)
 end
 
 function S:rivalCard(i, c)
+  local old = self.rviews[i]
+  if old and old.inst == c then return end -- already seated there, face-up
+  if old then self:sendAway(old, RDECK_X + 60, RDECK_Y - 60, 0.6) end
   local v = cardview.new(c, RDECK_X, RDECK_Y, 0.5)
   v.livesShown = (self.livesBefore and self.livesBefore[c.uid]) or c.lives
   v.flip, v.tflip = -1, -1
@@ -107,11 +110,49 @@ function S:rivalCard(i, c)
   sfx.play("card", 0.9)
 end
 
+-- A card view leaving the table (to a pile, or carried off).
+function S:sendAway(v, x, y, rot)
+  v:setTarget(x, y, 0.5, rot or 0.6)
+  v.leaveT = 0.7
+  self.leaving[#self.leaving + 1] = v
+end
+
+-- Hold the Cushion: pull your seated cat on cushion i back to your hand (it loses its Warmth).
+function S:retreat(i)
+  local v = self.board[i]
+  if not v or self.busy then return false end
+  if not match.retreat(self.s, 1, i) then return false end
+  self.board[i] = nil
+  self.views[v.inst.uid] = v
+  v.selected, v.paws, v.previewInfo, v.risk = false, nil, nil, nil
+  self:popText(v, "Pulled back", C.pale)
+  sfx.play("select", 0.8)
+  return true
+end
+
+-- The autotest's and fuzzer's player: the AI's suggested move, through the scene.
+function S:applySuggestion()
+  local slots, retreat = match.suggest(self.s, 1, 0)
+  for _, i in ipairs(retreat) do self:retreat(i) end
+  self.slots = {}
+  for i = 1, 3 do self.slots[i] = (not self.s.sides[1].seated[i]) and slots[i] or false end
+end
+
 function S:beginBout()
   local s = self.s
   self.slots = { false, false, false }
-  self.board = {}
-  self.rviews = {}
+  -- seated cats keep their places; anything else still on the table goes
+  local board, rv = {}, {}
+  for i = 1, 3 do
+    local mine, theirs = self.board[i], self.rviews[i]
+    if mine and s.sides[1].seated[i] == mine.inst then board[i] = mine elseif mine then self:sendAway(mine, DECK_X - 70, 400, -0.6) end
+    if theirs and s.sides[2].seated[i] == theirs.inst then rv[i] = theirs
+    elseif theirs then
+      self:popText(theirs, "Pulled back", C.pale)
+      self:sendAway(theirs, RDECK_X, RDECK_Y, 0.4)
+    end
+  end
+  self.board, self.rviews = board, rv
   self.rec = nil
   self.busyResolve = false
   self.confirmEmpty = false
@@ -137,6 +178,7 @@ function S:beginBout()
 end
 
 function S:placeAt(uid, i, from)
+  if self.board[i] then self:retreat(i) end -- swapping out a seated cat pulls it back first
   local occupant = self.slots[i]
   if from ~= "hand" then self.slots[from] = false end
   if occupant and occupant ~= uid and from ~= "hand" then self.slots[from] = occupant end
@@ -145,7 +187,7 @@ function S:placeAt(uid, i, from)
 end
 
 function S:firstFree()
-  for i = 1, 3 do if not self.slots[i] then return i end end
+  for i = 1, 3 do if not self.slots[i] and not self.board[i] then return i end end
 end
 
 function S:drop()
@@ -175,7 +217,7 @@ function S:charge()
   end
   local s = self.s
   local placed = 0
-  for i = 1, 3 do if self.slots[i] then placed = placed + 1 end end
+  for i = 1, 3 do if self.slots[i] or self.board[i] then placed = placed + 1 end end
   if placed == 0 and #self:handList() > 0 and not self.confirmEmpty then
     fx.toast("Your cushions are empty, so every rival cat would swat unopposed. Press Charge again to send nobody.", "bad")
     self.confirmEmpty = true
@@ -192,6 +234,7 @@ function S:charge()
   for i = 1, 3 do
     local uid = slots[i]
     if uid and self.views[uid] then self.views[uid].livesShown = before[uid] or self.views[uid].inst.lives end
+    if self.board[i] then self.board[i].livesShown = before[self.board[i].inst.uid] or self.board[i].inst.lives end
     if self.rviews[i] then self.rviews[i].livesShown = before[self.rviews[i].inst.uid] or self.rviews[i].inst.lives end
   end
   self.busy, self.busyResolve, self.drag = true, true, nil
@@ -222,6 +265,15 @@ end
 function S:animate(rec, lead)
   local s = self.s
   local d = 0.15
+  -- a seated rival cat that was pulled back leaves before the reveal
+  for i = 1, 3 do
+    local r = self.rviews[i]
+    if r and r.inst ~= rec.cards[2][i] then
+      self:popText(r, "Pulled back", C.pale)
+      self:sendAway(r, RDECK_X, RDECK_Y, 0.4)
+      self.rviews[i] = nil
+    end
+  end
   if lead == 1 then
     for i = 1, 3 do
       local c = rec.cards[2][i]
@@ -385,8 +437,29 @@ end
 function S:clearBoard(rec)
   local returns = {}
   for _, uid in ipairs(rec.returns or {}) do returns[uid] = true end
+  local s = self.s
+  local keepMine, keepTheirs = {}, {}
   for i = 1, 3 do
+    -- Hold the Cushion: winners stay seated and warm up
     local v = self.board[i]
+    if v and rec.stays[1][i] and not v.captured then
+      keepMine[i] = v
+      v.dim, v.paws = 0, nil
+      v:setTarget(MY_X[i], MY_Y, 1, 0)
+      local w = rec.stays[1][i]
+      self:popText(v, w >= match.HOT and ("HOT SEAT! Warmth " .. w) or ("+1 Warmth (" .. w .. ")"), w >= match.HOT and C.goldText or C.green)
+      if w >= match.HOT then fx.burst(v.x, v.y, theme.hex("#ff8a3a"), 18, 120); sfx.play("burn", 1.2, 0.5) end
+      v = nil
+    end
+    local r = self.rviews[i]
+    if r and rec.stays[2][i] and not r.captured then
+      keepTheirs[i] = r
+      r.dim, r.paws = 0, nil
+      r:setTarget(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, 0)
+      local w = rec.stays[2][i]
+      self:popText(r, w >= match.HOT and ("HOT SEAT! Warmth " .. w) or ("Holds on (" .. w .. ")"), w >= match.HOT and C.redText or C.pale)
+      self.rviews[i] = nil
+    end
     if v then
       v.dim, v.paws = 0, nil
       if v.captured then
@@ -415,7 +488,7 @@ function S:clearBoard(rec)
       self.leaving[#self.leaving + 1] = r
     end
   end
-  self.board, self.rviews = {}, {}
+  self.board, self.rviews = keepMine, keepTheirs
   sfx.play("whoosh", 1, 0.5)
 end
 
@@ -491,12 +564,25 @@ function S:update(dt)
   if active then
     if widgets.pressed and self.hoverUid and not self.drag then
       self.drag = { uid = self.hoverUid, from = self.hoverFrom, sx = mx, sy = my, moved = false }
+    elseif widgets.pressed and self.hoverBoard and not self.drag then
+      self.seatPress = { i = self.hoverBoard, sx = mx, sy = my }
+    end
+    local sp = self.seatPress
+    if sp and widgets.down and (math.abs(mx - sp.sx) + math.abs(my - sp.sy) > 4) and self.board[sp.i] then
+      -- dragging a seated cat: pull it back and carry it like a hand card
+      local uid = self.board[sp.i].inst.uid
+      if self:retreat(sp.i) then self.drag = { uid = uid, from = "hand", sx = sp.sx, sy = sp.sy, moved = true } end
+      self.seatPress = nil
+    elseif sp and widgets.released then
+      if self.board[sp.i] and self.board[sp.i]:contains(mx, my) then self:retreat(sp.i) end
+      self.seatPress = nil
     end
     if self.drag and widgets.down and (math.abs(mx - self.drag.sx) + math.abs(my - self.drag.sy) > 4) then self.drag.moved = true end
     if self.drag and widgets.released then self:drop() end
   elseif self.drag and not widgets.down then
     self.drag = nil
   end
+  if not widgets.down then self.seatPress = nil end
   -- live numbers for the cards on your cushions
   self.previewRec = nil
   if not self.busy then
@@ -504,9 +590,9 @@ function S:update(dt)
     self.previewRec = pr
     for i = 1, 3 do
       local uid = self.slots[i]
-      if uid and self.views[uid] then
+      local v = (uid and self.views[uid]) or self.board[i]
+      if v then
         local inf = pr.info[1][i]
-        local v = self.views[uid]
         v.paws = (inf.kind == "cat" or inf.kind == "box") and math.max(0, inf.paws) or nil
         v.previewInfo = inf
         -- would this cat be captured if it loses here?
@@ -546,6 +632,14 @@ function S:update(dt)
   if self.drag and self.drag.moved then
     local v = self.views[self.drag.uid]
     if v then v.hovered = true; v:setTarget(mx, my, 1, 0) end
+  end
+  for i = 1, 3 do
+    local b = self.board[i]
+    if b and not self.busyResolve then
+      b.hovered = self.hoverBoard == i
+      b.selected = true
+      b:setTarget(MY_X[i], MY_Y, 1, 0)
+    end
   end
   for _, v in pairs(self.views) do v:update(dt) end
   for i = 1, 3 do
@@ -835,7 +929,7 @@ function S:drawPanel()
   if s.omen then
     y = y + gfx.textf("Omen: " .. s.omen.name .. ". " .. s.omen.desc, T.body(), x, y, w, "left", C.gold) + 6
   end
-  y = y + gfx.textf("Click a card to place it, drag to choose a cushion. Then Charge!", T.body(), x, y, w, "left", C.paper2) + 6
+  y = y + gfx.textf("Click a card to place it, drag to choose a cushion. Then Charge! Winners stay seated and warm up; click a seated cat to pull it back.", T.body(), x, y, w, "left", C.paper2) + 6
   gfx.label("Coat edge: +" .. match.edge(s) .. " Paws", x, y, C.gold)
   y = y + 12
   for _, pair in ipairs({ { "ember", "gilt" }, { "gilt", "tide" }, { "tide", "ember" } }) do

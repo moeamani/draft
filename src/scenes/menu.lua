@@ -106,13 +106,17 @@ end
 function S.settings()
   local ov = {}
   function ov:draw()
-    overlays.frame(180, 70, 280, 230, "Settings")
-    local x, w, y = 196, 248, 110
+    overlays.frame(180, 52, 280, 266, "Settings")
+    local x, w, y = 196, 248, 92
     local sfxm = require("src.ui.sfx")
     if not G.platform.console then
       if widgets.button("set_fs", x, y, w, 28, "Fullscreen: " .. (love.window.getFullscreen() and "on" or "off")) then G.toggleFullscreen() end
       y = y + 34
     end
+    if widgets.button("set_crt", x, y, w, 28, "CRT screen: " .. (G.crtOn() and "on" or "off"), { disabled = not require("src.ui.shaders").crt }) then
+      G.cycleScreen()
+    end
+    y = y + 34
     if widgets.button("set_snd", x, y, w, 28, "Sound: " .. (sfxm.muted and "off" or "on")) then
       G.settings.muted = sfxm.toggleMute(); G.saveSettings()
     end
@@ -128,7 +132,7 @@ function S.settings()
       overlays.confirm("Reset festivals?", "Your free-festival save is deleted. The Four Hands forget you.", "Delete", function() G.wipeSave("free") end)
     end
     y = y + 32
-    gfx.textf("F11 or Alt+Enter toggles fullscreen (Ctrl+Cmd+F on a Mac). F3 toggles sound.", T.small(), x, y, w, "left", C.muted, { bg = C.ink })
+    gfx.textf("F11 or Alt+Enter toggles fullscreen (Ctrl+Cmd+F on a Mac). F2 toggles the CRT, F3 the sound.", T.small(), x, y, w, "left", C.muted, { bg = C.ink })
   end
   G.openOverlay(ov)
 end
@@ -138,7 +142,7 @@ local ITEMS = {
   { id = "free", label = "Free Festival", sub = freeLine, act = startFree },
   { id = "cattery", label = "The Cattery", sub = function() return "Every cat you've met" end, act = cattery },
   { id = "rules", label = "How to Play", sub = function() return "The rules, the coats, the tricks" end, act = function() overlays.help() end },
-  { id = "settings", label = "Settings", sub = function() return "Fullscreen, sound, saves" end, act = S.settings },
+  { id = "settings", label = "Settings", sub = function() return "CRT, fullscreen, sound, saves" end, act = S.settings },
   { id = "quit", label = "Quit", act = function() love.event.quit() end },
 }
 

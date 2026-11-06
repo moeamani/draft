@@ -120,6 +120,11 @@ function M.cardLines(def, inst, inf)
     for _, m in ipairs(inf.mods) do parts[#parts + 1] = signed(m.amount) .. " " .. m.text end
     lines[#lines + 1] = { text = table.concat(parts, ", ") .. " = " .. math.max(0, inf.paws) .. " Paws", color = C.green }
   end
+  if inst and (inst.warmth or 0) > 0 then
+    local match = require("src.core.match")
+    lines[#lines + 1] = { text = ("Seated: Warmth %d (+%d Paws).%s"):format(inst.warmth, inst.warmth,
+      inst.warmth >= match.HOT and " Hot Seat: every swat knocks off an extra goblet." or (" Hot Seat at " .. match.HOT .. ".")), color = C.goldText }
+  end
   if def.kind == "unit" then
     local max = cards.maxLives(def)
     if def.ability == "ninelives" then

@@ -192,7 +192,7 @@ function M.setupMatch(save)
   end
   -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra goblets
   if tier >= 5 then em.goblets = em.goblets + 1 end
-  if n then em.goblets = em.goblets + math.floor(n.level / 5) end
+  if n then em.goblets = em.goblets + math.floor(n.level / 4) end
   local style = match.STYLES[personality] or match.STYLES.default
   local state = match.create({ name = save.playerName, deck = run.deck, mods = pm, cushions = run.cushions },
     { name = opp.name, deck = deck, mods = em, cushions = n and M.handCushions(n) or nil },
