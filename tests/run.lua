@@ -146,6 +146,9 @@ local function setupState(handA, handB, extraA, extraB, omen)
   for k, v in pairs(extraB or {}) do b[k] = v end
   local s = match.create(a, b, 1, nil, omen)
   s.sides[1].hand, s.sides[2].hand = deckOf(handA), deckOf(handB)
+  for si = 1, 2 do
+    for _, c in ipairs(s.sides[si].hand) do c.lives = cards.maxLives(cards.getDef(c)) end
+  end
   return s
 end
 local function modText(inf, text)
@@ -205,6 +208,103 @@ test("market offers an upholstery the player doesn't have", function()
     local st = game.makeMarket(run)
     assert(st.cushion and not (st.cushion.slot == 2 and st.cushion.kind == "velvet"))
   end
+end)
+
+-- Stolen Lives
+local function commitBout(s, a, b)
+  -- place hand indices a (player) and b (rival) and resolve one bout through the real commit
+  s.lead = 1
+  local slots = {}
+  for i = 1, 3 do slots[i] = a[i] and s.sides[1].hand[a[i]].uid or false end
+  local P2 = {}
+  for i = 1, 3 do P2[i] = b[i] and s.sides[2].hand[b[i]] or false end
+  local aiPlace = match.aiPlace
+  match.aiPlace = function(st, si) st.sides[si].placed = P2; return P2 end
+  local rec = match.commit(s, slots)
+  match.aiPlace = aiPlace
+  return rec
+end
+test("lives: a lost duel costs a life, a crushing loss costs two, then the cat is captured", function()
+  local s = setupState({ "kaytail", "kaytail" }, { "lamoracat", "agravain" })
+  local k1 = s.sides[1].hand[1]
+  eq(k1.lives, cards.maxLives(cards.CARDS.kaytail), "starts with full lives")
+  -- Kaytail (3, ember) vs Agravain (5, shadow): loses by 2 -> 1 life
+  local rec = commitBout(s, { 1 }, { 2 })
+  eq(rec.wounds[1].cost, 1); eq(k1.lives, 1)
+  -- the other Kaytail vs Lamoracat (7 + 3 tide edge = 10): crushed -> captured outright
+  local s2 = setupState({ "kaytail" }, { "lamoracat" })
+  local k2 = s2.sides[1].hand[1]
+  local rec2 = commitBout(s2, { 1 }, { 1 })
+  eq(rec2.wounds[1].crushed, true); eq(rec2.wounds[1].captured, true)
+  eq(#s2.sides[1].lost, 1); eq(s2.sides[2].taken[1].uid, k2.uid)
+  for _, c in ipairs(s2.sides[1].discard) do assert(c.uid ~= k2.uid, "a captured cat doesn't go to the discard pile") end
+end)
+test("lives: Nine Lives never loses one", function()
+  local s = setupState({ "borscat" }, { "lamoracat" })
+  local rec = commitBout(s, { 1 }, { 1 })
+  eq(#rec.wounds, 0)
+end)
+test("stolen lives: Hands keep captives, field them at 1 life, and you rescue them", function()
+  local save = game.newSave("T", 21)
+  local run = game.startRun(save)
+  local n = save.hands[4]
+  local deckBefore = #run.deck
+  local victim = run.deck[5]
+  local ctx = { opp = { name = n.name, id = n.id }, nemesis = n, stage = "group", tier = 1,
+    state = { result = "loss", history = {}, revealed = {}, sides = { { lost = { victim }, scored = {}, goblets = 0 }, { lost = {}, goblets = 3 } } } }
+  local out = { }
+  game.settleLives(save, ctx, out)
+  eq(#run.deck, deckBefore - 1, "the cat leaves your pride")
+  eq(#n.captives, 1); eq(n.captives[1].id, victim.id); eq(n.captives[1].captive, true)
+  local deck = require("src.core.nemesis").nemesisDeck(run.rng, n, 1)
+  local found
+  for _, c in ipairs(deck) do if c.captive then found = c end end
+  assert(found, "the captive fights for the Hand")
+  local s = match.create({ name = "A", deck = deckOf(FILLER) }, { name = "B", deck = { found } }, 1)
+  eq((s.sides[2].hand[1] or s.sides[2].deck[1]).lives, 1, "a captive is down to 1 life")
+  -- beat it: it comes home
+  local ctx2 = { opp = { name = n.name, id = n.id }, nemesis = n, stage = "group", tier = 1,
+    state = { result = "loss", history = {}, revealed = {}, sides = { { lost = {}, scored = {} }, { lost = { found } } } } }
+  local out2 = {}
+  game.settleLives(save, ctx2, out2)
+  eq(#out2.rescued, 1); eq(#n.captives, 0); eq(#run.deck, deckBefore)
+end)
+test("stolen lives: beating a Hand frees every captive; strays pawn theirs", function()
+  local save = game.newSave("T", 22)
+  local run = game.startRun(save)
+  local n = save.hands[4]
+  n.captives = { { id = "kaytail", level = 2, uid = "cap1", captive = true }, { id = "merline", level = 1, uid = "cap2", captive = true } }
+  local before = #run.deck
+  local ctx = { opp = { name = n.name, id = n.id }, nemesis = n, stage = "group", tier = 1,
+    state = { result = "win", history = {}, revealed = {}, sides = { { lost = {}, scored = {} }, { lost = {} } } } }
+  local out = {}
+  game.settleLives(save, ctx, out)
+  eq(#out.rescued, 2); eq(#n.captives, 0); eq(#run.deck, before + 2)
+  local ctx2 = { opp = { name = "Stray", id = "s11" }, stage = "group", tier = 1,
+    state = { result = "loss", history = {}, revealed = {}, sides = { { lost = { run.deck[1] }, scored = {} }, { lost = {} } } } }
+  game.settleLives(save, ctx2, {})
+  eq(#run.festival.pawnshop, 1)
+end)
+
+-- WCAG 2.x AA: every text colour reaches 4.5:1 on every dark ground, and plate labels on their plates
+test("contrast: text tokens pass WCAG AA on every ground", function()
+  local theme = require("src.ui.theme")
+  local C = theme.c
+  local grounds = { "deep", "ink", "ink2", "ink3", "night" }
+  local texts = { "paper", "paper2", "muted", "goldText", "redText", "blueText", "cyan", "green", "pale", "steel" }
+  for _, t in ipairs(texts) do
+    for _, g in ipairs(grounds) do
+      local r = theme.contrast(C[t], C[g])
+      assert(r >= 4.5, ("%s on %s is %.2f:1"):format(t, g, r))
+    end
+  end
+  for _, plate in ipairs({ "red", "blue", "redDark", "blueDark", "goldDark", "slate", "ink3" }) do
+    assert(theme.contrast(C.white, C[plate]) >= 4.5, "white on " .. plate)
+  end
+  assert(theme.contrast(C.black, C.gold) >= 4.5, "black on gold")
+  -- the automatic correction always lands on a passing colour
+  local fixed = theme.readable(theme.hex("#e8483b"), C.ink3)
+  assert(theme.contrast(fixed, C.ink3) >= 4.5, "readable() fixes a failing colour")
 end)
 
 test("festival: groups, table, knockout", function()

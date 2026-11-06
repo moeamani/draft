@@ -12,6 +12,7 @@ function M.baseMods()
     -- charm effects
     hexBonus = 0, pounceBonus = 0, coatPaws = {}, legendPaws = 0, yarn = 0, cream = 0,
     tally = false, seal = false, lucky = false, drum = false, catnip = false, peek = false,
+    extraLives = 0,
   }
 end
 

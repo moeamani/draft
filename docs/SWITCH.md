@@ -11,18 +11,16 @@ the Home menu.
 
 ## What's different on the console
 
-LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. `src/platform.lua`
-detects LÖVE Potion and switches the game to its shader-free path:
+LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The game only
+needs one shader anyway: the dithered backdrop. `src/platform.lua` detects LÖVE Potion and draws
+the backdrop from PNGs instead:
 
 | Effect | Desktop | Switch |
 | --- | --- | --- |
 | Backdrop (`stage`) | live shader | PNG baked from the same maths (`assets/switch/stage-*.png`) |
-| Figma dither on plates and title cards | `fdither` shader | a 16x16 Bayer dot tile laid over each plate |
-| Lens smear on title cards and card backs | `smear` shader | PNG baked per plate colour (`assets/switch/smear-*.png`) |
-| VS portrait smear | `smear` shader | colour ghosts trailing the portrait |
-| Card flash and dissolve | shaders | additive wash and fade |
-| Screen wipe | shader | fade |
-| CRT filter (F2) | optional shader | not available |
+| Smear accent on title cards and card backs | baked PNGs (`assets/switch/smear-*.png`) | the same PNGs |
+| Cat art cleanup pass (stray pixels) | canvas read-back | skipped if read-back isn't available |
+| Everything else (plates, cards, cats, text) | no shader | no shader |
 
 The baked PNGs come from `tools/switch/bake_assets.py`, which ports the shaders to numpy and
 reads its presets, colour ramps and tints from `src/ui/bakes.lua`, the same table the game
@@ -34,8 +32,9 @@ python3 tools/switch/bake_assets.py
 
 The sound effects are synthesised at load as on desktop, at 11 kHz to keep start-up short.
 
-You can try the console paths on a desktop with `love . --console`: no shaders, the baked art and
-the controller cursor.
+You can try the console paths on a desktop with `love . --console`: no shaders, the baked backdrop
+and the controller cursor. Text is drawn at the screen's resolution on the Switch too (1280x720
+handheld, 1920x1080 docked), so docked play is sharp.
 
 ## Controls
 
@@ -123,8 +122,8 @@ mouse, a fake gamepad and touchscreen), not on hardware.
 
 ## Known limits
 
-- The game draws a 640x360 canvas at 2x (1280x720). Handheld mode is 1:1. Docked at 1080p it's
-  scaled by 1.5 with linear filtering, so pixels are slightly soft.
+- The game's art is laid out on a 640x360 grid: 2x in handheld mode and 3x docked, both
+  pixel-perfect.
 - `conf.lua` asks for LÖVE 11.4. LÖVE Potion 3 follows the LÖVE 12 API. Everything the game
   calls exists in both, but LÖVE Potion may print a version notice.
 - If LÖVE Potion can't create sound data on your version, the game runs silently rather than

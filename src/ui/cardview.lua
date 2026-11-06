@@ -7,7 +7,6 @@ local cards = require("src.core.cards")
 local gfx = require("src.ui.gfx")
 local icons = require("src.ui.icons")
 local plates = require("src.ui.plates")
-local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
@@ -39,20 +38,30 @@ local function begin(cv)
   lg.clear(0, 0, 0, 0)
 end
 
--- Face layout: the rarity frame, a 50x48 illustration, then two plates: the name on its coat's
--- colour (so the coat reads at a glance) and the ability. A type badge sits on the art.
+-- Face layout: the rarity frame, a 50x48 pixel-art illustration, then two plates: the name on
+-- its coat's colour (so the coat reads at a glance) and the ability. The text on a card (name,
+-- ability, Paws, lives) is drawn live at screen resolution by View:draw, never baked.
+M.NAME_PLATE = { 3, 52, 50, 12 }
+M.ABIL_PLATE = { 3, 65, 50, 11 }
+local function nameColor(def)
+  if def.kind ~= "unit" then return C.ink3 end
+  return ({ ember = C.red, tide = C.blue, gilt = C.gold, shadow = C.slate })[def.coat] or C.slate
+end
+M.nameColor = nameColor
+local function abilColor(def)
+  if def.kind ~= "unit" then return C.ink2 end
+  return def.ability == "none" and C.slate or C.blueDark
+end
+
 local function renderFace(def, level)
   local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
   if faceCache[key] then return faceCache[key] end
   local W, H = M.W, M.H
   local unit = def.kind == "unit"
-  local coat = unit and cards.COATS[def.coat] or nil
   -- build the plates before switching canvases (they bake into their own canvases)
-  local nameCol = unit and coat.color or C.ink3
-  local namePlate = plates.plate(W - 6, 12, nameCol, { outline = false, light = 0.16 })
-  local abilCol = not unit and C.ink2 or (def.ability == "none" and theme.hex("#3b4a5e") or C.blue)
-  local abilPlate = plates.plate(W - 6, 11, abilCol, { outline = false, light = 0.14 })
-  local frame = plates.plate(W, H, rarityCol(def), { outline = C.black, light = 0.25 })
+  local namePlate = plates.plate(50, 12, nameColor(def), { outline = false })
+  local abilPlate = plates.plate(50, 11, abilColor(def), { outline = false })
+  local frame = plates.plate(W, H, rarityCol(def), { outline = C.black })
   local pic = art.card(def)
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
@@ -65,14 +74,6 @@ local function renderFace(def, level)
   lg.draw(pic, 3, 3)
   lg.draw(namePlate, 3, 52)
   lg.draw(abilPlate, 3, 65)
-  local f10 = theme.T.small()
-  local dark = unit and def.coat == "gilt"
-  gfx.text(fit(f10, cards.shortName(def), W - 8), f10, W / 2, 52, dark and C.black or (unit and C.white or C.cyan), { align = "center", shadow = false })
-  local label = M.SHORT[def.ability] or ""
-  local lw = f10:getWidth(label) + 11
-  local lx = math.floor(W / 2 - lw / 2)
-  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", lx + 4, 70, C.white)
-  gfx.text(label, f10, lx + 10, 65, C.white, { shadow = false })
   if unit then
     -- type badge: sword for Physical, orb for Magic
     theme.set(C.black)
@@ -81,9 +82,7 @@ local function renderFace(def, level)
     lg.rectangle("fill", W - 14, 4, 10, 10)
     icons.draw(def.type == "magic" and "orb" or "sword", W - 9, 9, def.type == "magic" and C.cyan or C.paper)
   end
-  if level > 1 then
-    for i = 1, level - 1 do icons.draw("star", W - 9 - (i - 1) * 8, 46, C.gold) end
-  end
+  icons.draw(icons.ABILITY_ICON[def.ability] or "paw", 9, 70, C.white)
   lg.pop()
   faceCache[key] = cv
   return cv
@@ -113,8 +112,7 @@ function M.back(kind)
   lg.rectangle("fill", 0, 0, W, H)
   theme.set(C.paper)
   lg.rectangle("fill", 1, 1, W - 2, H - 2)
-  lg.setColor(1, 1, 1)
-  lg.draw(inner, 2, 2)
+  plates.draw(inner, 2, 2)
   lg.pop()
   backs[kind] = cv
   return cv
@@ -135,8 +133,7 @@ function M.pile()
     theme.set(C.paper)
     lg.rectangle("fill", k * 2 + 1, 5 - k * 2, w - 2, h - 2)
   end
-  lg.setColor(1, 1, 1)
-  lg.draw(inner, 2, 4)
+  plates.draw(inner, 2, 4)
   lg.pop()
   return pile
 end
@@ -207,6 +204,24 @@ function View:atRest()
   return self.rot == 0 and self.s == 1 and math.abs(self.flip) == 1 and self.bounce < 0.02 and not self.dying
 end
 
+-- A tiny heart for each life: full for lives left, an empty outline for lives lost.
+local HEART = { ".k.k.", "kffff", "kffff", ".kff.", "..k.." }
+local HEART_RED, HEART_LOST = theme.hex("#ff5a6e"), theme.hex("#3a3f4c")
+local function hearts(x, y, left, max, alpha)
+  for i = 1, max do
+    local hx = x + (i - 1) * 6
+    for j, row in ipairs(HEART) do
+      for c = 1, #row do
+        local ch = row:sub(c, c)
+        if ch == "k" then theme.set(C.black, alpha)
+        elseif ch == "f" then theme.set(i <= left and HEART_RED or HEART_LOST, alpha) end
+        if ch ~= "." then lg.rectangle("fill", hx + c - 1, y + j - 1, 1, 1) end
+      end
+    end
+  end
+end
+M.hearts = hearts
+
 function View:draw(opts)
   opts = opts or {}
   if self.dying and self.dying >= 1 then return end
@@ -214,81 +229,93 @@ function View:draw(opts)
   local showBack = self.faceDown or self.flip < 0
   local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1)
   local alpha = self.alpha
-  if self.dying and not shaders.dissolve then alpha = alpha * (1 - self.dying) end -- no shader: fade out
+  if self.dying then alpha = alpha * (1 - self.dying) end
   local k = 1 - self.dim * 0.6
   local lift = (self.hovered or self.selected) and 3 or 2
   local rest = self:atRest()
-  local x0, y0 = math.floor(self.x - M.W / 2 + 0.5), math.floor(self.y - M.H / 2 + 0.5)
-  -- shadow
-  lg.setColor(0, 0, 0, 0.45 * alpha)
+  local s = self.s * (1 + self.bounce * 0.12)
+  local fx_ = math.abs(self.flip)
+  -- the card's own frame of reference: (0, 0) is its top-left corner
+  lg.push()
   if rest then
-    lg.rectangle("fill", x0 + 1, y0 + lift, M.W, M.H)
+    lg.translate(math.floor(self.x - M.W / 2 + 0.5), math.floor(self.y - M.H / 2 + 0.5))
   else
-    local s = self.s
-    lg.push()
-    lg.translate(math.floor(self.x + 1), math.floor(self.y + lift))
+    lg.translate(self.x, self.y)
     lg.rotate(self.rot)
-    lg.rectangle("fill", -M.W * s * math.abs(self.flip) / 2, -M.H * s / 2, M.W * s * math.abs(self.flip), M.H * s)
-    lg.pop()
+    lg.scale(s * fx_, s)
+    lg.translate(-M.W / 2, -M.H / 2)
   end
-  local sh
-  if self.dying and shaders.dissolve then
-    sh = shaders.dissolve
-    sh:send("t", math.max(0, math.min(1, self.dying)))
-    sh:send("edge", { 1.0, 0.55, 0.1 })
-  elseif self.flash > 0 and shaders.flash then
-    sh = shaders.flash
-    sh:send("amount", self.flash)
-  end
-  lg.setShader(sh)
-  if rest then
-    lg.setColor(k, k, k, alpha)
-    lg.draw(tex, x0, y0)
-  else
-    local s = self.s * (1 + self.bounce * 0.12)
-    lg.setColor(k, k, k, alpha)
-    lg.draw(tex, self.x, self.y, self.rot, s * math.abs(self.flip), s, M.W / 2, M.H / 2)
-  end
-  lg.setShader()
-  if self.flash > 0 and not shaders.flash then -- no shader: a white wash over the card
+  lg.setColor(0, 0, 0, 0.45 * alpha)
+  lg.rectangle("fill", 1, lift, M.W, M.H)
+  lg.setColor(k, k, k, alpha)
+  lg.draw(tex, 0, 0)
+  if self.flash > 0 then -- a white wash over the card
     lg.setBlendMode("add")
     lg.setColor(self.flash * alpha, self.flash * alpha, self.flash * alpha, 1)
-    if rest then
-      lg.rectangle("fill", x0, y0, M.W, M.H)
-    else
-      local s = self.s * (1 + self.bounce * 0.12)
-      lg.push()
-      lg.translate(self.x, self.y)
-      lg.rotate(self.rot)
-      lg.rectangle("fill", -M.W * s * math.abs(self.flip) / 2, -M.H * s / 2, M.W * s * math.abs(self.flip), M.H * s)
-      lg.pop()
-    end
+    lg.rectangle("fill", 0, 0, M.W, M.H)
     lg.setBlendMode("alpha")
   end
   if self.selected and not self.dying then
-    theme.set(C.gold, alpha)
-    if rest then
-      lg.rectangle("fill", x0 - 2, y0 - 2, M.W + 4, 1)
-      lg.rectangle("fill", x0 - 2, y0 + M.H + 1, M.W + 4, 1)
-      lg.rectangle("fill", x0 - 2, y0 - 2, 1, M.H + 4)
-      lg.rectangle("fill", x0 + M.W + 1, y0 - 2, 1, M.H + 4)
-    end
+    theme.set(C.goldText, alpha)
+    lg.rectangle("line", -1.5, -1.5, M.W + 3, M.H + 3)
   end
-  if showBack or self.dying or (def.kind ~= "unit" and not self.paws) then return end
-  -- Paws badge: a little black "Power" plate (green when buffed, red when hexed)
-  local bx, by
-  if rest then bx, by = x0 + 9, y0 + 9 else bx, by = self:project(-0.5 + 9 / M.W, -0.5 + 9 / M.H) end
+  if not showBack and not self.dying then self:drawText(opts, alpha, k) end
+  lg.pop()
+end
+
+-- The live layer of a face: name, ability, Paws badge, lives, and the captive's brand.
+function View:drawText(opts, alpha, k)
+  local def = self.def
+  local unit = def.kind == "unit"
+  local f = theme.T.small()
+  local np, ap = M.NAME_PLATE, M.ABIL_PLATE
+  local ncol = nameColor(def)
+  local ink = (unit and def.coat == "gilt") and C.black or C.white
+  local name = cards.shortName(def)
+  local nf = f
+  if nf:getWidth(name) > np[3] - 4 then nf = theme.font("body", 7.5) end
+  if nf:getWidth(name) > np[3] - 4 then name = name:match("^(%S+)") or name end
+  gfx.text(name, nf, np[1] + np[3] / 2, np[2] + (np[4] - nf:getHeight()) / 2, unit and ink or C.cyan,
+    { align = "center", alpha = alpha, bg = ncol })
+  local label = M.SHORT[def.ability] or ""
+  gfx.text(label, theme.font("bold", 7.5), ap[1] + 11, ap[2] + (ap[4] - theme.font("bold", 7.5):getHeight()) / 2, C.white,
+    { alpha = alpha, bg = abilColor(def) })
+  if not unit and not self.paws then return end
+  -- Paws badge (green when buffed, red when hexed)
   local base = def.ability == "box" and 4 or cards.paws(self.inst)
   local p = opts.paws or self.paws or base
-  local font = theme.T.body()
+  local font = theme.T.bold()
   local str = tostring(p)
-  local bw = math.max(14, font:getWidth(str) + 5)
-  local bxl, byt = math.floor(bx - bw / 2), math.floor(by - 7)
+  local bw = math.max(14, math.ceil(font:getWidth(str)) + 6)
   local bg = def.rarity == "legendary" and C.goldDark or C.night
   if p > base then bg = theme.hex("#1f6b45") elseif p < base then bg = C.redDark end
-  gfx.box(bxl, byt, bw, 14, C.black, alpha)
-  gfx.box(bxl + 1, byt + 1, bw - 2, 12, bg, alpha)
-  gfx.text(str, font, bxl + bw / 2, byt - 2, C.white, { align = "center", shadow = false, alpha = alpha })
+  gfx.box(2, 2, bw, 14, C.black, alpha)
+  gfx.box(3, 3, bw - 2, 12, bg, alpha)
+  gfx.text(str, font, 2 + bw / 2, 3 + (12 - font:getHeight()) / 2, C.white, { align = "center", alpha = alpha, bg = bg })
+  -- lives
+  if unit then
+    local max = cards.maxLives(def)
+    local left = self.livesShown or self.inst.lives or max
+    if self.inst.captive then max = 1 end
+    if max > 0 then
+      theme.set(C.black, 0.6 * alpha)
+      lg.rectangle("fill", 3, 44, max * 6 + 2, 7)
+      hearts(4, 45, left, max, alpha)
+    end
+    if self.risk then
+      -- placed here, it could be captured
+      gfx.box(M.W - 15, 16, 12, 12, C.black, alpha)
+      gfx.box(M.W - 14, 17, 10, 10, C.red, alpha)
+      gfx.text("!", theme.font("bold", 9), M.W - 9, 17, C.white, { align = "center", alpha = alpha, bg = C.red })
+    end
+    if self.inst.captive then
+      -- your cat, held by the rival: a red brand on the art
+      theme.set(theme.hex("#ff3b30"), alpha)
+      lg.rectangle("line", 3.5, 3.5, 49, 47)
+      gfx.box(M.W - 22, 40, 19, 10, C.redDark, alpha)
+      gfx.text("YOURS", theme.font("bold", 5.5), M.W - 12.5, 41.5, C.white, { align = "center", alpha = alpha, bg = C.redDark })
+    end
+  end
 end
 
 return M

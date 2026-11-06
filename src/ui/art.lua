@@ -1,13 +1,16 @@
--- Cat illustrations, painted with plain primitives so they work everywhere (LÖVE Potion too).
+-- Cat illustrations as clean pixel art.
 --
--- Every picture is a bust portrait in three layers, in a 100-unit-wide logical space:
---   bg   a themed backdrop for the cat's coat (an Ember hall, a Tide shore, a Gilt sunburst, a
---        Shadow moon), or blood red for the Four Hands
---   fig  the cat: shoulders and outfit, ears, a shaded head with its fur pattern, the face, the
---        headwear and the props. It's painted on its own layer and gets a 1px dark outline.
---   fx   what glows and shouldn't be outlined: whiskers, orbs, flames, sparkles, notes, runes
--- Pictures are painted at 2x and box-filtered down, then quantised with the Figma dither like
--- every other surface. Results are cached.
+-- Every picture is painted once at its real pixel size (a card's art is 50x48) with no
+-- anti-aliasing, dither or blur. Bigger views are exact integer enlargements, so the pixels stay
+-- crisp and chunky. A picture has three layers:
+--   bg   a backdrop for the cat's coat in a few flat bands: an Ember hall, a Tide shore, a Gilt
+--        sunburst, a Shadow night (blood red for the Four Hands)
+--   fig  the cat: shoulders and outfit, ears, a two-tone head, its fur pattern, headwear and
+--        props, then the face from hand-placed pixel stamps (eyes, nose, mouth). Stray single
+--        pixels are cleaned up, and the figure gets a 1px dark outline.
+--   fx   what glows: whiskers, orbs, flames, sparkles, notes, runes (no outline)
+-- Shapes are placed in a 100-unit-wide logical space and snapped to the pixel grid; the stamps
+-- are in real pixels. Results are cached.
 local rngm = require("src.core.rng")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -16,15 +19,17 @@ local M = {}
 local hex = theme.hex
 local C = theme.c
 local PI = math.pi
+local floor = math.floor
 
--- ---------------------------------------------------------------- palette
+-- ---------------------------------------------------------------- palette (hue-shifted ramps)
 
+local OUTLINE = hex("#140f1c")
 local FUR = {
-  ember = { base = hex("#e07a3a"), light = hex("#f7ad6a"), dark = hex("#b0502a"), stripe = hex("#8a3216"), muzzle = hex("#fbe3c6") },
-  tide = { base = hex("#7f93a8"), light = hex("#b6c6d6"), dark = hex("#56677c"), stripe = hex("#44526a"), muzzle = hex("#e4eaf0") },
-  gilt = { base = hex("#e8c47c"), light = hex("#f9e7bb"), dark = hex("#bd9045"), stripe = hex("#a5762d"), muzzle = hex("#fff6e2") },
-  shadow = { base = hex("#333844"), light = hex("#5a6274"), dark = hex("#1b1e25"), stripe = hex("#101216"), muzzle = hex("#474d5c") },
-  cream = { base = hex("#f1e6d2"), light = hex("#fffaf0"), dark = hex("#cdbb9c"), stripe = hex("#7a5a40"), muzzle = hex("#fffdf8") },
+  ember = { dark = hex("#b4502a"), base = hex("#e47e3a"), light = hex("#f8b26a"), stripe = hex("#8a3216"), muzzle = hex("#fde6c8") },
+  tide = { dark = hex("#56677e"), base = hex("#8195ab"), light = hex("#b8c8d8"), stripe = hex("#45536c"), muzzle = hex("#e6ecf2") },
+  gilt = { dark = hex("#bf9145"), base = hex("#eac67e"), light = hex("#fae8bc"), stripe = hex("#a7772e"), muzzle = hex("#fff6e2") },
+  shadow = { dark = hex("#1c1f2b"), base = hex("#343a49"), light = hex("#58617a"), stripe = hex("#12141c"), muzzle = hex("#4a5163") },
+  cream = { dark = hex("#cbb99a"), base = hex("#f1e6d2"), light = hex("#fffaf0"), stripe = hex("#7a5a40"), muzzle = hex("#fffdf8") },
 }
 local PATTERNS = {
   ember = { "tabby", "tabby", "solid", "tux", "patch" },
@@ -33,73 +38,125 @@ local PATTERNS = {
   shadow = { "solid", "solid", "tux", "smoke" },
 }
 local EYE = {
-  gold = hex("#f2c230"), green = hex("#8fd14f"), blue = hex("#5cc6ff"), copper = hex("#e8822e"),
-  red = hex("#ff3b30"), violet = hex("#c18cff"), cyan = hex("#47e7fd"),
+  gold = hex("#f2c230"), green = hex("#8ed34e"), blue = hex("#5cc6ff"), copper = hex("#ec8a32"),
+  red = hex("#ff3b30"), violet = hex("#c48cff"), cyan = hex("#47e7fd"),
 }
 local EYES_BY_COAT = {
   ember = { "green", "gold", "copper" }, tide = { "gold", "copper", "green" },
   gilt = { "blue", "green", "gold" }, shadow = { "gold", "green", "gold" },
 }
-local OUTLINE = hex("#07090a")
-local PINK, PINKD = hex("#f2909a"), hex("#c25f6c")
-local STEEL = { base = hex("#9aa6b8"), light = hex("#dce4ee"), dark = hex("#5d6878"), deep = hex("#3c4552") }
-local GOLD = { base = hex("#e0b021"), light = hex("#ffe27a"), dark = hex("#9a7408") }
-local WOOD, WOODD = hex("#8a5a32"), hex("#5c3a1f")
+local PINK, PINKD = hex("#f4929c"), hex("#c45f6e")
+local STEEL = { deep = hex("#3a4250"), dark = hex("#5d6879"), base = hex("#9aa7b9"), light = hex("#d8e2ee") }
+local GOLD = { dark = hex("#8f6a06"), base = hex("#e2b022"), light = hex("#ffe27a") }
+local WOOD, WOODD = hex("#8a5a32"), hex("#53351c")
 local CLOTH = { ember = hex("#c8382c"), tide = hex("#2471fc"), gilt = hex("#d3a200"), shadow = hex("#24503c"), none = hex("#24503c") }
 local ROBES = { hex("#2471fc"), hex("#c8382c"), hex("#24503c"), hex("#3b3f8f"), hex("#16352a") }
+local WHITE = hex("#ffffff")
 
 local BG = {
-  ember = { top = hex("#5a1d12"), bottom = hex("#160806"), glow = hex("#ff8a3a"), accent = hex("#e8483b") },
-  tide = { top = hex("#123d6e"), bottom = hex("#061326"), glow = hex("#5cb8ff"), accent = hex("#47e7fd") },
-  gilt = { top = hex("#5e4500"), bottom = hex("#1c1300"), glow = hex("#ffd34a"), accent = hex("#ffe27a") },
-  shadow = { top = hex("#16352a"), bottom = hex("#030605"), glow = hex("#47e7fd"), accent = hex("#f4f1e8") },
-  menace = { top = hex("#3c0707"), bottom = hex("#0a0202"), glow = hex("#ff3b30"), accent = hex("#ff8a3a") },
+  ember = { hex("#5a1d12"), hex("#3e130c"), hex("#260b07"), glow = hex("#ff8a3a") },
+  tide = { hex("#164a80"), hex("#0f3460"), hex("#081f3c"), glow = hex("#5cb8ff"), accent = hex("#7fd8ff") },
+  gilt = { hex("#6a4e06"), hex("#4a3604"), hex("#2a1e02"), glow = hex("#ffd34a") },
+  shadow = { hex("#1d4434"), hex("#122b21"), hex("#07130e"), glow = hex("#47e7fd") },
+  menace = { hex("#4a0a0a"), hex("#2c0505"), hex("#140202"), glow = hex("#ff3b30"), accent = hex("#ff8a3a") },
 }
 
 -- ---------------------------------------------------------------- drawing helpers
 
+local K = 0.5 -- output pixels per logical unit (set per picture)
+local function snap(v) return floor(v * K + 0.5) / K end
+local function px(n) return (n or 1) / K end -- n output pixels, in logical units
+
 local function col(c, a) lg.setColor(c[1], c[2], c[3], a or c[4] or 1) end
-local function ell(x, y, rx, ry, c, rot, a)
-  col(c, a)
+local function ell(x, y, rx, ry, c, rot)
+  col(c)
+  x, y = snap(x), snap(y)
+  rx, ry = math.max(px(0.5), rx), math.max(px(0.5), ry)
   if rot and rot ~= 0 then
     lg.push(); lg.translate(x, y); lg.rotate(rot)
-    lg.ellipse("fill", 0, 0, math.max(0.1, rx), math.max(0.1, ry), 28)
+    lg.ellipse("fill", 0, 0, rx, ry, 32)
     lg.pop()
   else
-    lg.ellipse("fill", x, y, math.max(0.1, rx), math.max(0.1, ry), 28)
+    lg.ellipse("fill", x, y, rx, ry, 32)
   end
 end
 local function poly(c, ...) col(c); lg.polygon("fill", ...) end -- convex shapes only
-local function ln(c, w, ...) col(c); lg.setLineWidth(w); lg.line(...); lg.setLineWidth(1) end
-local function rect(c, x, y, w, h, a) col(c, a); lg.rectangle("fill", x, y, w, h) end
-local function rrect(c, x, y, w, h, rot) -- rotated rectangle around its centre
-  col(c)
-  lg.push(); lg.translate(x, y); lg.rotate(rot or 0); lg.rectangle("fill", -w / 2, -h / 2, w, h); lg.pop()
+local function rect(c, x, y, w, h, a)
+  col(c, a)
+  lg.rectangle("fill", snap(x), snap(y), math.max(px(), snap(w)), math.max(px(), snap(h)))
 end
-local function vgrad(x, y, w, h, top, bottom)
-  for i = 0, math.ceil(h) - 1 do
-    local t = h > 1 and i / (h - 1) or 0
-    lg.setColor(top[1] + (bottom[1] - top[1]) * t, top[2] + (bottom[2] - top[2]) * t, top[3] + (bottom[3] - top[3]) * t, 1)
-    lg.rectangle("fill", x, y + i, w, 1)
-  end
-end
--- a soft radial glow from stacked circles (alphas compound to a linear falloff)
-local function glow(x, y, r, c, a, rings)
-  rings = rings or 12
-  local prev = 0
-  for k = 1, rings do
-    local target = a * k / rings
-    col(c, (target - prev) / (1 - prev))
-    lg.circle("fill", x, y, r * (1 - (k - 1) / rings), 32)
-    prev = target
-  end
-end
-local function sparkle(x, y, s, c, a)
-  ell(x, y, s * 0.35, s * 1.6, c, 0, a)
-  ell(x, y, s * 1.6, s * 0.35, c, 0, a)
-  ell(x, y, s * 0.5, s * 0.5, C.white, 0, a)
+local function line(c, n, ...) -- n: thickness in output pixels
+  col(c); lg.setLineWidth(px(n)); lg.line(...); lg.setLineWidth(1)
 end
 local function mix(a, b, t) return { a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t, 1 } end
+
+-- A pixel stamp: rows of characters, each one output pixel, looked up in pal ("." is empty).
+-- (x, y) is the stamp's top-left corner in logical units; flip mirrors it horizontally.
+local function stamp(x, y, rows, pal, flip)
+  x, y = snap(x), snap(y)
+  local p = px()
+  for j, row in ipairs(rows) do
+    local n = #row
+    for i = 1, n do
+      local c = pal[row:sub(i, i)]
+      if c then
+        col(c)
+        local ii = flip and (n - i) or (i - 1)
+        lg.rectangle("fill", x + ii * p, y + (j - 1) * p, p, p)
+      end
+    end
+  end
+end
+
+-- flat posterised bands instead of a gradient
+local function bands(w, h, cols)
+  local n = #cols
+  for i = 1, n do
+    local y0 = snap((i - 1) / n * h)
+    rect(cols[i], 0, y0, w, h - y0 + px())
+  end
+end
+
+-- a glow as a few flat rings
+local function glow(x, y, r, c, a, rings)
+  rings = rings or 3
+  for k = 1, rings do
+    col(c, a * 0.4)
+    lg.circle("fill", snap(x), snap(y), r * (1 - (k - 1) / rings), 32)
+  end
+end
+
+-- a two-tone piece: dark underneath, base shifted up-left, so the shadow falls bottom-right
+local function shaded(x, y, rx, ry, R, rot)
+  ell(x, y, rx, ry, R.dark, rot)
+  ell(x - px(), y - px(), rx - px(), ry - px(), R.base, rot)
+end
+
+-- ---------------------------------------------------------------- stamps
+
+local EYES = {
+  calm = { ".kkk.", "kwcck", "kcpck", "kdpdk", ".kkk." },
+  wide = { ".kkk.", "kwppk", "kpppk", "kdppk", ".kkk." },
+  smug = { ".....", "kkkkk", "kcpck", ".kkk.", "....." },
+  fierce = { "kk...", "..kkk", ".kcpk", "kdcpk", ".kkk." },
+  happy = { ".....", ".kkk.", "k...k", ".....", "....." },
+  menace = { "kk...", "..kkk", ".kcpk", "kccpk", ".kkk." },
+  patch = { "kkkkk", "kkkkk", "kkkkk", "kkkkk", ".kkk." },
+}
+local NOSE = { ".ppp.", "..p..", "kk.kk" }
+local YOWL = { ".ppp.", ".kkk.", "kwrwk", ".kkk." }
+local TONGUE = { ".ppp.", "..p..", "kk.kk", "..t..", "..t.." }
+local EMBLEMS = {
+  ember = { "..e..", ".eee.", "eeeee", ".eee." },
+  tide = { "e...e", ".e.e.", "e.e.e", ".e.e." },
+  gilt = { "e.e.e", ".eee.", "eeeee", ".eee.", "e.e.e" },
+  sun = { "e.e.e", ".eee.", "eeeee", ".eee.", "e.e.e" },
+  shadow = { ".ee..", "eee..", "eee..", ".eee." },
+}
+local SPARK = { ".s.", "sws", ".s." }
+local NOTE = { "..nn", "..n.", "nnn.", "nnn." }
+local RUNE = { "r.r", ".r.", "r.r" }
+local FLAME = { ".y.", "yoy", "yoy", ".o." }
 
 -- ---------------------------------------------------------------- per-card looks
 -- Anything not set here is chosen from the card's type, ability, rarity and seed.
@@ -112,16 +169,16 @@ local SPEC = {
   circaleus = { pattern = "solid", eyes = "green", hat = "wizard", robe = hex("#16352a"), prop = "wand", expr = "wide" },
   purrceval = { pattern = "smoke", eyes = "gold", hat = "coif", outfit = "mail", prop = "grail", expr = "calm" },
   purrlinore = { pattern = "tux", eyes = "green", hat = "hood", robe = hex("#24503c"), prop = "mouse", expr = "fierce" },
-  mordraleus = { pattern = "solid", eyes = "red", hat = "hornhelm", outfit = "plate", steel = "dark", prop = "sword", expr = "fierce", ghost = true },
+  mordraleus = { pattern = "solid", eyes = "red", hat = "hornhelm", outfit = "plate", steel = "dark", prop = "sword", expr = "menace" },
   merlinus = { pattern = "tux", eyes = "blue", hat = "bigwizard", robe = hex("#3b3f8f"), prop = "book", expr = "wide" },
   uther = { pattern = "tabby", eyes = "gold", hat = "crown", outfit = "plate", prop = "banner", cape = hex("#2471fc"), expr = "yowl" },
   greenmouser = { pattern = "smoke", eyes = "green", hat = "none", outfit = "plate", steel = "green", prop = "axe", halo = true, expr = "calm" },
   mewdred = { pattern = "tabby", eyes = "copper", hat = "helm", outfit = "plate", prop = "claws", expr = "fierce" },
-  galahiss = { pattern = "solid", fur = "cream", eyes = "blue", hat = "none", outfit = "plate", steel = "white", prop = "sword", halo = "gold", expr = "calm", tongue = true },
+  galahiss = { pattern = "solid", fur = "cream", eyes = "blue", hat = "none", outfit = "plate", steel = "white", prop = "sword", halo = "gold", expr = "calm" },
   gawpaw = { pattern = "tabby", eyes = "gold", hat = "helm", outfit = "plate", prop = "claws", emblem = "sun", expr = "fierce" },
   bedimew = { pattern = "points", eyes = "blue", hat = "coif", outfit = "mail", prop = "sword", expr = "smug", tongue = true },
   borscat = { pattern = "tabby", eyes = "gold", hat = "helm", outfit = "mail", prop = "sword", halo = true, scars = 2 },
-  lamoracat = { pattern = "fluff", eyes = "copper", hat = "none", outfit = "mail", prop = "shield", headW = 1.12, expr = "smug" },
+  lamoracat = { pattern = "fluff", eyes = "copper", hat = "none", outfit = "mail", prop = "shield", headW = 1.1, expr = "smug" },
   pelliroar = { pattern = "fluff", eyes = "green", hat = "crownTilt", outfit = "tunic", prop = "banner", expr = "yowl" },
   tristripe = { pattern = "tabby", eyes = "green", hat = "none", outfit = "tunic", prop = "lute", expr = "happy" },
   alleystray = { pattern = "tux", eyes = "gold", hat = "bandana", outfit = "rags", prop = "fishbone", eyepatch = true, torn = true, expr = "smug" },
@@ -144,6 +201,7 @@ local SPEC = {
   candlewitch = { pattern = "tabby", eyes = "green", hat = "witch", robe = hex("#16352a"), prop = "candle", expr = "smug" },
   guard = { pattern = "solid", eyes = "gold", hat = "helm", outfit = "mail", prop = "spear", expr = "calm" },
 }
+M.SPEC = SPEC
 
 local PROP_PHYS = { smite = "hammer", none = "shield", litter = "spear", muster = "banner", yowl = "banner", pounce = "claws", ninelives = "sword", stray = "fishbone", groom = "sword", purr = "lute" }
 local PROP_MAGIC = { inspire = "orb", hex = "wand", litter = "staff", pounce = "fireball", muster = "orb", yowl = "lute", stray = "crystal", purr = "book", groom = "staff", none = "candle" }
@@ -152,14 +210,16 @@ local EXPR = { purr = "happy", yowl = "yowl", hex = "smug", pounce = "fierce", s
 -- Fill in everything a painter needs. o: seed, coat, magic, ability, legendary, rarity, scars,
 -- menace, crown, cutout; plus any SPEC fields.
 local function derive(o)
+  if o.derived then return o end
   local r = rngm.new(o.seed or 1)
   local function nx() return rngm.next(r) end
-  local function pick(t) return t[math.floor(nx() * #t) + 1] end
-  o.coat = FUR[o.coat] and o.coat or "shadow"
+  local function pick(t) return t[floor(nx() * #t) + 1] end
+  o.coat = (FUR[o.coat] and o.coat ~= "cream") and o.coat or "shadow"
   o.pattern = o.pattern or pick(PATTERNS[o.coat] or PATTERNS.shadow)
   o.fur = o.fur or (o.pattern == "points" and "cream" or o.coat)
   o.eyes = o.eyes or (o.menace and "red" or pick(EYES_BY_COAT[o.coat] or EYES_BY_COAT.shadow))
-  o.expr = o.expr or (o.menace and "fierce") or EXPR[o.ability] or pick({ "calm", "calm", "smug", "fierce", "wide" })
+  o.expr = o.expr or (o.menace and "menace") or EXPR[o.ability] or pick({ "calm", "calm", "smug", "fierce", "wide" })
+  if o.menace and o.expr ~= "yowl" then o.expr = "menace" end
   if o.magic then
     o.outfit = o.outfit or "robe"
     o.hat = o.hat or (o.crown and "crown") or (o.legendary and "circlet") or (o.ability == "hex" and pick({ "hood", "hood", "wizard", "witch" }))
@@ -174,9 +234,8 @@ local function derive(o)
   if o.cape == nil then o.cape = o.legendary and pick({ hex("#c8382c"), hex("#2471fc"), hex("#3b3f8f") }) or false end
   o.robe = o.robe or pick(ROBES)
   o.cloth = o.cloth or CLOTH[o.coat]
-  o.headW = o.headW or (0.95 + nx() * 0.12)
-  o.earH = o.earH or (0.85 + nx() * 0.35)
-  o.jx = o.jx or (nx() - 0.5) * 3
+  o.headW = o.headW or (0.96 + nx() * 0.1)
+  o.earH = o.earH or (0.85 + nx() * 0.3)
   if o.ability == "litter" and o.kittens == nil then o.kittens = true end
   if o.ability == "groom" and o.tongue == nil then o.tongue = true end
   if o.ability == "purr" and o.notes == nil then o.notes = true end
@@ -185,7 +244,7 @@ local function derive(o)
   if (o.ability == "inspire" or o.legendary) and o.sparkles == nil then o.sparkles = true end
   if o.ability == "stray" and o.eyepatch == nil then o.eyepatch = nx() < 0.6 end
   if (o.scars or 0) >= 3 then o.torn = true end
-  o.rng = r
+  o.derived = true
   return o
 end
 
@@ -196,206 +255,159 @@ local function bgPaint(w, h, o)
   local B = BG[key] or BG.shadow
   local r = rngm.new((o.seed or 1) + 77)
   local function nx() return rngm.next(r) end
-  vgrad(0, 0, w, h, B.top, B.bottom)
-  local cx, cy = w / 2 + (o.jx or 0), h - 52
+  bands(w, h, { B[1], B[2], B[3] })
+  local cx, cy = w / 2, h - 52
   if key == "ember" then
     -- a hall with hanging pennants, lit by a brazier
-    for _, px in ipairs({ 8, w - 20 }) do
-      rect(hex("#3a0e0a"), px, 0, 12, 34)
-      poly(hex("#3a0e0a"), px, 34, px + 12, 34, px + 6, 40)
-      rect(hex("#7a2016"), px + 2, 0, 8, 30)
+    for _, x0 in ipairs({ 6, w - 18 }) do
+      rect(hex("#2a0a06"), x0, 0, 12, 30)
+      poly(hex("#2a0a06"), snap(x0), snap(30), snap(x0 + 12), snap(30), snap(x0 + 6), snap(38))
+      rect(hex("#8a2418"), x0 + 2, 0, 8, 28)
     end
-    glow(cx, cy + 4, 58, B.glow, 0.55)
-    for i = 1, 16 do
-      local ex, ey = nx() * w, nx() * h * 0.9
-      rect(nx() < 0.5 and B.glow or GOLD.light, ex, ey, 1.4, 1.4, 0.5 + nx() * 0.5)
-    end
+    glow(cx, cy + 4, 46, B.glow, 0.45)
+    for _ = 1, 10 do rect(nx() < 0.5 and B.glow or GOLD.light, nx() * w, nx() * h * 0.85, px(), px()) end
   elseif key == "tide" then
-    glow(cx, cy, 60, B.glow, 0.45)
-    for i = 1, 18 do
-      local rx, ry = nx() * w, nx() * h * 0.7
-      ln(B.accent, 0.8, rx, ry, rx - 3, ry + 7)
+    glow(cx, cy, 46, B.glow, 0.35)
+    for _ = 1, 12 do rect(B.accent, nx() * w, nx() * h * 0.6, px(), px(3), 0.7) end
+    for k = 0, 1 do
+      local y = h - 22 + k * 10
+      for x = -4, w, 16 do rect(B.accent, x + (k % 2) * 8, y, px(4), px(), 0.6) end
     end
-    for k = 0, 2 do
-      local y = h - 30 + k * 9
-      for x = -6, w, 14 do
-        col(B.accent, 0.25 + k * 0.08); lg.setLineWidth(1.4)
-        lg.arc("line", "open", x + (k % 2) * 7, y, 7, PI, 2 * PI)
-      end
-    end
-    lg.setLineWidth(1)
   elseif key == "gilt" then
-    -- sunburst
-    for i = 0, 15 do
-      local a1, a2 = i / 16 * 2 * PI, (i + 0.5) / 16 * 2 * PI
-      if i % 2 == 0 then
-        col(B.glow, 0.16)
-        lg.polygon("fill", cx, cy - 4, cx + math.cos(a1) * 140, cy - 4 + math.sin(a1) * 140, cx + math.cos(a2) * 140, cy - 4 + math.sin(a2) * 140)
-      end
+    for i = 0, 7 do
+      local a1 = i / 8 * 2 * PI
+      col(B.glow, 0.18)
+      lg.polygon("fill", cx, cy - 4, cx + math.cos(a1) * 140, cy - 4 + math.sin(a1) * 140, cx + math.cos(a1 + 0.3) * 140, cy - 4 + math.sin(a1 + 0.3) * 140)
     end
-    glow(cx, cy - 4, 50, B.glow, 0.5)
-    -- castle on the horizon
-    local base = h - 26
-    for _, t in ipairs({ { 6, 14 }, { 20, 22 }, { w - 34, 20 }, { w - 16, 12 } }) do
-      rect(hex("#2a1e00"), t[1], base - t[2], 11, t[2] + 26)
-      for k = 0, 2 do rect(hex("#2a1e00"), t[1] + k * 4, base - t[2] - 3, 3, 3) end
+    glow(cx, cy - 4, 40, B.glow, 0.4)
+    local base = h - 24
+    for _, t in ipairs({ { 4, 14 }, { 18, 22 }, { w - 30, 18 }, { w - 14, 10 } }) do
+      rect(hex("#221800"), t[1], base - t[2], 10, t[2] + 26)
+      for k = 0, 2 do rect(hex("#221800"), t[1] + k * 4, base - t[2] - px(2), px(2), px(2)) end
     end
   elseif key == "shadow" then
-    local mx, my = w - 22, 18
-    glow(mx, my, 30, B.glow, 0.25)
-    ell(mx, my, 10, 10, C.paper)
-    ell(mx - 3, my - 2, 2.4, 2, hex("#d8d3c2")); ell(mx + 3, my + 3, 1.8, 1.6, hex("#d8d3c2")); ell(mx + 4, my - 4, 1.2, 1.2, hex("#d8d3c2"))
-    for i = 1, 14 do
-      local sx, sy = nx() * w, nx() * h * 0.6
-      rect(C.paper, sx, sy, 1, 1, 0.4 + nx() * 0.6)
-    end
-    glow(cx, cy, 52, B.glow, 0.3)
-    for k = 0, 2 do rect(C.paper, 0, h - 26 + k * 8, w, 3, 0.05 + k * 0.03) end
+    local mx, my = w - 20, 16
+    ell(mx, my, 9, 9, C.paper)
+    stamp(mx - px(2), my - px(2), { "dd.", "d.." }, { d = hex("#d8d3c2") })
+    for _ = 1, 10 do rect(C.paper, nx() * w, nx() * h * 0.55, px(), px(), 0.8) end
+    glow(cx, cy, 44, B.glow, 0.22)
+    rect(C.paper, 0, h - 18, w, px(2), 0.12)
   elseif key == "menace" then
-    glow(cx, cy, 64, B.glow, 0.5)
-    for i = 0, 9 do
-      local fx = i * (w / 9)
-      local fh = 14 + nx() * 22
-      col(i % 2 == 0 and B.glow or B.accent, 0.55)
-      lg.polygon("fill", fx - 9, h, fx + 9, h, fx + (nx() - 0.5) * 6, h - fh)
+    glow(cx, cy, 52, B.glow, 0.4)
+    for i = 0, 7 do
+      local fx_ = i * (w / 7)
+      local fh = 12 + nx() * 18
+      col(i % 2 == 0 and B.glow or B.accent, 0.7)
+      lg.polygon("fill", snap(fx_ - 7), h, snap(fx_ + 7), h, snap(fx_), snap(h - fh))
     end
   end
   if o.legendary then
-    for i = 0, 7 do
-      local a = i / 8 * 2 * PI + 0.2
-      col(GOLD.light, 0.12)
-      lg.polygon("fill", cx, cy, cx + math.cos(a) * 120, cy + math.sin(a) * 120, cx + math.cos(a + 0.12) * 120, cy + math.sin(a + 0.12) * 120)
+    for i = 0, 5 do
+      local a = i / 6 * 2 * PI + 0.2
+      col(GOLD.light, 0.14)
+      lg.polygon("fill", cx, cy, cx + math.cos(a) * 120, cy + math.sin(a) * 120, cx + math.cos(a + 0.14) * 120, cy + math.sin(a + 0.14) * 120)
     end
   end
 end
 
 -- ---------------------------------------------------------------- the cat
 
-local function emblem(kind, x, y, s, c)
-  if kind == "ember" then
-    poly(c, x - 3 * s, y + 3 * s, x + 3 * s, y + 3 * s, x, y - 4 * s)
-    poly(c, x - 4 * s, y + 3 * s, x - 1 * s, y + 3 * s, x - 3 * s, y - 1 * s)
-    poly(c, x + 1 * s, y + 3 * s, x + 4 * s, y + 3 * s, x + 3 * s, y - 1 * s)
-  elseif kind == "tide" then
-    col(c); lg.setLineWidth(1.4 * s)
-    lg.arc("line", "open", x - 2 * s, y, 2.5 * s, PI, 2 * PI); lg.arc("line", "open", x + 3 * s, y, 2.5 * s, 0, PI)
-    lg.setLineWidth(1)
-  elseif kind == "gilt" or kind == "sun" then
-    ell(x, y, 2.4 * s, 2.4 * s, c)
-    for i = 0, 7 do
-      local a = i / 8 * 2 * PI
-      ln(c, 0.9 * s, x + math.cos(a) * 3 * s, y + math.sin(a) * 3 * s, x + math.cos(a) * 4.6 * s, y + math.sin(a) * 4.6 * s)
-    end
-  else -- shadow: a moon
-    ell(x, y, 3.2 * s, 3.2 * s, c)
-  end
+local function steelOf(o)
+  if o.steel == "dark" then return { deep = hex("#101216"), dark = hex("#22252e"), base = hex("#3e4350"), light = hex("#6b7487") } end
+  if o.steel == "green" then return { deep = hex("#152a1a"), dark = hex("#2c5536"), base = hex("#4f8a5c"), light = hex("#8fd19c") } end
+  if o.steel == "white" then return { deep = hex("#5d6879"), dark = hex("#9aa7b9"), base = hex("#dce3ec"), light = hex("#ffffff") } end
+  return STEEL
 end
 
-local function steelOf(o)
-  if o.steel == "dark" then return { base = hex("#3a3f4c"), light = hex("#6b7487"), dark = hex("#1d2027"), deep = hex("#101216") } end
-  if o.steel == "green" then return { base = hex("#4f8a5c"), light = hex("#8fd19c"), dark = hex("#2c5536"), deep = hex("#1a3320") } end
-  if o.steel == "white" then return { base = hex("#d9dee6"), light = hex("#ffffff"), dark = hex("#9aa6b8"), deep = hex("#6b7487") } end
-  return STEEL
+local function emblem(kind, x, y, c)
+  local rows = EMBLEMS[kind] or EMBLEMS.shadow
+  stamp(x - px(floor(#rows[1] / 2)), y - px(floor(#rows / 2)), rows, { e = c })
 end
 
 local function body(w, h, o, cx)
   local S = steelOf(o)
   local by = h + 18
   if o.cape then
-    ell(cx, by + 4, 52, 50, theme.darken and theme.darken(o.cape, 0.6) or o.cape)
-    ell(cx - 2, by + 2, 50, 49, o.cape)
+    ell(cx, by + 4, 52, 50, theme.shade(o.cape, -0.45))
+    ell(cx - px(), by + 2, 50, 49, o.cape)
   end
   local outfit = o.outfit
-  if outfit == "plate" then
-    ell(cx, by, 44, 44, S.dark); ell(cx - 1.5, by - 1.5, 42, 42.5, S.base)
-    ell(cx - 14, by - 32, 12, 4, S.light, -0.3)
-    -- pauldrons
-    for sgn = -1, 1, 2 do
-      local px = cx + sgn * 31
-      ell(px, h - 14, 15, 12, S.dark); ell(px - 1, h - 15, 13.5, 10.5, S.base)
-      ell(px - 3, h - 19, 7, 3, S.light, sgn * 0.2)
-      ln(S.deep, 1, px - 13, h - 10, px + 13, h - 10)
-    end
-    -- tabard
-    rect(mix(o.cloth, C.black, 0.35), cx - 12, h - 26, 24, 26)
-    rect(o.cloth, cx - 11, h - 26, 22, 26)
-    emblem(o.emblem or o.coat, cx, h - 13, 1.3, o.coat == "gilt" and C.paper or GOLD.light)
-  elseif outfit == "mail" then
-    ell(cx, by, 44, 44, S.dark); ell(cx - 1.5, by - 1.5, 42, 42.5, S.base)
-    for yy = h - 26, h, 3 do
-      for xx = cx - 40, cx + 40, 3 do
-        if ((xx - cx) / 44) ^ 2 + ((yy - by) / 44) ^ 2 < 1 then rect(S.dark, xx + (yy % 2) * 1.5, yy, 1, 1) end
+  if outfit == "plate" or outfit == "mail" then
+    shaded(cx, by, 44, 44, S)
+    if outfit == "mail" then
+      for yy = h - 26, h, px(2) do
+        for xx = cx - 40, cx + 40, px(2) do
+          if ((xx - cx) / 44) ^ 2 + ((yy - by) / 44) ^ 2 < 0.97 and floor((xx + yy) / px(2) + 0.5) % 2 == 0 then rect(S.dark, xx, yy, px(), px()) end
+        end
+      end
+    else
+      for sgn = -1, 1, 2 do
+        local x0 = cx + sgn * 31
+        shaded(x0, h - 14, 15, 12, S)
+        ell(x0 - 3, h - 20, 6, 2.5, S.light, sgn * 0.2)
       end
     end
-    rect(mix(o.cloth, C.black, 0.35), cx - 13, h - 24, 26, 24)
-    rect(o.cloth, cx - 12, h - 24, 24, 24)
-    emblem(o.emblem or o.coat, cx, h - 12, 1.2, o.coat == "gilt" and C.paper or GOLD.light)
+    rect(theme.shade(o.cloth, -0.4), cx - 12, h - 26, 24, 26)
+    rect(o.cloth, cx - 11, h - 26, 22, 26)
+    rect(theme.shade(o.cloth, 0.25), cx - 11, h - 26, 22, px())
+    emblem(o.emblem or o.coat, cx, h - 13, o.coat == "gilt" and C.paper or GOLD.light)
   elseif outfit == "robe" then
     local R = o.robe
-    ell(cx, by, 44, 44, mix(R, C.black, 0.45)); ell(cx - 1.5, by - 1.5, 42, 42.5, R)
-    ell(cx - 16, by - 34, 12, 4, mix(R, C.white, 0.3), -0.3)
-    -- high collar
-    poly(mix(R, C.black, 0.25), cx - 22, h - 20, cx - 8, h - 26, cx - 16, h - 40)
-    poly(mix(R, C.black, 0.25), cx + 22, h - 20, cx + 8, h - 26, cx + 16, h - 40)
-    ln(GOLD.base, 1.4, cx - 20, h - 21, cx - 15, h - 38)
-    ln(GOLD.base, 1.4, cx + 20, h - 21, cx + 15, h - 38)
-    ln(GOLD.base, 1.6, cx, h - 24, cx, h)
-    ell(cx, h - 18, 3.4, 3.4, GOLD.dark); ell(cx, h - 18, 2.4, 2.4, o.magic and EYE.cyan or C.red)
-  elseif outfit == "apron" or outfit == "tunic" or outfit == "rags" then
+    shaded(cx, by, 44, 44, { dark = theme.shade(R, -0.45), base = R })
+    ell(cx - 16, h - 18, 9, 3, theme.shade(R, 0.3), -0.3)
+    poly(theme.shade(R, -0.25), snap(cx - 22), snap(h - 20), snap(cx - 8), snap(h - 26), snap(cx - 16), snap(h - 40))
+    poly(theme.shade(R, -0.25), snap(cx + 22), snap(h - 20), snap(cx + 8), snap(h - 26), snap(cx + 16), snap(h - 40))
+    line(GOLD.base, 1, snap(cx - 20), snap(h - 21), snap(cx - 15), snap(h - 38))
+    line(GOLD.base, 1, snap(cx + 20), snap(h - 21), snap(cx + 15), snap(h - 38))
+    rect(GOLD.base, cx - px(0.5), h - 24, px(), 24)
+    stamp(cx - px(1.5), h - 20, { ".g.", "gcg", ".g." }, { g = GOLD.dark, c = o.magic and EYE.cyan or C.red })
+  else -- tunic, apron, rags
     local T = outfit == "rags" and hex("#6b5440") or o.cloth
-    ell(cx, by, 44, 44, mix(T, C.black, 0.45)); ell(cx - 1.5, by - 1.5, 42, 42.5, T)
-    ell(cx - 16, by - 34, 12, 4, mix(T, C.white, 0.25), -0.3)
-    poly(mix(T, C.black, 0.35), cx - 9, h - 26, cx + 9, h - 26, cx, h - 14) -- v-neck
+    shaded(cx, by, 44, 44, { dark = theme.shade(T, -0.45), base = T })
+    ell(cx - 16, h - 18, 9, 3, theme.shade(T, 0.25), -0.3)
+    poly(theme.shade(T, -0.35), snap(cx - 9), snap(h - 26), snap(cx + 9), snap(h - 26), snap(cx), snap(h - 14))
     if outfit == "apron" then
       rect(C.paper, cx - 14, h - 22, 28, 22)
-      rect(hex("#d8d3c2"), cx - 14, h - 22, 28, 2)
-      ln(hex("#d8d3c2"), 1, cx - 14, h - 22, cx - 22, h - 34)
-      ln(hex("#d8d3c2"), 1, cx + 14, h - 22, cx + 22, h - 34)
+      rect(hex("#d8d3c2"), cx - 14, h - 22, 28, px())
     elseif outfit == "rags" then
       rect(hex("#8a6a4a"), cx - 26, h - 16, 9, 7)
       rect(hex("#4a3828"), cx + 14, h - 10, 8, 6)
-      ln(hex("#c9a66b"), 1.6, cx - 30, h - 30, cx + 22, h)
+      line(hex("#c9a66b"), 1, cx - 30, h - 30, cx + 22, h)
     else
-      ln(WOODD, 2.4, cx - 30, h - 28, cx + 26, h)
+      line(WOODD, 2, cx - 30, h - 28, cx + 26, h)
       rect(GOLD.base, cx - 3, h - 15, 5, 4)
     end
   end
   if o.cape then
-    -- ermine collar
     ell(cx, h - 24, 30, 6, C.paper)
-    for i = -3, 3 do rect(C.black, cx + i * 8 - 0.5, h - 25 + (i % 2), 1.2, 2) end
+    for i = -3, 3 do rect(OUTLINE, cx + i * 8, h - 25 + (i % 2), px(), px(2)) end
   end
 end
 
--- Union of the head shapes (skull, cheeks, chin), offset and shrunk for shading.
-local function headShape(cx, cy, o, c, dx, dy, s)
+-- the head: skull, cheeks and chin
+local function headShape(cx, cy, o, c, dx, dy)
   local wf = o.headW
-  ell(cx + dx, cy + dy, 22 * wf - s, 18.5 - s, c)
-  ell(cx - 12 * wf + dx, cy + 7 + dy, 12.5 * wf - s, 10.5 - s, c)
-  ell(cx + 12 * wf + dx, cy + 7 + dy, 12.5 * wf - s, 10.5 - s, c)
-  ell(cx + dx, cy + 11 + dy, 11 - s, 8.5 - s, c)
+  ell(cx + dx, cy + dy, 22 * wf, 18.5, c)
+  ell(cx - 12 * wf + dx, cy + 7 + dy, 12.5 * wf, 10.5, c)
+  ell(cx + 12 * wf + dx, cy + 7 + dy, 12.5 * wf, 10.5, c)
+  ell(cx + dx, cy + 11 + dy, 11, 8.5, c)
 end
 
 local function ears(cx, cy, o, F)
   local wf, eh = o.headW, o.earH
   for sgn = -1, 1, 2 do
-    local bx1, by1 = cx + sgn * 22 * wf, cy - 2
-    local bx2, by2 = cx + sgn * 6 * wf, cy - 16
-    local tx, ty = cx + sgn * 21 * wf, cy - 16 - 18 * eh
+    local bx1, by1 = snap(cx + sgn * 22 * wf), snap(cy - 2)
+    local bx2, by2 = snap(cx + sgn * 6 * wf), snap(cy - 16)
+    local tx, ty = snap(cx + sgn * 21 * wf), snap(cy - 16 - 18 * eh)
     local earBase = (o.pattern == "points") and FUR[o.coat == "gilt" and "ember" or o.coat].stripe or F.base
     poly(F.dark, bx1, by1, bx2, by2, tx, ty)
-    poly(earBase, bx1 - sgn * 1.2, by1 - 1, bx2 + sgn * 0.6, by2, tx - sgn * 0.6, ty + 2)
-    poly(PINK, bx1 - sgn * 4.5, by1 - 4, bx2 + sgn * 3.5, by2 - 1, tx - sgn * 1.4, ty + 6)
-    if o.pattern == "fluff" then
-      ln(F.light, 1, tx - sgn * 3, ty + 9, tx - sgn * 5, ty + 15)
-      ln(F.light, 1, tx - sgn * 1, ty + 10, tx - sgn * 2, ty + 16)
-    end
+    poly(earBase, bx1 - sgn * px(), by1 - px(), bx2, by2, tx, ty + px())
+    poly(PINK, snap(bx1 - sgn * 5), snap(by1 - 4), snap(bx2 + sgn * 3.5), snap(by2 - 1), snap(tx - sgn * 1.5), snap(ty + 7))
     if o.torn and sgn == 1 then
-      -- a notch bitten out of the right ear
       local mxp, myp = (bx1 + tx) / 2, (by1 + ty) / 2
       lg.setBlendMode("replace")
       lg.setColor(0, 0, 0, 0)
-      lg.polygon("fill", mxp + 3, myp - 4, mxp + 3, myp + 3, mxp - 2, myp)
+      lg.polygon("fill", snap(mxp + 3), snap(myp - 4), snap(mxp + 3), snap(myp + 3), snap(mxp - 2), snap(myp))
       lg.setBlendMode("alpha")
     end
   end
@@ -405,504 +417,437 @@ local function pattern(cx, cy, o, F)
   local wf = o.headW
   local p = o.pattern
   if p == "tabby" or p == "patch" then
-    -- the "M" on the forehead and cheek stripes
-    ln(F.stripe, 2, cx, cy - 18, cx, cy - 10)
-    ln(F.stripe, 1.6, cx - 5, cy - 17, cx - 4, cy - 10)
-    ln(F.stripe, 1.6, cx + 5, cy - 17, cx + 4, cy - 10)
-    for sgn = -1, 1, 2 do
-      ln(F.stripe, 1.5, cx + sgn * 24 * wf, cy + 3, cx + sgn * 16 * wf, cy + 4.5)
-      ln(F.stripe, 1.5, cx + sgn * 24 * wf, cy + 8, cx + sgn * 17 * wf, cy + 9)
-    end
+    rect(F.stripe, cx - px(0.5), cy - 18, px(), 7)
+    rect(F.stripe, cx - 6, cy - 17, px(), 5)
+    rect(F.stripe, cx + 6 - px(), cy - 17, px(), 5)
+    rect(F.stripe, cx - 24 * wf, cy + 3, 7 * wf, px())
+    rect(F.stripe, cx + 17 * wf, cy + 3, 7 * wf, px())
+    rect(F.stripe, cx - 24 * wf, cy + 8, 6 * wf, px())
+    rect(F.stripe, cx + 18 * wf, cy + 8, 6 * wf, px())
     if p == "patch" then
-      ell(cx - 11, cy - 8, 8, 6, FUR.shadow.base, -0.3)
-      ell(cx + 14, cy + 6, 6, 5, FUR.cream.base, 0.4)
+      ell(cx - 11, cy - 8, 7, 5, FUR.shadow.base)
+      ell(cx + 14, cy + 4, 5, 4, FUR.cream.base)
     end
   elseif p == "smoke" then
-    ell(cx - 2, cy - 12, 7, 4, F.light, -0.2)
+    ell(cx - 3, cy - 12, 7, 3, F.light)
   elseif p == "points" then
-    -- a darker mask around the eyes and nose
     local P = FUR[o.coat == "gilt" and "ember" or o.coat] or FUR.ember
-    ell(cx, cy + 5, 13 * wf, 10, mix(F.base, P.stripe, 0.55))
+    ell(cx, cy + 6, 12 * wf, 9, mix(F.base, P.stripe, 0.5))
   elseif p == "fluff" then
     for sgn = -1, 1, 2 do
       for k = 0, 2 do
-        poly(F.light, cx + sgn * (17 + k * 2) * wf, cy + 6 + k * 4, cx + sgn * (27 + k) * wf, cy + 10 + k * 5, cx + sgn * (18 + k * 2) * wf, cy + 13 + k * 4)
+        poly(F.light, snap(cx + sgn * (17 + k * 2) * wf), snap(cy + 6 + k * 4), snap(cx + sgn * (27 + k) * wf), snap(cy + 10 + k * 5), snap(cx + sgn * (18 + k * 2) * wf), snap(cy + 13 + k * 4))
       end
     end
   end
 end
 
-local function eye(x, y, o, sgn, F)
-  local ec = EYE[o.eyes] or EYE.gold
-  local rx, ry = 6.2, 5.4
-  if o.expr == "happy" then
-    col(OUTLINE); lg.setLineWidth(2)
-    lg.arc("line", "open", x, y + 2.5, 4.6, PI * 1.12, PI * 1.88)
-    lg.setLineWidth(1)
-    return
-  end
-  if o.eyepatch and sgn == -1 then
-    ell(x, y, rx + 1.2, ry + 1.2, OUTLINE)
-    ln(OUTLINE, 1.6, x - 12, y - 10, x + 14, y - 14)
-    return
-  end
-  if o.expr == "wide" then rx, ry = 6.8, 6.4 end
-  ell(x, y, rx + 1.1, ry + 1.1, OUTLINE)
-  ell(x, y, rx, ry, ec)
-  ell(x, y + ry * 0.35, rx * 0.8, ry * 0.5, mix(ec, C.white, 0.35))
-  local pw = o.expr == "wide" and 2.8 or (o.menace and 0.9 or 1.5)
-  ell(x, y, pw, ry * 0.86, OUTLINE)
-  ell(x - 2.2, y - 2.2, 1.4, 1.4, C.white)
-  ell(x + 2, y + 2.4, 0.7, 0.7, C.white)
-  local lid = F.base
-  if o.expr == "smug" then
-    poly(lid, x - rx - 2, y - ry - 2, x + rx + 2, y - ry - 2, x + rx + 2, y - 0.4, x - rx - 2, y - 0.4)
-    ln(OUTLINE, 1.6, x - rx - 0.5, y - 0.4, x + rx + 0.5, y - 0.4)
-  elseif o.expr == "fierce" or o.expr == "yowl" then
-    local inner = -sgn
-    poly(lid, x - inner * (rx + 2), y - ry - 2.5, x + inner * (rx + 2), y - ry - 2.5, x + inner * (rx + 2), y + 0.8)
-    ln(OUTLINE, 1.8, x - inner * (rx + 0.5), y - ry + 0.2, x + inner * (rx + 0.8), y + 0.6)
-  end
-end
-
-local function face(cx, cy, o, F)
-  local muz = F.muzzle
-  if o.pattern == "tux" then muz = C.paper end
-  if o.pattern == "tux" then
-    poly(C.paper, cx - 6, cy - 2, cx + 6, cy - 2, cx + 9, cy + 14, cx - 9, cy + 14)
-  end
-  ell(cx - 4.8, cy + 9.5, 5.8, 4.6, muz)
-  ell(cx + 4.8, cy + 9.5, 5.8, 4.6, muz)
-  ell(cx, cy + 13, 4.8, 3.6, muz)
-  -- eyes
-  for sgn = -1, 1, 2 do eye(cx + sgn * 10 * o.headW, cy + 1, o, sgn, F) end
-  -- nose and mouth
-  poly(PINK, cx - 2.8, cy + 5.6, cx + 2.8, cy + 5.6, cx, cy + 8.4)
-  ell(cx - 0.8, cy + 6, 0.9, 0.5, C.white)
-  if o.expr == "yowl" then
-    ell(cx, cy + 13.5, 5, 4.6, OUTLINE)
-    ell(cx, cy + 15.5, 3, 2, PINK)
-    poly(C.white, cx - 4, cy + 10.5, cx - 2, cy + 10.5, cx - 3, cy + 14)
-    poly(C.white, cx + 2, cy + 10.5, cx + 4, cy + 10.5, cx + 3, cy + 14)
-  else
-    col(OUTLINE); lg.setLineWidth(1.1)
-    lg.line(cx, cy + 8.4, cx, cy + 10)
-    lg.arc("line", "open", cx - 2.3, cy + 9.8, 2.3, 0.1, PI - 0.1)
-    lg.arc("line", "open", cx + 2.3, cy + 9.8, 2.3, 0.1, PI - 0.1)
-    lg.setLineWidth(1)
-    if o.tongue then ell(cx + 1, cy + 13.6, 2.4, 2.8, PINK); ln(PINKD, 0.8, cx + 1, cy + 12, cx + 1, cy + 15) end
-  end
-  -- scars
-  local scars = o.scars or 0
-  if scars > 0 then ln(C.paper, 1.2, cx - 14, cy - 8, cx - 6, cy + 7) end
-  if scars > 1 then ln(PINKD, 1.2, cx + 6, cy - 12, cx + 14, cy - 4) end
-end
-
 -- Headwear that sits behind the head (drawn before the ears).
-local function hatBack(cx, cy, o, F)
+local function hatBack(cx, cy, o)
   local hat = o.hat
   if hat == "hood" or hat == "hoodCirclet" or hat == "veil" then
     local R = hat == "veil" and hex("#9fd8ff") or o.robe
-    local a = hat == "veil" and 0.85 or 1
-    col(mix(R, C.black, 0.4), a); lg.ellipse("fill", cx, cy + 2, 31, 30, 32)
-    col(R, a); lg.ellipse("fill", cx - 1, cy + 1, 29.5, 29, 32)
-    col(R, a); lg.polygon("fill", cx - 14, cy - 22, cx + 14, cy - 22, cx + 4, cy - 40)
+    ell(cx, cy + 2, 31, 30, theme.shade(R, -0.4))
+    ell(cx - px(), cy + 1, 29.5, 29, R)
+    poly(R, snap(cx - 14), snap(cy - 22), snap(cx + 14), snap(cy - 22), snap(cx + 4), snap(cy - 40))
   elseif hat == "coif" then
     local S = steelOf(o)
-    ell(cx, cy + 4, 30, 29, S.deep); ell(cx - 1, cy + 3, 28.5, 27.5, S.dark)
-    for yy = cy - 22, cy + 30, 3 do
-      for xx = cx - 28, cx + 28, 3 do
-        if ((xx - cx) / 29) ^ 2 + ((yy - cy - 4) / 28) ^ 2 < 1 then rect(S.base, xx + (yy % 2) * 1.5, yy, 1, 1) end
+    ell(cx, cy + 4, 30, 29, S.deep)
+    ell(cx - px(), cy + 3, 28.5, 27.5, S.dark)
+    for yy = cy - 22, cy + 30, px(2) do
+      for xx = cx - 28, cx + 28, px(2) do
+        if ((xx - cx) / 28) ^ 2 + ((yy - cy - 4) / 27) ^ 2 < 0.95 and floor((xx + yy) / px(2) + 0.5) % 2 == 0 then rect(S.base, xx, yy, px(), px()) end
       end
     end
   end
 end
 
 -- Headwear on top of the head. Returns true if the ears should be drawn over it.
-local function hatFront(cx, cy, o, F)
+local function hatFront(cx, cy, o)
   local hat = o.hat
   local top = cy - 18.5
   local wf = o.headW
   if hat == "helm" or hat == "bighelm" or hat == "hornhelm" then
     local S = hat == "hornhelm" and steelOf({ steel = "dark" }) or steelOf(o)
     local big = hat == "bighelm" and 1.18 or 1
-    local hy = cy - 8 + (big > 1 and 4 or 0)
+    local hy = snap(cy - 8 + (big > 1 and 4 or 0))
     local r = 23.5 * wf * big
     if hat == "hornhelm" then
       for sgn = -1, 1, 2 do
-        poly(C.paper, cx + sgn * 16, hy - 12, cx + sgn * 24, hy - 8, cx + sgn * 30, hy - 30)
-        poly(hex("#d8d3c2"), cx + sgn * 20, hy - 10, cx + sgn * 24, hy - 8, cx + sgn * 30, hy - 30)
+        poly(C.paper, snap(cx + sgn * 16), snap(hy - 12), snap(cx + sgn * 24), snap(hy - 8), snap(cx + sgn * 30), snap(hy - 30))
       end
     end
-    col(S.dark); lg.arc("fill", cx, hy, r + 1, PI, 2 * PI, 28)
-    col(S.base); lg.arc("fill", cx - 0.8, hy - 0.8, r, PI, 2 * PI, 28)
-    ell(cx - 8, hy - r * 0.6, 6, 3, S.light, -0.3)
-    rect(S.dark, cx - r - 1, hy - 1, 2 * r + 2, 4)
-    for k = -3, 3 do rect(S.light, cx + k * 6 - 0.5, hy, 1, 1) end
-    rect(S.dark, cx - 2, hy - 2, 4, 12)
-    rect(S.base, cx - 1.2, hy - 2, 2.4, 11)
-    if hat == "bighelm" then
-      poly(C.red, cx - 3, hy - r, cx + 3, hy - r, cx + 9, hy - r - 12) -- a plume
-    end
+    col(S.dark); lg.arc("fill", snap(cx), hy, r + px(), PI, 2 * PI, 32)
+    col(S.base); lg.arc("fill", snap(cx - px()), hy - px(), r - px(0.5), PI, 2 * PI, 32)
+    ell(cx - 8, hy - r * 0.6, 5, 2, S.light, -0.3)
+    rect(S.dark, cx - r - px(), hy - px(), 2 * r + px(2), px(2))
+    rect(S.dark, cx - px(1.5), hy - px(), px(3), 11)
+    rect(S.base, cx - px(0.5), hy - px(), px(1), 10)
+    if hat == "bighelm" then poly(C.red, snap(cx - 3), snap(hy - r), snap(cx + 3), snap(hy - r), snap(cx + 9), snap(hy - r - 12)) end
     return hat ~= "hornhelm"
   elseif hat == "crown" or hat == "crownTilt" then
-    lg.push()
-    if hat == "crownTilt" then lg.translate(cx, top); lg.rotate(0.28); lg.translate(-cx, -top) end
-    rect(GOLD.dark, cx - 13, top - 1, 26, 6)
+    local tilt = hat == "crownTilt" and 1 or 0
+    rect(GOLD.dark, cx - 13, top - px(), 26, 6)
     rect(GOLD.base, cx - 12, top, 24, 4)
-    for k = -2, 2 do poly(GOLD.base, cx + k * 5.5 - 3, top, cx + k * 5.5 + 3, top, cx + k * 5.5, top - 8 + math.abs(k)) end
-    ell(cx, top + 2, 1.8, 1.8, C.red); ell(cx - 7, top + 2, 1.3, 1.3, EYE.blue); ell(cx + 7, top + 2, 1.3, 1.3, EYE.blue)
-    rect(GOLD.light, cx - 11, top, 22, 1)
-    lg.pop()
+    for k = -2, 2 do
+      local kx = cx + k * 5.5
+      local ky = top + k * tilt
+      poly(GOLD.base, snap(kx - 3), snap(ky), snap(kx + 3), snap(ky), snap(kx), snap(ky - 8 + math.abs(k)))
+    end
+    rect(GOLD.light, cx - 11, top, 22, px())
+    stamp(cx - px(1), top + px(), { "rr", "rr" }, { r = C.red })
+    rect(EYE.blue, cx - 8, top + px(), px(), px())
+    rect(EYE.blue, cx + 8 - px(), top + px(), px(), px())
   elseif hat == "circlet" or hat == "hoodCirclet" then
-    ln(GOLD.base, 1.6, cx - 19 * wf, top + 8, cx, top + 4, cx + 19 * wf, top + 8)
-    ell(cx, top + 4.5, 2.4, 2.4, GOLD.dark); ell(cx, top + 4.5, 1.6, 1.6, EYE.cyan)
+    rect(GOLD.base, cx - 18 * wf, top + 5, 36 * wf, px())
+    stamp(cx - px(1.5), top + 4 - px(), { ".g.", "gcg", ".g." }, { g = GOLD.dark, c = EYE.cyan })
     if hat == "hoodCirclet" then
-      col(o.robe); lg.setLineWidth(3); lg.arc("line", "open", cx, cy + 2, 27, PI * 1.05, PI * 1.95); lg.setLineWidth(1)
+      col(theme.shade(o.robe, -0.2)); lg.setLineWidth(px(2)); lg.arc("line", "open", snap(cx), snap(cy + 2), 27, PI * 1.05, PI * 1.95, 32); lg.setLineWidth(1)
     end
   elseif hat == "hood" or hat == "veil" then
     local R = hat == "veil" and hex("#9fd8ff") or o.robe
-    col(mix(R, C.black, 0.2), hat == "veil" and 0.85 or 1); lg.setLineWidth(3.5)
-    lg.arc("line", "open", cx, cy + 3, 26.5, PI * 1.02, PI * 1.98)
+    col(theme.shade(R, -0.2)); lg.setLineWidth(px(2))
+    lg.arc("line", "open", snap(cx), snap(cy + 3), 26.5, PI * 1.02, PI * 1.98, 32)
     lg.setLineWidth(1)
     return true
   elseif hat == "wizard" or hat == "bigwizard" or hat == "witch" then
     local R = hat == "witch" and hex("#16352a") or o.robe
     local big = hat == "bigwizard" and 1.25 or 1
-    local by = top + 4 + (big > 1 and 4 or 0)
+    local byy = top + 4 + (big > 1 and 4 or 0)
     local brim = hat == "witch" and 30 or 24
-    ell(cx + 1, by + 1, brim * big, 4.5 * big, mix(R, C.black, 0.45))
-    ell(cx, by, brim * big, 4 * big, R)
-    poly(mix(R, C.black, 0.25), cx - 14 * big, by, cx + 15 * big, by, cx + 6 * big, by - 22 * big)
-    poly(R, cx - 13 * big, by - 0.5, cx + 13 * big, by - 0.5, cx + 5 * big, by - 21 * big)
-    poly(R, cx + 4 * big, by - 19 * big, cx + 7 * big, by - 21 * big, cx + 16 * big, by - 32 * big)
+    ell(cx, byy + px(), brim * big, 4.5 * big, theme.shade(R, -0.45))
+    ell(cx, byy, brim * big, 3.5 * big, R)
+    poly(theme.shade(R, -0.25), snap(cx - 14 * big), snap(byy), snap(cx + 15 * big), snap(byy), snap(cx + 6 * big), snap(byy - 22 * big))
+    poly(R, snap(cx - 13 * big), snap(byy - px()), snap(cx + 12 * big), snap(byy - px()), snap(cx + 5 * big), snap(byy - 21 * big))
+    poly(R, snap(cx + 4 * big), snap(byy - 19 * big), snap(cx + 7 * big), snap(byy - 21 * big), snap(cx + 16 * big), snap(byy - 32 * big))
     if hat == "witch" then
-      rect(hex("#0a1a12"), cx - 12, by - 5, 25, 4)
-      rect(GOLD.base, cx - 2, by - 5.5, 5, 5)
+      rect(hex("#0a1a12"), cx - 12, byy - 5, 25, 4)
+      rect(GOLD.base, cx - 2, byy - 5, 4, 4)
     else
-      ln(GOLD.base, 1.6, cx - 13 * big, by - 1, cx + 13 * big, by - 1)
-      sparkle(cx - 2 * big, by - 10 * big, 1.6, GOLD.light, 1)
-      ell(cx + 5 * big, by - 4 * big, 1, 1, GOLD.light)
+      rect(GOLD.base, cx - 13 * big, byy - px(2), 26 * big, px())
     end
   elseif hat == "beret" then
     ell(cx - 2, top + 2, 20, 6, hex("#7a2016"), -0.15)
-    ell(cx - 3, top + 1, 19, 5.5, C.red, -0.15)
-    ell(cx + 14, top - 6, 2.2, 11, C.paper, 0.6)
-    ln(hex("#d8d3c2"), 0.8, cx + 9, top + 1, cx + 19, top - 13)
+    ell(cx - 3, top + 1, 19, 5, C.red, -0.15)
+    poly(C.paper, snap(cx + 10), snap(top), snap(cx + 14), snap(top + 1), snap(cx + 20), snap(top - 14))
   elseif hat == "leaves" then
     for k = -3, 3 do
       local a = k * 0.3
-      ell(cx + math.sin(a) * 20, top + 5 - math.cos(a) * 3, 3.2, 5.5, k % 2 == 0 and hex("#5fd38d") or hex("#2f8a52"), a)
+      ell(cx + math.sin(a) * 20, top + 5 - math.cos(a) * 3, 3, 5, k % 2 == 0 and hex("#5fd38d") or hex("#2f8a52"), a)
     end
-    ell(cx, top + 1, 2, 2, C.red)
+    rect(C.red, cx - px(), top, px(2), px(2))
   elseif hat == "bandana" or hat == "bandage" then
     local B = hat == "bandana" and C.red or C.paper
-    rect(mix(B, C.black, 0.3), cx - 22 * wf, top + 3, 44 * wf, 7)
-    rect(B, cx - 21 * wf, top + 3, 42 * wf, 5.5)
+    rect(theme.shade(B, -0.35), cx - 22 * wf, top + 3, 44 * wf, 7)
+    rect(B, cx - 21 * wf, top + 3, 42 * wf, 5)
     if hat == "bandana" then
-      poly(B, cx + 20 * wf, top + 4, cx + 30 * wf, top + 2, cx + 28 * wf, top + 12)
-      for k = -2, 2 do rect(C.paper, cx + k * 8, top + 5, 1.5, 1.5) end
+      poly(B, snap(cx + 20 * wf), snap(top + 4), snap(cx + 30 * wf), snap(top + 2), snap(cx + 28 * wf), snap(top + 12))
+      for k = -2, 2 do rect(C.paper, cx + k * 8, top + 5, px(), px()) end
     else
-      ln(PINKD, 1, cx + 5, top + 4, cx + 9, top + 8)
+      rect(PINKD, cx + 5, top + 5, px(2), px())
     end
     return true
   end
   return false
 end
 
-local function kitten(x, y, s, o, F)
-  ell(x, y + 2, 8 * s, 6 * s, F.dark)
+local function kitten(x, y, F)
+  ell(x, y + 2, 8, 6, F.dark)
   for sgn = -1, 1, 2 do
-    poly(F.dark, x + sgn * 7 * s, y - 1 * s, x + sgn * 1.5 * s, y - 5 * s, x + sgn * 7 * s, y - 11 * s)
-    poly(PINK, x + sgn * 5.5 * s, y - 2 * s, x + sgn * 3 * s, y - 4.5 * s, x + sgn * 6 * s, y - 8 * s)
+    poly(F.dark, snap(x + sgn * 7), snap(y - 1), snap(x + sgn * 1.5), snap(y - 5), snap(x + sgn * 7), snap(y - 11))
   end
-  ell(x - 0.6, y - 0.4, 7.6 * s, 6.6 * s, F.base)
-  ell(x, y + 3 * s, 4 * s, 2.6 * s, F.muzzle)
-  for sgn = -1, 1, 2 do
-    ell(x + sgn * 3.4 * s, y, 2.3 * s, 2.3 * s, OUTLINE)
-    ell(x + sgn * 3.4 * s, y, 1.6 * s, 1.8 * s, EYE[o.eyes] or EYE.gold)
-    ell(x + sgn * 3.4 * s - 0.6, y - 0.7, 0.6, 0.6, C.white)
-  end
-  poly(PINK, x - 1, y + 2 * s, x + 1, y + 2 * s, x, y + 3 * s)
+  ell(x - px(), y - px(), 7.5, 6.5, F.base)
+  ell(x, y + 3, 4, 2.5, F.muzzle)
+end
+local function kittenFace(x, y, o)
+  local e = EYE[o.eyes] or EYE.gold
+  stamp(x - px(2), y - px(1), { "k...k", "e...e" }, { k = OUTLINE, e = e })
+  stamp(x, y + px(1), { "p" }, { p = PINK })
 end
 
--- Props held in front of (or behind) the cat. back = true for the ones behind the body.
-local function prop(w, h, o, cx, cy, F, back)
+-- Props held in front of (or behind) the cat.
+local function prop(w, h, o, cx, F, back)
   local p = o.prop
   local S = steelOf(o)
   if back then
     if p == "banner" then
-      local px = cx - 34
-      rect(WOODD, px - 1.5, 4, 3, h)
-      ell(px, 4, 2.4, 2.4, GOLD.base)
-      rect(mix(o.cloth, C.black, 0.3), px + 1, 8, 24, 24)
-      rect(o.cloth, px + 1, 8, 23, 22)
-      poly(o.cloth, px + 1, 30, px + 12, 30, px + 1, 38)
-      poly(o.cloth, px + 12, 30, px + 24, 30, px + 24, 38)
-      emblem(o.coat, px + 12, 19, 1.4, o.coat == "gilt" and C.paper or GOLD.light)
+      local x0 = cx - 34
+      rect(WOODD, x0 - px(), 4, px(2), h)
+      rect(GOLD.base, x0 - px(), 2, px(2), px(2))
+      rect(theme.shade(o.cloth, -0.35), x0 + px(), 8, 24, 24)
+      rect(o.cloth, x0 + px(), 8, 23, 22)
+      poly(o.cloth, snap(x0 + 1), snap(30), snap(x0 + 12), snap(30), snap(x0 + 1), snap(38))
+      poly(o.cloth, snap(x0 + 12), snap(30), snap(x0 + 24), snap(30), snap(x0 + 24), snap(38))
+      emblem(o.coat, x0 + 12, 19, o.coat == "gilt" and C.paper or GOLD.light)
     elseif p == "spear" then
-      local px = cx + 34
-      rect(WOODD, px - 1.2, 10, 2.4, h)
-      poly(S.base, px - 3.5, 12, px + 3.5, 12, px, -2)
-      ln(S.light, 0.8, px, 0, px, 11)
-      poly(C.red, px + 1, 14, px + 12, 17, px + 1, 21)
+      local x0 = cx + 34
+      rect(WOODD, x0 - px(), 10, px(2), h)
+      poly(S.base, snap(x0 - 3.5), snap(12), snap(x0 + 3.5), snap(12), snap(x0), snap(-2))
+      poly(C.red, snap(x0 + 1), snap(14), snap(x0 + 12), snap(17), snap(x0 + 1), snap(21))
     elseif p == "staff" then
-      local px = cx - 34
-      rect(WOOD, px - 1.6, 14, 3.2, h)
-      poly(hex("#2f8a52"), px - 6, 16, px, 14, px - 3, 8)
-      poly(EYE.cyan, px - 4, 10, px + 4, 10, px, 2)
-      poly(hex("#2bb0d0"), px - 4, 10, px + 4, 10, px, 16)
+      local x0 = cx - 34
+      rect(WOOD, x0 - px(), 14, px(2), h)
+      poly(EYE.cyan, snap(x0 - 4), snap(10), snap(x0 + 4), snap(10), snap(x0), snap(2))
+      poly(hex("#2bb0d0"), snap(x0 - 4), snap(10), snap(x0 + 4), snap(10), snap(x0), snap(16))
     elseif p == "axe" then
-      local px = cx + 33
-      rect(WOODD, px - 1.4, 8, 2.8, h)
-      col(STEEL.dark); lg.arc("fill", px + 1, 18, 13, -PI / 2, PI / 2, 20)
-      col(STEEL.base); lg.arc("fill", px + 1, 18, 11.5, -PI / 2, PI / 2, 20)
-      ln(STEEL.light, 1, px + 10, 10, px + 12, 18)
+      local x0 = cx + 33
+      rect(WOODD, x0 - px(), 8, px(2), h)
+      col(STEEL.dark); lg.arc("fill", snap(x0 + 1), snap(18), 13, -PI / 2, PI / 2, 24)
+      col(STEEL.base); lg.arc("fill", snap(x0 + 1), snap(18), 11, -PI / 2, PI / 2, 24)
     elseif p == "excalibur" then
-      local px = cx + 30
-      poly(S.light, px - 2, 60, px + 2, 60, px + 2, 8, px, 2, px - 2, 8)
-      ln(S.dark, 0.8, px, 6, px, 58)
-      rect(GOLD.base, px - 8, 58, 16, 3.5)
-      rect(WOODD, px - 1.5, 61, 3, 9)
+      local x0 = cx + 30
+      poly(S.light, snap(x0 - 2), snap(60), snap(x0 + 2), snap(60), snap(x0 + 2), snap(8), snap(x0), snap(2), snap(x0 - 2), snap(8))
+      rect(GOLD.base, x0 - 8, 58, 16, px(3))
+      rect(WOODD, x0 - px(), 61, px(2), 9)
     end
     return
   end
   if p == "sword" then
-    local px = cx + 31
-    poly(S.light, px - 2, h - 18, px + 2, h - 18, px + 2, h - 62, px, h - 67, px - 2, h - 62)
-    ln(S.dark, 0.8, px, h - 64, px, h - 20)
-    rect(GOLD.dark, px - 8, h - 19, 16, 4)
-    rect(GOLD.base, px - 7.5, h - 19, 15, 2.6)
-    rect(WOODD, px - 1.6, h - 15, 3.2, 10)
-    ell(px, h - 4, 2.6, 2.6, GOLD.base)
-    ell(px - 10, h - 6, 6, 5, F.base) -- a paw on the grip
-    ell(px - 10, h - 7, 4.5, 3, F.light)
+    local x0 = cx + 31
+    poly(S.light, snap(x0 - 2), snap(h - 18), snap(x0 + 2), snap(h - 18), snap(x0 + 2), snap(h - 62), snap(x0), snap(h - 67), snap(x0 - 2), snap(h - 62))
+    rect(S.dark, x0 - px(0.5), h - 62, px(), 42)
+    rect(GOLD.dark, x0 - 8, h - 19, 16, px(3))
+    rect(GOLD.base, x0 - 8, h - 19, 16, px(2))
+    rect(WOODD, x0 - px(), h - 15, px(2), 10)
+    shaded(x0 - 10, h - 6, 6, 5, F)
   elseif p == "hammer" then
-    local px, py = cx + 30, h - 40
-    lg.push(); lg.translate(px, py); lg.rotate(0.35)
-    rect(WOODD, -1.8, -6, 3.6, 52)
-    rect(S.dark, -11, -16, 22, 14)
-    rect(S.base, -10, -15, 20, 12)
-    rect(S.light, -10, -15, 20, 2)
-    rect(GOLD.base, -11, -9, 22, 2)
+    lg.push(); lg.translate(snap(cx + 30), snap(h - 40)); lg.rotate(0.35)
+    col(WOODD); lg.rectangle("fill", -px(), -6, px(2), 52)
+    col(S.dark); lg.rectangle("fill", -11, -16, 22, 14)
+    col(S.base); lg.rectangle("fill", -10, -15, 20, 11)
+    col(S.light); lg.rectangle("fill", -10, -15, 20, px())
+    col(GOLD.base); lg.rectangle("fill", -11, -9, 22, px(2))
     lg.pop()
-    ell(cx + 25, h - 12, 6, 5, F.base)
+    shaded(cx + 25, h - 12, 6, 5, F)
   elseif p == "shield" then
     local sx, sy = cx - 24, h - 16
-    poly(S.dark, sx - 14, sy - 16, sx + 14, sy - 16, sx + 14, sy + 2, sx, sy + 16, sx - 14, sy + 2)
-    poly(o.cloth, sx - 12, sy - 14, sx + 12, sy - 14, sx + 12, sy + 1, sx, sy + 13, sx - 12, sy + 1)
-    rect(mix(o.cloth, C.white, 0.3), sx - 12, sy - 14, 24, 2)
-    emblem(o.coat, sx, sy - 3, 1.6, o.coat == "gilt" and C.paper or GOLD.light)
+    poly(S.dark, snap(sx - 14), snap(sy - 16), snap(sx + 14), snap(sy - 16), snap(sx + 14), snap(sy + 2), snap(sx), snap(sy + 16), snap(sx - 14), snap(sy + 2))
+    poly(o.cloth, snap(sx - 12), snap(sy - 14), snap(sx + 12), snap(sy - 14), snap(sx + 12), snap(sy + 1), snap(sx), snap(sy + 13), snap(sx - 12), snap(sy + 1))
+    rect(theme.shade(o.cloth, 0.3), sx - 12, sy - 14, 24, px())
+    emblem(o.coat, sx, sy - 3, o.coat == "gilt" and C.paper or GOLD.light)
   elseif p == "claws" then
-    local px, py = cx + 24, h - 18
-    ell(px, py, 9, 8, F.dark); ell(px - 0.8, py - 0.8, 8, 7, F.base)
+    local x0, y0 = cx + 24, h - 18
+    shaded(x0, y0, 9, 8, F)
     for k = -1, 1 do
-      poly(C.white, px + k * 4 - 1.4, py - 6, px + k * 4 + 1.4, py - 6, px + k * 4 + 0.5, py - 13)
-      ell(px + k * 4, py - 3, 1.6, 1.4, PINK)
+      poly(WHITE, snap(x0 + k * 4 - 1.5), snap(y0 - 6), snap(x0 + k * 4 + 1.5), snap(y0 - 6), snap(x0 + k * 4), snap(y0 - 13))
     end
-    ell(px, py + 2.5, 3.4, 2.6, PINK)
+    ell(x0, y0 + 2.5, 3, 2.2, PINK)
   elseif p == "lute" then
     local lx, ly = cx + 22, h - 12
-    lg.push(); lg.translate(lx, ly); lg.rotate(0.55)
-    rect(WOODD, -1.8, -30, 3.6, 24)
-    rect(WOODD, -3, -34, 6, 5)
+    lg.push(); lg.translate(snap(lx), snap(ly)); lg.rotate(0.55)
+    col(WOODD); lg.rectangle("fill", -px(), -30, px(2), 24); lg.rectangle("fill", -3, -34, 6, 5)
     lg.pop()
-    ell(lx, ly, 11, 9, WOODD); ell(lx - 0.6, ly - 0.6, 10, 8, WOOD)
+    shaded(lx, ly, 11, 9, { dark = WOODD, base = WOOD })
     ell(lx, ly, 3, 3, hex("#2a1a0c"))
-    ell(lx - 10, ly + 3, 5, 4.5, F.base)
+    shaded(lx - 10, ly + 3, 5, 4.5, F)
   elseif p == "orb" or p == "crystal" or p == "fireball" then
     if p == "crystal" then
-      rect(GOLD.dark, cx - 9, h - 8, 18, 5); rect(GOLD.base, cx - 7, h - 10, 14, 3)
+      rect(GOLD.dark, cx - 9, h - 8, 18, 5)
+      rect(GOLD.base, cx - 7, h - 10, 14, px(2))
     end
-    for sgn = -1, 1, 2 do ell(cx + sgn * 10, h - 14, 6, 5, F.base) end
+    for sgn = -1, 1, 2 do shaded(cx + sgn * 10, h - 14, 6, 5, F) end
   elseif p == "wand" then
-    lg.push(); lg.translate(cx + 22, h - 22); lg.rotate(0.6)
-    rect(WOODD, -1.2, -16, 2.4, 22)
+    lg.push(); lg.translate(snap(cx + 22), snap(h - 22)); lg.rotate(0.6)
+    col(WOODD); lg.rectangle("fill", -px(), -16, px(2), 22)
     lg.pop()
-    ell(cx + 24, h - 12, 5.5, 4.5, F.base)
+    shaded(cx + 24, h - 12, 5.5, 4.5, F)
   elseif p == "book" then
     rect(hex("#4a1a12"), cx - 34, h - 26, 22, 26)
-    rect(hex("#7a2016"), cx - 33, h - 25, 20, 24)
-    rect(C.paper, cx - 31, h - 24, 2, 22)
-    emblem("gilt", cx - 23, h - 14, 1, GOLD.base)
-    ell(cx - 13, h - 10, 5.5, 4.5, F.base)
+    rect(hex("#8a2418"), cx - 33, h - 25, 20, 24)
+    rect(C.paper, cx - 31, h - 24, px(2), 22)
+    emblem("gilt", cx - 22, h - 14, GOLD.base)
+    shaded(cx - 13, h - 10, 5.5, 4.5, F)
   elseif p == "goblet" or p == "grail" then
     local gx, gy = cx + 25, h - 22
-    poly(GOLD.dark, gx - 8, gy - 8, gx + 8, gy - 8, gx + 4, gy + 4, gx - 4, gy + 4)
-    poly(GOLD.base, gx - 7, gy - 7, gx + 7, gy - 7, gx + 3.5, gy + 3, gx - 3.5, gy + 3)
-    rect(GOLD.light, gx - 6, gy - 7, 12, 1.2)
-    rect(GOLD.dark, gx - 1.5, gy + 3, 3, 10)
-    rect(GOLD.base, gx - 6, gy + 12, 12, 3)
-    if p == "grail" then ell(gx, gy - 1, 1.6, 1.6, C.red) end
-    ell(gx - 10, gy + 6, 5.5, 4.5, F.base)
+    poly(GOLD.dark, snap(gx - 8), snap(gy - 8), snap(gx + 8), snap(gy - 8), snap(gx + 4), snap(gy + 4), snap(gx - 4), snap(gy + 4))
+    poly(GOLD.base, snap(gx - 7), snap(gy - 7), snap(gx + 6), snap(gy - 7), snap(gx + 3), snap(gy + 3), snap(gx - 3), snap(gy + 3))
+    rect(GOLD.light, gx - 6, gy - 7, 12, px())
+    rect(GOLD.dark, gx - px(), gy + 3, px(2), 10)
+    rect(GOLD.base, gx - 6, gy + 12, 12, px(2))
+    if p == "grail" then rect(C.red, gx - px(), gy - 2, px(2), px(2)) end
+    shaded(gx - 10, gy + 6, 5.5, 4.5, F)
   elseif p == "fishbone" then
-    local fx, fy = cx + 22, h - 16
-    ln(C.paper, 1.4, fx - 10, fy, fx + 8, fy)
-    for k = 0, 3 do ln(C.paper, 1, fx - 6 + k * 4, fy - 4, fx - 6 + k * 4, fy + 4) end
-    poly(C.paper, fx + 8, fy, fx + 14, fy - 5, fx + 14, fy + 5)
-    ell(fx - 12, fy, 3.5, 3, C.paper)
-    ell(fx - 13, fy - 0.5, 0.8, 0.8, OUTLINE)
+    local fx0, fy0 = cx + 22, h - 16
+    rect(C.paper, fx0 - 10, fy0, 18, px())
+    for k = 0, 3 do rect(C.paper, fx0 - 6 + k * 4, fy0 - 4, px(), 8) end
+    poly(C.paper, snap(fx0 + 8), snap(fy0), snap(fx0 + 14), snap(fy0 - 5), snap(fx0 + 14), snap(fy0 + 5))
+    ell(fx0 - 12, fy0, 3.5, 3, C.paper)
   elseif p == "mouse" then
     local mx, my = cx - 26, h - 10
-    ell(mx, my, 8, 6, hex("#9aa0a8")); ell(mx - 6, my - 4, 3.2, 3.2, hex("#9aa0a8")); ell(mx - 6, my - 4, 1.8, 1.8, PINK)
-    ell(mx - 7, my + 1, 1, 1, OUTLINE)
-    ln(PINK, 1, mx + 7, my + 2, mx + 14, my - 4)
+    ell(mx, my, 8, 6, hex("#9aa0a8"))
+    ell(mx - 6, my - 4, 3, 3, hex("#9aa0a8"))
+    line(PINK, 1, mx + 7, my + 2, mx + 14, my - 4)
   elseif p == "ladle" then
-    lg.push(); lg.translate(cx + 26, h - 30); lg.rotate(0.25)
-    rect(S.base, -1.2, -10, 2.4, 30)
+    lg.push(); lg.translate(snap(cx + 26), snap(h - 30)); lg.rotate(0.25)
+    col(S.base); lg.rectangle("fill", -px(), -10, px(2), 30)
     lg.pop()
-    ell(cx + 23, h - 41, 6, 4.5, S.dark); ell(cx + 23, h - 42, 5, 3, S.light)
-    ell(cx + 28, h - 10, 5.5, 4.5, F.base)
+    shaded(cx + 23, h - 41, 6, 4.5, S)
+    shaded(cx + 28, h - 10, 5.5, 4.5, F)
   elseif p == "candle" then
     local x0 = cx + 26
-    rect(GOLD.dark, x0 - 8, h - 8, 16, 3)
+    rect(GOLD.dark, x0 - 8, h - 8, 16, px(3))
     rect(C.paper, x0 - 3, h - 30, 6, 22)
-    rect(hex("#d8d3c2"), x0 + 1.5, h - 30, 1.5, 22)
-    ln(OUTLINE, 0.8, x0, h - 30, x0, h - 33)
-    ell(x0 - 9, h - 10, 5.5, 4.5, F.base)
+    rect(hex("#d8d3c2"), x0 + 1, h - 30, px(), 22)
+    shaded(x0 - 9, h - 10, 5.5, 4.5, F)
   elseif p == "needle" then
     rect(C.paper, cx - 34, h - 24, 24, 22)
-    for k = 0, 3 do rect(k % 2 == 0 and C.red or C.blue, cx - 32, h - 22 + k * 5, 20, 2) end
-    ln(S.light, 0.8, cx - 10, h - 30, cx - 18, h - 14)
+    for k = 0, 3 do rect(k % 2 == 0 and C.red or C.blue, cx - 32, h - 22 + k * 5, 20, px(2)) end
+    line(STEEL.light, 1, cx - 10, h - 30, cx - 18, h - 14)
   end
 end
 
-local function fx(w, h, o, cx, cy, F)
+-- The face, in pixel stamps (drawn after the shapes are cleaned up). Positions are worked out
+-- in whole output pixels so both eyes are exact mirror images.
+local function face(cx, cy, o)
+  local ec = EYE[o.eyes] or EYE.gold
+  local pal = { k = OUTLINE, w = WHITE, c = ec, d = theme.shade(ec, -0.35), p = OUTLINE }
+  if o.expr == "menace" then pal.p = theme.shade(ec, -0.6) end
+  local ex = floor(10 * o.headW * K + 0.5)
+  local ey = floor((cy + 1) * K + 0.5)
+  local cxp = floor(cx * K + 0.5)
+  for sgn = -1, 1, 2 do
+    local rows = EYES[o.expr] or EYES.calm
+    if o.expr == "yowl" then rows = EYES.fierce end
+    if o.eyepatch and sgn == -1 then rows = EYES.patch end
+    stamp((cxp + sgn * ex - 2) / K, (ey - 2) / K, rows, pal, sgn == 1)
+  end
+  if o.eyepatch then line(OUTLINE, 1, (cxp - ex - 4) / K, (ey - 4) / K, (cxp + ex + 4) / K, (ey - 8) / K) end
+  local npal = { p = PINK, k = OUTLINE, w = WHITE, r = hex("#8a1f2a"), t = PINK }
+  local rows = o.expr == "yowl" and YOWL or (o.tongue and TONGUE or NOSE)
+  stamp((cxp - 2) / K, (ey + 3) / K, rows, npal)
+  local scars = o.scars or 0
+  if scars > 0 then stamp((cxp - ex - 3) / K, (ey - 4) / K, { "..s", ".s.", "s.." }, { s = C.paper }) end
+  if scars > 1 then stamp((cxp + ex + 1) / K, (ey - 6) / K, { "s..", ".s.", "..s" }, { s = PINKD }) end
+end
+
+local function fxLayer(w, h, o, cx, cy)
   local r = rngm.new((o.seed or 1) + 501)
   local function nx() return rngm.next(r) end
-  -- whiskers
-  local wc = o.coat == "shadow" and hex("#a9bfb3") or C.paper
-  for sgn = -1, 1, 2 do
-    for i = 0, 2 do
-      col(wc, 0.75); lg.setLineWidth(0.8)
-      lg.line(cx + sgn * 9, cy + 9 + i * 1.6, cx + sgn * 26, cy + 6 + i * 3.6)
-    end
+  -- whiskers: two light pixel lines a side, past the cheeks
+  local wc = o.fur == "shadow" and hex("#b8cbc0") or C.paper
+  local cxp, eyp = floor(cx * K + 0.5), floor((cy + 1) * K + 0.5)
+  local hw = floor(23 * o.headW * K)
+  for i = 0, 1 do
+    local y = (eyp + 4 + i * 2) / K
+    col(wc, 0.9)
+    lg.rectangle("fill", (cxp - hw - 3) / K, y, px(4), px())
+    lg.rectangle("fill", (cxp + hw - 1) / K, y, px(4), px())
   end
-  lg.setLineWidth(1)
   local p = o.prop
   if p == "orb" or p == "crystal" or p == "fireball" then
-    local c = p == "fireball" and hex("#ff8a3a") or (o.ability == "hex" and hex("#c18cff") or EYE.cyan)
+    local c = p == "fireball" and hex("#ff8a3a") or (o.ability == "hex" and EYE.violet or EYE.cyan)
     local ox, oy = cx, h - 22
-    glow(ox, oy, 20, c, 0.7)
-    ell(ox, oy, 7, 7, mix(c, C.white, 0.2))
-    ell(ox - 2, oy - 2, 2.4, 2.4, C.white)
-    if p == "fireball" then
-      poly(GOLD.light, ox - 4, oy - 3, ox + 4, oy - 3, ox, oy - 14)
-    end
+    glow(ox, oy, 14, c, 0.8)
+    ell(ox, oy, 6, 6, mix(c, WHITE, 0.25))
+    rect(WHITE, ox - px(2), oy - px(2), px(), px())
+    if p == "fireball" then stamp(ox - px(1), oy - 14, FLAME, { y = GOLD.light, o = hex("#ff8a3a") }) end
   elseif p == "candle" then
     local x0 = cx + 26
-    glow(x0, h - 36, 14, hex("#ff8a3a"), 0.7)
-    poly(GOLD.light, x0 - 2.4, h - 33, x0 + 2.4, h - 33, x0, h - 41)
-    ell(x0, h - 34, 2.4, 2.4, GOLD.light)
+    glow(x0, h - 34, 9, hex("#ff8a3a"), 0.7)
+    stamp(x0 - px(1), h - 30 - px(4), FLAME, { y = GOLD.light, o = hex("#ff8a3a") })
   elseif p == "wand" then
-    sparkle(cx + 31, h - 36, 2.6, o.ability == "hex" and hex("#c18cff") or GOLD.light, 1)
+    stamp(cx + 30 - px(1), h - 38, SPARK, { s = o.ability == "hex" and EYE.violet or GOLD.light, w = WHITE })
   elseif p == "staff" then
-    glow(cx - 34, 9, 10, EYE.cyan, 0.6)
+    glow(cx - 34, 9, 8, EYE.cyan, 0.6)
   elseif p == "excalibur" then
-    glow(cx + 30, 30, 14, EYE.cyan, 0.35)
-    sparkle(cx + 30, 12, 2.4, C.white, 1)
+    glow(cx + 30, 26, 10, EYE.cyan, 0.4)
+    stamp(cx + 30 - px(1), 10, SPARK, { s = WHITE, w = WHITE })
   end
   if o.halo then
-    local hc = o.halo == "gold" and GOLD.light or EYE.cyan
-    col(hc, 0.85); lg.setLineWidth(2)
-    lg.ellipse("line", cx, cy - 32, 14, 3.6, 24)
+    col(o.halo == "gold" and GOLD.light or EYE.cyan)
+    lg.setLineWidth(px())
+    lg.ellipse("line", snap(cx), snap(cy - 32), 13, 3, 24)
     lg.setLineWidth(1)
   end
   if o.runes then
-    local rc = hex("#c18cff")
-    for i = 1, 4 do
-      local rx, ry = 8 + nx() * (w - 16), 8 + nx() * 40
-      if math.abs(rx - cx) > 22 then
-        col(rc, 0.8); lg.setLineWidth(1)
-        lg.line(rx - 2, ry - 3, rx + 2, ry - 3, rx, ry + 3, rx - 2, ry - 3)
-      end
+    for _ = 1, 3 do
+      local rx, ry = 6 + nx() * (w - 12), 6 + nx() * 36
+      if math.abs(rx - cx) > 24 then stamp(rx, ry, RUNE, { r = EYE.violet }) end
     end
   end
   if o.notes then
-    for i = 1, 3 do
-      local nxp, nyp = cx + 24 + i * 5, cy - 14 - i * 7
-      ell(nxp, nyp + 4, 2.2, 1.6, GOLD.light, -0.4)
-      ln(GOLD.light, 1, nxp + 2, nyp + 4, nxp + 2, nyp - 3)
-    end
+    for i = 1, 2 do stamp(cx + 24 + i * 6, cy - 12 - i * 9, NOTE, { n = GOLD.light }) end
   end
   if o.sparkles then
-    for i = 1, 4 do
-      local sx, sy = 6 + nx() * (w - 12), 6 + nx() * (h * 0.55)
-      if math.abs(sx - cx) > 24 then sparkle(sx, sy, 1.2 + nx(), GOLD.light, 0.9) end
+    for _ = 1, 3 do
+      local sx, sy = 4 + nx() * (w - 8), 4 + nx() * (h * 0.5)
+      if math.abs(sx - cx) > 26 then stamp(sx, sy, SPARK, { s = GOLD.light, w = WHITE }) end
     end
   end
-  if o.menace then
-    for sgn = -1, 1, 2 do glow(cx + sgn * 10 * o.headW, cy + 1, 8, EYE.red, 0.45) end
+  if o.kittens then
+    kittenFace(cx - 30, h - 10, o)
+    kittenFace(cx + 18, h - 7, o)
   end
 end
 
--- The figure layer (outlined).
-local function figure(w, h, o)
-  local cx, cy = w / 2 + o.jx, h - 52
+-- the figure, in two passes: shapes (cleaned up), then the face stamps
+local function figureShapes(w, h, o)
+  local cx, cy = snap(w / 2), snap(h - 52)
   local F = FUR[o.fur] or FUR.shadow
-  prop(w, h, o, cx, cy, F, true)
+  prop(w, h, o, cx, F, true)
   body(w, h, o, cx)
-  -- the neck ruff, so the head sits on the collar
-  ell(cx, h - 30, 16, 9, F.dark); ell(cx, h - 31, 14.5, 8, F.base)
-  hatBack(cx, cy, o, F)
+  ell(cx, h - 30, 16, 9, F.dark)
+  ell(cx, h - 31, 14.5, 8, F.base)
+  hatBack(cx, cy, o)
   local helmLike = o.hat == "helm" or o.hat == "bighelm" or o.hat == "hood" or o.hat == "veil" or o.hat == "bandana" or o.hat == "bandage"
   if not helmLike then ears(cx, cy, o, F) end
-  headShape(cx, cy, o, F.dark, 0, 0, 0)
-  headShape(cx, cy, o, F.base, -1.2, -1.4, 0.8)
-  ell(cx - 8, cy - 10, 8, 4.5, F.light, -0.35)
+  headShape(cx, cy, o, F.dark, 0, 0)
+  headShape(cx, cy, o, F.base, -px(), -px())
+  ell(cx - 8, cy - 10, 7, 3.5, F.light, -0.35)
   pattern(cx, cy, o, F)
-  face(cx, cy, o, F)
-  local earsOver = hatFront(cx, cy, o, F)
+  local muz = o.pattern == "tux" and C.paper or F.muzzle
+  if o.pattern == "tux" then poly(C.paper, snap(cx - 6), snap(cy - 2), snap(cx + 6), snap(cy - 2), snap(cx + 9), snap(cy + 14), snap(cx - 9), snap(cy + 14)) end
+  ell(cx - 5, cy + 9.5, 6, 4.5, muz)
+  ell(cx + 5, cy + 9.5, 6, 4.5, muz)
+  ell(cx, cy + 13, 5, 3.5, muz)
+  local earsOver = hatFront(cx, cy, o)
   if helmLike and earsOver then ears(cx, cy, o, F) end
   if o.kittens then
-    kitten(cx - 30, h - 10, 1, o, F)
-    kitten(cx + 18, h - 7, 0.9, o, F)
+    kitten(cx - 30, h - 10, F)
+    kitten(cx + 18, h - 7, F)
   end
-  prop(w, h, o, cx, cy, F, false)
+  prop(w, h, o, cx, F, false)
+end
+
+local function figureDetails(w, h, o)
+  face(snap(w / 2), snap(h - 52), o)
 end
 
 -- ---------------------------------------------------------------- tricks
 
 local TRICK_BG = {
-  downpour = { top = hex("#16263a"), bottom = hex("#05090f") },
-  moonfog = { top = hex("#16352a"), bottom = hex("#030605") },
-  sunbeam = { top = hex("#2a1e0a"), bottom = hex("#0c0904") },
-  warhorn = { top = hex("#5a1d12"), bottom = hex("#160806") },
-  box = { top = hex("#24503c"), bottom = hex("#08140f") },
-  hairball = { top = hex("#2a3a14"), bottom = hex("#0a1004") },
+  downpour = { hex("#1c3048"), hex("#122236"), hex("#0a1422") },
+  moonfog = { hex("#1d4434"), hex("#122b21"), hex("#07130e") },
+  sunbeam = { hex("#3a2a10"), hex("#2a1e0a"), hex("#160f04") },
+  warhorn = { hex("#5a1d12"), hex("#3e130c"), hex("#260b07") },
+  box = { hex("#2f6a4f"), hex("#24503c"), hex("#16352a") },
+  hairball = { hex("#33461a"), hex("#243212"), hex("#141c08") },
 }
 
 local function trickBg(w, h, o)
-  local B = TRICK_BG[o.ability] or TRICK_BG.box
-  vgrad(0, 0, w, h, B.top, B.bottom)
+  bands(w, h, TRICK_BG[o.ability] or TRICK_BG.box)
   local cx, cy = w / 2, h / 2
   local ab = o.ability
   if ab == "downpour" then
-    for i = 1, 40 do
-      local x, y = (i * 37) % w, (i * 53) % h
-      ln(hex("#5cb8ff"), 0.9, x, y, x - 4, y + 9)
-    end
+    for i = 1, 26 do rect(hex("#5cb8ff"), (i * 37) % w, (i * 53) % h, px(), px(3), 0.8) end
   elseif ab == "moonfog" then
-    glow(cx + 16, 26, 34, EYE.cyan, 0.2)
-    ell(cx + 16, 26, 16, 16, C.paper)
-  elseif ab == "sunbeam" then
-    -- a window
-    rect(hex("#3a2a10"), 10, 8, 28, 30)
-    rect(GOLD.light, 12, 10, 11, 12); rect(GOLD.light, 25, 10, 11, 12); rect(GOLD.light, 12, 24, 11, 12); rect(GOLD.light, 25, 24, 11, 12)
-    col(GOLD.light, 0.22)
-    lg.polygon("fill", 12, 10, 36, 10, w, h, w - 58, h)
-    for i = 1, 10 do rect(GOLD.light, 30 + (i * 19) % 50, 30 + (i * 23) % 50, 1, 1, 0.7) end
-  elseif ab == "warhorn" then
-    glow(cx, cy, 50, hex("#ff8a3a"), 0.4)
-    for i = 1, 3 do
-      col(GOLD.light, 0.5 - i * 0.1); lg.setLineWidth(2)
-      lg.arc("line", "open", cx + 18, cy - 8, 10 + i * 8, -0.9, 0.9)
+    glow(cx + 16, 24, 26, EYE.cyan, 0.2)
+    ell(cx + 16, 24, 14, 14, C.paper)
+    for k = 0, 3 do
+      col(C.paper, 0.18 + k * 0.08)
+      lg.ellipse("fill", snap(cx + (k % 2 == 0 and -10 or 12)), snap(44 + k * 11), 48, 6, 28)
     end
-    lg.setLineWidth(1)
+  elseif ab == "sunbeam" then
+    rect(hex("#3a2a10"), 8, 6, 28, 30)
+    for _, q in ipairs({ { 10, 8 }, { 23, 8 }, { 10, 22 }, { 23, 22 } }) do rect(GOLD.light, q[1], q[2], 11, 12) end
+    col(GOLD.light, 0.22)
+    lg.polygon("fill", snap(10), snap(8), snap(34), snap(8), w, h, w - 58, h)
+  elseif ab == "warhorn" then
+    glow(cx, cy, 40, hex("#ff8a3a"), 0.4)
   elseif ab == "box" then
-    glow(cx, cy + 6, 46, GOLD.base, 0.25)
+    glow(cx, cy + 6, 38, GOLD.base, 0.25)
   elseif ab == "hairball" then
-    glow(cx, cy, 44, hex("#a8d14f"), 0.3)
+    glow(cx, cy, 36, hex("#a8d14f"), 0.3)
   end
 end
 
@@ -911,62 +856,44 @@ local function trickFig(w, h, o)
   local ab = o.ability
   if ab == "downpour" then
     for _, c in ipairs({ { cx - 18, 24, 16, 11 }, { cx + 2, 18, 20, 14 }, { cx + 22, 26, 14, 10 }, { cx, 30, 28, 8 } }) do
-      ell(c[1], c[2], c[3], c[4], hex("#56677c"))
-      ell(c[1] - 2, c[2] - 2, c[3] - 2, c[4] - 2, hex("#8a96a8"))
+      shaded(c[1], c[2], c[3], c[4], { dark = hex("#56677c"), base = hex("#9aa7b9") })
     end
-    -- a soaked cat under it, ears flat
     local F = FUR.tide
-    ell(cx, h - 6, 22, 12, F.dark); ell(cx - 1, h - 7, 20, 11, F.base)
-    poly(F.dark, cx - 20, h - 12, cx - 8, h - 16, cx - 26, h - 20)
-    poly(F.dark, cx + 20, h - 12, cx + 8, h - 16, cx + 26, h - 20)
-    ell(cx - 7, h - 9, 3.4, 2.4, OUTLINE); ell(cx + 7, h - 9, 3.4, 2.4, OUTLINE)
-    ell(cx - 7, h - 9.4, 2.4, 1.4, EYE.gold); ell(cx + 7, h - 9.4, 2.4, 1.4, EYE.gold)
-  elseif ab == "moonfog" then
-    for k = 0, 3 do
-      local y = 44 + k * 11
-      col(C.paper, 0.18 + k * 0.08)
-      lg.ellipse("fill", cx + (k % 2 == 0 and -10 or 12), y, 48, 6, 28)
-    end
-    -- eyes in the fog
-    for sgn = -1, 1, 2 do ell(cx - 14 + sgn * 6, 62, 3, 2, EYE.gold) end
+    shaded(cx, h - 6, 22, 12, F)
+    poly(F.dark, snap(cx - 20), snap(h - 12), snap(cx - 8), snap(h - 16), snap(cx - 26), snap(h - 20))
+    poly(F.dark, snap(cx + 20), snap(h - 12), snap(cx + 8), snap(h - 16), snap(cx + 26), snap(h - 20))
   elseif ab == "sunbeam" then
-    -- a cat asleep on a cushion in the light
-    ell(cx + 10, h - 14, 30, 9, hex("#7a2016")); ell(cx + 9, h - 15, 28, 7.5, C.red)
+    shaded(cx + 10, h - 14, 30, 8, { dark = hex("#7a2016"), base = C.red })
     local F = FUR.gilt
-    ell(cx + 10, h - 25, 22, 11, F.dark); ell(cx + 9, h - 26, 20.5, 10, F.base)
-    ell(cx - 6, h - 29, 11, 9, F.dark); ell(cx - 7, h - 30, 10, 8, F.base)
-    poly(F.dark, cx - 15, h - 34, cx - 9, h - 37, cx - 15, h - 44)
-    poly(F.dark, cx + 1, h - 34, cx - 5, h - 37, cx + 1, h - 44)
-    ln(OUTLINE, 1.2, cx - 12, h - 30, cx - 9, h - 30)
-    ln(OUTLINE, 1.2, cx - 5, h - 30, cx - 2, h - 30)
-    col(F.dark); lg.setLineWidth(3); lg.arc("line", "open", cx + 30, h - 26, 8, -PI / 2, PI / 2); lg.setLineWidth(1)
+    shaded(cx + 10, h - 25, 22, 10, F)
+    shaded(cx - 6, h - 29, 11, 9, F)
+    poly(F.dark, snap(cx - 15), snap(h - 34), snap(cx - 9), snap(h - 37), snap(cx - 15), snap(h - 44))
+    poly(F.dark, snap(cx + 1), snap(h - 34), snap(cx - 5), snap(h - 37), snap(cx + 1), snap(h - 44))
   elseif ab == "warhorn" then
-    lg.push(); lg.translate(cx - 4, cy + 6); lg.rotate(-0.35)
+    lg.push(); lg.translate(snap(cx - 4), snap(cy + 6)); lg.rotate(-0.35)
     poly(GOLD.dark, -26, -4, -26, 4, 10, 10, 10, -10)
-    poly(GOLD.base, -25, -3, -25, 3, 9, 8.5, 9, -8.5)
-    rect(GOLD.light, -25, -3, 34, 1.5)
-    ell(12, 0, 5, 12, GOLD.dark); ell(12, 0, 3.5, 10, hex("#2a1e00"))
-    rect(C.red, -18, -5, 4, 10); rect(C.red, -4, -7, 4, 14)
+    poly(GOLD.base, -25, -3, -25, 3, 9, 8, 9, -8)
+    col(GOLD.light); lg.rectangle("fill", -25, -3, 34, px())
+    col(GOLD.dark); lg.ellipse("fill", 12, 0, 5, 12, 24)
+    col(hex("#2a1e00")); lg.ellipse("fill", 12, 0, 3.5, 10, 24)
+    col(C.red); lg.rectangle("fill", -18, -5, 4, 10); lg.rectangle("fill", -4, -7, 4, 14)
     lg.pop()
   elseif ab == "box" then
-    local bx, by = cx - 26, cy - 4
+    local bx, by = snap(cx - 26), snap(cy - 4)
     poly(hex("#8c5a24"), bx, by, bx + 52, by, bx + 52, by + 36, bx, by + 36)
-    poly(hex("#b07a3a"), bx + 1, by + 1, bx + 51, by + 1, bx + 51, by + 35, bx + 1, by + 35)
+    poly(hex("#b07a3a"), bx + px(), by + px(), bx + 51, by + px(), bx + 51, by + 35, bx + px(), by + 35)
     rect(hex("#d9a35a"), bx + 22, by + 1, 8, 34)
     poly(hex("#9a6a2c"), bx, by, bx + 26, by, bx + 18, by - 10, bx - 8, by - 10)
     poly(hex("#c08844"), bx + 26, by, bx + 52, by, bx + 60, by - 10, bx + 34, by - 10)
-    -- ears and eyes peeking out of the dark gap
     rect(hex("#120a04"), bx + 4, by - 2, 44, 6)
-    local F = FUR.shadow
-    poly(F.base, bx + 12, by + 1, bx + 20, by + 1, bx + 14, by - 9)
-    poly(F.base, bx + 28, by + 1, bx + 36, by + 1, bx + 34, by - 9)
+    poly(FUR.shadow.base, snap(bx + 12), snap(by + 1), snap(bx + 20), snap(by + 1), snap(bx + 14), snap(by - 9))
+    poly(FUR.shadow.base, snap(bx + 28), snap(by + 1), snap(bx + 36), snap(by + 1), snap(bx + 34), snap(by - 9))
   elseif ab == "hairball" then
     local hx, hy = cx, cy + 6
-    ell(hx, hy, 17, 15, hex("#5c3a1f"))
-    ell(hx - 1, hy - 1, 15.5, 13.5, hex("#8c6a2c"))
-    for i = 0, 17 do
-      local a = i / 18 * 2 * PI
-      ln(i % 2 == 0 and hex("#d0602a") or hex("#3a2412"), 1.3, hx + math.cos(a) * 6, hy + math.sin(a) * 5, hx + math.cos(a + 0.6) * 18, hy + math.sin(a + 0.6) * 16)
+    shaded(hx, hy, 17, 15, { dark = hex("#5c3a1f"), base = hex("#8c6a2c") })
+    for i = 0, 11 do
+      local a = i / 12 * 2 * PI
+      line(i % 2 == 0 and hex("#d0602a") or hex("#3a2412"), 1, hx + math.cos(a) * 6, hy + math.sin(a) * 5, hx + math.cos(a + 0.6) * 17, hy + math.sin(a + 0.6) * 15)
     end
   end
 end
@@ -975,104 +902,158 @@ local function trickFx(w, h, o)
   local cx, cy = w / 2, h / 2
   local ab = o.ability
   if ab == "box" then
-    local bx, by = cx - 26, cy - 4
-    for _, ex in ipairs({ bx + 18, bx + 30 }) do ell(ex, by + 1, 2.4, 1.6, EYE.gold) end
+    local bx, by = snap(cx - 26), snap(cy - 4)
+    for _, ex in ipairs({ bx + 18, bx + 30 }) do rect(EYE.gold, ex - px(), by, px(2), px()) end
   elseif ab == "hairball" then
-    for k = -1, 1 do
-      col(hex("#a8d14f"), 0.8); lg.setLineWidth(1.4)
-      local x = cx + k * 12
-      lg.line(x, cy - 12, x + 3, cy - 18, x - 1, cy - 24, x + 2, cy - 30)
-    end
-    lg.setLineWidth(1)
+    for k = -1, 1 do stamp(cx + k * 12 - px(), cy - 30, { ".g", "g.", ".g", "g." }, { g = hex("#a8d14f") }) end
   elseif ab == "sunbeam" then
-    for k = 0, 2 do
-      local zx, zy = cx + 4 + k * 8, h - 50 - k * 9
-      ln(C.paper, 1.2, zx, zy, zx + 4, zy, zx, zy + 4, zx + 4, zy + 4)
-    end
+    for k = 0, 1 do stamp(cx + 4 + k * 10, h - 54 - k * 12, { "zzz", "..z", ".z.", "z..", "zzz" }, { z = C.paper }) end
   elseif ab == "moonfog" then
-    for sgn = -1, 1, 2 do glow(cx - 14 + sgn * 6, 62, 6, EYE.gold, 0.5) end
+    for sgn = -1, 1, 2 do rect(EYE.gold, cx - 14 + sgn * 6 - px(), 62, px(2), px()) end
+  elseif ab == "downpour" then
+    for sgn = -1, 1, 2 do rect(EYE.gold, cx + sgn * 7 - px(), h - 10, px(2), px()) end
   elseif ab == "warhorn" then
-    sparkle(cx + 24, cy - 16, 2, GOLD.light, 1)
+    col(GOLD.light, 0.8)
+    lg.setLineWidth(px())
+    for i = 1, 3 do lg.arc("line", "open", snap(cx + 18), snap(cy - 8), 8 + i * 7, -0.9, 0.9, 16) end
+    lg.setLineWidth(1)
   end
 end
 
 -- ---------------------------------------------------------------- compositing
 
 local cache = {}
-local SS = 2 -- supersampling
 
-local function begin(cv, transparent)
+local function begin(cv, opaque)
   lg.push("all")
   lg.origin()
-  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
-  lg.setShader()
+  lg.setScissor()
   lg.setCanvas(cv)
-  lg.clear(0, 0, 0, transparent and 0 or 1)
+  lg.clear(0, 0, 0, opaque and 1 or 0)
 end
 
-local RIM = { shadow = hex("#62c49a"), menace = hex("#c8382c") }
-local OFFSETS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }
+-- Replace stray single pixels with their surroundings. Needs canvas read-back; skipped where
+-- the platform can't.
+local function cleanup(cv)
+  local ok, data = pcall(function() return cv:newImageData() end)
+  if not ok or not data then return cv end
+  local w, h = data:getDimensions()
+  local P = {}
+  for y = 0, h - 1 do
+    local row = {}
+    for x = 0, w - 1 do
+      local r, g, b, a = data:getPixel(x, y)
+      row[x] = { r, g, b, a }
+    end
+    P[y] = row
+  end
+  local function same(p, q)
+    return math.abs(p[1] - q[1]) < 0.02 and math.abs(p[2] - q[2]) < 0.02 and math.abs(p[3] - q[3]) < 0.02 and (p[4] > 0.5) == (q[4] > 0.5)
+  end
+  local changed = false
+  for y = 1, h - 2 do
+    for x = 1, w - 2 do
+      local p = P[y][x]
+      if p[4] > 0.5 then
+        local n = { P[y - 1][x], P[y + 1][x], P[y][x - 1], P[y][x + 1] }
+        local alike = false
+        for _, q in ipairs(n) do if same(p, q) then alike = true; break end end
+        if not alike then
+          local best, bestN = nil, 0
+          for _, q in ipairs(n) do
+            if q[4] > 0.5 then
+              local c = 0
+              for _, q2 in ipairs(n) do if same(q, q2) then c = c + 1 end end
+              if c > bestN then best, bestN = q, c end
+            end
+          end
+          if best and bestN >= 2 then data:setPixel(x, y, best[1], best[2], best[3], best[4]); changed = true end
+        end
+      end
+    end
+  end
+  if not changed then return cv end
+  local img = lg.newImage(data)
+  img:setFilter("nearest", "nearest")
+  return img
+end
 
--- Paint bg / fig / fx into an outW x outH picture. Logical space is 100 units wide.
+local OFFSETS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }
+local RIM = { shadow = hex("#5fbf94"), menace = hex("#c8382c") }
+
+-- Paint a picture of outW x outH pixels. The logical space is 100 units wide.
 local function compose(key, outW, outH, layers, o, transparent)
   if cache[key] then return cache[key] end
-  local plates = require("src.ui.plates")
-  local cw, ch = outW * SS, outH * SS
-  local k = cw / 100
-  local lw, lh = 100, ch / k
-  local fig = lg.newCanvas(cw, ch)
-  begin(fig, true)
-  lg.scale(k)
+  K = outW / 100
+  local lw, lh = 100, outH / K
+  -- 1. the figure's shapes, cleaned up, then its details
+  local shapes = lg.newCanvas(outW, outH)
+  shapes:setFilter("nearest", "nearest")
+  begin(shapes)
+  lg.scale(K)
   layers.fig(lw, lh, o)
   lg.pop()
-  local comp = lg.newCanvas(cw, ch)
-  begin(comp, transparent)
-  if not transparent then
-    lg.push(); lg.scale(k); layers.bg(lw, lh, o); lg.pop()
+  local clean = cleanup(shapes)
+  local fig = lg.newCanvas(outW, outH)
+  fig:setFilter("nearest", "nearest")
+  begin(fig)
+  lg.setColor(1, 1, 1)
+  lg.draw(clean, 0, 0)
+  if layers.details then
+    lg.scale(K)
+    layers.details(lw, lh, o)
   end
-  if o.ghost then
-    lg.setBlendMode("alpha", "premultiplied")
-    lg.setColor(0.18 * 0.35, 0.55 * 0.35, 0.6 * 0.35, 0.35)
-    lg.draw(fig, -10 * SS, 0)
-  end
-  lg.setBlendMode("alpha", "alphamultiply")
-  local rim = o.menace and RIM.menace or (o.coat == "shadow" and RIM.shadow) or nil
-  if rim then -- dark figures get a second, coloured line outside the outline, like moonlight
-    lg.setColor(rim[1], rim[2], rim[3], 1)
-    for _, d in ipairs(OFFSETS) do lg.draw(fig, d[1] * SS * 2, d[2] * SS * 2) end
-  end
-  lg.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
-  for _, d in ipairs(OFFSETS) do lg.draw(fig, d[1] * SS, d[2] * SS) end
-  lg.setBlendMode("alpha", "premultiplied")
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(fig, 0, 0)
-  lg.setBlendMode("alpha", "alphamultiply")
-  lg.push(); lg.scale(k); layers.fx(lw, lh, o); lg.pop()
   lg.pop()
-  fig:release()
-  -- box-filter down to the output size
-  comp:setFilter("linear", "linear")
+  if clean ~= shapes then clean:release() end
+  shapes:release()
+  -- 2. backdrop, outline (with a rim light for dark cats), figure, glow
   local out = lg.newCanvas(outW, outH)
   out:setFilter("nearest", "nearest")
-  begin(out, true)
-  lg.setBlendMode("alpha", "premultiplied")
+  begin(out, not transparent)
+  if not transparent then
+    lg.push(); lg.scale(K); layers.bg(lw, lh, o); lg.pop()
+  end
+  if o.ghost then
+    lg.setColor(0.25, 0.7, 0.75, 0.35)
+    lg.draw(fig, -6, 0)
+  end
+  local rim = o.menace and RIM.menace or (o.coat == "shadow" and RIM.shadow) or nil
+  if rim then
+    lg.setColor(rim[1], rim[2], rim[3], 1)
+    for _, d in ipairs(OFFSETS) do lg.draw(fig, d[1] * 2, d[2] * 2) end
+    for _, d in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do lg.draw(fig, d[1], d[2]) end
+  end
+  lg.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
+  for _, d in ipairs(OFFSETS) do lg.draw(fig, d[1], d[2]) end
   lg.setColor(1, 1, 1, 1)
-  lg.draw(comp, 0, 0, 0, 1 / SS, 1 / SS)
+  lg.draw(fig, 0, 0)
+  lg.push(); lg.scale(K); layers.fx(lw, lh, o); lg.pop()
   lg.pop()
-  comp:release()
-  local d = plates.dither(out, outW, outH, transparent)
-  if d ~= out then out:release() end -- without the shader the raw canvas is the result
-  cache[key] = d
-  return d
+  fig:release()
+  cache[key] = out
+  return out
+end
+
+-- an exact integer enlargement of a picture
+local function enlarge(key, img, n)
+  if n == 1 then return img end
+  if cache[key] then return cache[key] end
+  local w, h = img:getDimensions()
+  local out = lg.newCanvas(w * n, h * n)
+  out:setFilter("nearest", "nearest")
+  begin(out)
+  lg.setColor(1, 1, 1)
+  lg.draw(img, 0, 0, 0, n, n)
+  lg.pop()
+  cache[key] = out
+  return out
 end
 
 local CAT = {
   bg = bgPaint,
-  fig = figure,
-  fx = function(w, h, o)
-    local cx, cy = w / 2 + o.jx, h - 52
-    fx(w, h, o, cx, cy, FUR[o.fur] or FUR.shadow)
-  end,
+  fig = figureShapes,
+  details = figureDetails,
+  fx = function(w, h, o) fxLayer(w, h, o, snap(w / 2), snap(h - 52)) end,
 }
 local TRICK = { bg = trickBg, fig = trickFig, fx = trickFx }
 
@@ -1092,34 +1073,43 @@ local function cardSpec(def)
 end
 M.cardSpec = cardSpec
 
--- The picture on a card face (50x48), or larger for the inspect panel and the Cattery
--- (scale 2 gives 100x96).
+-- The picture on a card face (50x48); scale 2 or 3 gives an exact enlargement for the inspect
+-- panel, tooltips and the Cattery.
 function M.card(def, scale)
   scale = scale or 1
-  local w, h = M.CARD_W * scale, M.CARD_H * scale
-  local key = ("card:%s:%d:%d"):format(def.id, def.scars or 0, scale)
-  if cache[key] then return cache[key] end
-  if def.kind == "special" then
-    return compose(key, w, h, TRICK, { ability = def.ability, seed = rngm.hash(def.id) }, false)
+  local key = ("card:%s:%d"):format(def.id, def.scars or 0)
+  local base = cache[key]
+  if not base then
+    if def.kind == "special" then
+      base = compose(key, M.CARD_W, M.CARD_H, TRICK, { ability = def.ability, seed = rngm.hash(def.id), coat = "shadow" }, false)
+    else
+      base = compose(key, M.CARD_W, M.CARD_H, CAT, cardSpec(def), false)
+    end
   end
-  return compose(key, w, h, CAT, cardSpec(def), false)
+  return enlarge(key .. ":x" .. scale, base, scale)
 end
 function M.illustration(def) return M.card(def, 2) end
 
--- Square portraits (any size). Returns the image and the eye positions {x1, y1, x2, y2, colour}.
+-- Square portraits. Painted at up to 64px and enlarged by whole steps beyond that.
+-- Returns the image and the eye positions {x1, y1, x2, y2, colour} in output pixels.
 local eyes = {}
 function M.portrait(o, size)
   size = size or 48
-  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s:%d:%s"):format(o.seed or 0, o.coat, tostring(o.magic), tostring(o.ability), tostring(o.legendary), o.scars or 0,
-    tostring(o.crown), tostring(o.menace), size, tostring(o.cutout))
+  local n = math.max(1, math.ceil(size / 64))
+  local base = floor(size / n)
+  local key = ("p:%d:%s:%s:%s:%s:%d:%s:%s:%d:%s:%s"):format(o.seed or 0, o.coat, tostring(o.magic), tostring(o.ability), tostring(o.legendary), o.scars or 0,
+    tostring(o.crown), tostring(o.menace), base, tostring(o.cutout), tostring(o.id))
   if not cache[key] then
     derive(o)
-    compose(key, size, size, CAT, o, o.cutout)
-    local k = size / 100
-    local cx, cy = 50 + o.jx, 100 - 52 + 1
-    eyes[key] = { (cx - 10 * o.headW) * k, cy * k, (cx + 10 * o.headW) * k, cy * k, EYE[o.eyes] or EYE.gold }
+    compose(key, base, base, CAT, o, o.cutout)
+    local k = base / 100
+    local cx, cy = floor(50 * k + 0.5), floor((100 - 52 + 1) * k + 0.5)
+    local ex = floor(10 * o.headW * k + 0.5)
+    eyes[key] = { cx - ex, cy, cx + ex, cy, EYE[o.eyes] or EYE.gold }
   end
-  return cache[key], eyes[key]
+  local e = eyes[key]
+  local img = enlarge(key .. ":x" .. n, cache[key], n)
+  return img, { e[1] * n, e[2] * n, e[3] * n, e[4] * n, e[5] }
 end
 
 function M.nemesis(n, rank, size, cutout)
@@ -1130,12 +1120,27 @@ end
 
 function M.player(name, size, cutout)
   return M.portrait({ seed = rngm.hash(name), coat = "gilt", magic = false, ability = "smite", legendary = false, cutout = cutout,
-    rarity = "rare", prop = "sword", hat = "none", outfit = "plate", expr = "calm", eyes = "green" }, size)
+    rarity = "rare", prop = "sword", hat = "none", outfit = "plate", expr = "calm", eyes = "green", pattern = "tabby" }, size)
 end
 
 function M.stray(foe, size, cutout)
   return M.portrait({ seed = foe.seed, coat = foe.coat, magic = false, ability = "none", legendary = false, menace = foe.elite, cutout = cutout,
     rarity = "common" }, size)
+end
+
+-- Story characters: Old Bedimew (your mentor) and the Crier.
+function M.character(id, size, cutout)
+  local o
+  if id == "bedimew" then
+    o = { id = id, seed = 4040, coat = "gilt", magic = false, ability = "groom", rarity = "rare", cutout = cutout, scars = 2 }
+    for k, v in pairs(SPEC.bedimew) do o[k] = v end
+  elseif id == "crier" then
+    o = { id = id, seed = 777, coat = "gilt", magic = true, ability = "yowl", rarity = "rare", cutout = cutout }
+    for k, v in pairs(SPEC.taliesing) do o[k] = v end
+  else
+    return nil
+  end
+  return M.portrait(o, size)
 end
 
 -- Portrait for any festival entrant. cutout: no backdrop, just the cat (for looming over the table).
@@ -1149,9 +1154,6 @@ function M.entrant(save, e, size, cutout)
   return M.stray(e.foe or { seed = e.seed or 1, coat = e.coat or "shadow" }, size, cutout)
 end
 
--- Turn a smooth image (Figma export) into dithered pixels at the given width.
-function M.bake(img, w)
-  return require("src.ui.plates").image(img, w)
-end
+function M.bake(img, w) return require("src.ui.plates").image(img, w) end
 
 return M

@@ -40,8 +40,9 @@ function M.start(dir)
   local save
   step(0.4, function()
     save = game.newSave("Sir Whiskers", 4242)
-    G.save = save
-    G.go("title", {}, true)
+    G.useMode("free")
+    G.setSave(save)
+    G.go("menu", {}, true)
   end)
   step(1.2, function() M.mx, M.my = 482, 268; end)
   step(0.6, function() shot("01_title"); M.mx = nil end)
@@ -127,7 +128,7 @@ function M.start(dir)
   step(1.0, function() shot("18_news") end)
   step(0.2, function()
     for i = 1, 30 do game.noteSeen(save, cards.DRAFTABLE[i].id) end
-    G.go("title", {}, true)
+    G.go("menu", {}, true)
     overlays.cattery()
     G.overlay.sel = cards.CARDS.merline
   end)

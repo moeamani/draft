@@ -48,80 +48,96 @@ function M.updateStates(dt)
   end
 end
 
-local function serifSize(h, font)
-  if font == theme.T.huge() then return 24 end
-  if h >= 34 then return 22 elseif h >= 28 then return 19 elseif h >= 22 then return 16 end
-  return 14
+local function labelSize(h, hint)
+  if hint == "huge" then return 16 end
+  if h >= 34 then return 14 elseif h >= 28 then return 12.5 elseif h >= 22 then return 11 end
+  return 10
 end
 
--- The one button style: a dithered plate on a darker lip, with a serif label (Figma title cards).
--- opts: color, sub, disabled, font (size hint), icon, textColor
+-- The largest Atkinson Bold size (down to 8) at which str fits in width.
+local function fitBold(str, size, width)
+  while size > 8 and theme.font("bold", size):getWidth(str) > width do size = size - 0.5 end
+  return size
+end
+M.fitBold = fitBold
+
+-- The one button style: a flat plate on a darker lip with a bold, high-contrast label.
+-- opts: color, sub, disabled, size ("huge" for the big call-to-action), icon, iconColor,
+--       textColor, focused (keyboard / controller selection)
 function M.button(id, x, y, w, h, label, opts)
   opts = opts or {}
   local plates = require("src.ui.plates")
   local s = st(id)
   local clicked, over = M.click(id, x, y, w, h)
   if opts.disabled then clicked = false end
-  s.over = over and not opts.disabled
-  s.down = s.over and M.down
-  if s.over and not s.wasOver then sfx.play("hover", 1, 0.4) end
+  s.over = (over or opts.focused) and not opts.disabled
+  s.down = s.over and over and M.down
+  if s.over and not s.wasOver and over then sfx.play("hover", 1, 0.4) end
   s.wasOver = s.over
   if clicked then sfx.play("click") end
   local col = opts.color or C.ink3
-  if opts.disabled then col = C.ink2 elseif s.hover > 0.5 then col = theme.mix(col, C.paper, 0.12) end
+  if opts.disabled then col = C.ink2 elseif s.hover > 0.5 then col = theme.shade(col, 0.12) end
   x, y, w, h = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
   local press = s.down and 2 or 0
-  theme.set(C.black, 0.55)
+  theme.set(C.black, 0.5)
   lg.rectangle("fill", x + 1, y + 3, w, h)
-  plates.draw(plates.plate(w, h, theme.darken(col, 0.55)), x, y + 2)
+  plates.draw(plates.plate(w, h, theme.shade(col, -0.45)), x, y + 2)
   local by = y + press
-  plates.draw(plates.plate(w, h, col, { light = 0.14 }), x, by)
+  plates.draw(plates.plate(w, h, col), x, by)
+  if opts.focused and not opts.disabled then
+    theme.set(C.goldText)
+    lg.rectangle("line", x - 1.5, by - 1.5, w + 3, h + 3)
+  end
   local tc = opts.disabled and C.muted or (opts.textColor or C.white)
-  local size = plates.fit(label, serifSize(opts.sub and h - 12 or h, opts.font), w - 10 - (opts.icon and 12 or 0))
-  local fh = theme.serif(size):getHeight()
+  local font = theme.font("bold", fitBold(label, labelSize(opts.sub and h - 10 or h, opts.size), w - 10 - (opts.icon and 14 or 0)))
+  local fh = font:getHeight()
   if opts.sub then
     local sf = theme.T.small()
-    local total = fh + sf:getHeight() - 2
-    local ty = by + math.floor((h - total) / 2)
-    plates.print(label, size, x + w / 2, ty, tc, { align = "center" })
-    gfx.text(opts.sub, sf, x + w / 2, ty + fh - 2, opts.disabled and C.muted or theme.mix(tc, col, 0.2), { align = "center", shadow = false })
+    local total = fh + sf:getHeight() - 1
+    local ty = by + (h - total) / 2
+    gfx.text(label, font, x + w / 2, ty, tc, { align = "center", bg = col })
+    gfx.text(opts.sub, sf, x + w / 2, ty + fh - 1, opts.disabled and C.muted or C.paper2, { align = "center", bg = col })
   else
-    local ty = by + math.floor((h - fh) / 2)
+    local ty = by + (h - fh) / 2
     local tx = x + w / 2
     if opts.icon then
-      local tw = plates.textWidth(label, size) + 12
-      tx = tx + 6
-      require("src.ui.icons").draw(opts.icon, x + w / 2 - tw / 2 + 4, by + h / 2, opts.iconColor or C.paper)
+      local tw = font:getWidth(label) + 14
+      tx = tx + 7
+      require("src.ui.icons").draw(opts.icon, math.floor(x + w / 2 - tw / 2 + 4), math.floor(by + h / 2), opts.iconColor or C.paper)
     end
-    plates.print(label, size, tx, ty, tc, { align = "center" })
+    gfx.text(label, font, tx, ty, tc, { align = "center", bg = col })
   end
   return clicked
 end
 
 -- A clickable choice card: a title and a wrapped, readable description.
--- opts: color, icon, iconColor, disabled, border, titleColor
+-- opts: color, icon, iconColor, disabled, titleColor, focused
 function M.choice(id, x, y, w, h, title, desc, opts)
   opts = opts or {}
   local s = st(id)
   local clicked, over = M.click(id, x, y, w, h)
   if opts.disabled then clicked = false end
-  s.over = over and not opts.disabled
-  if s.over and not s.wasOver then sfx.play("hover", 1, 0.4) end
+  s.over = (over or opts.focused) and not opts.disabled
+  if s.over and not s.wasOver and over then sfx.play("hover", 1, 0.4) end
   s.wasOver = s.over
   if clicked then sfx.play("click") end
-  local plates = require("src.ui.plates")
   local lift = s.hover > 0.5 and 2 or 0
   local col = opts.color or C.ink2
-  if opts.disabled then col = C.deep elseif s.hover > 0.5 then col = theme.mix(col, C.paper, 0.08) end
+  if opts.disabled then col = C.deep elseif s.hover > 0.5 then col = theme.shade(col, 0.08) end
   local by = y - lift
   gfx.panel(x, by, w, h, col)
-  local tx = x + 9
-  if opts.icon then
-    require("src.ui.icons").draw(opts.icon, x + 16, by + 15, opts.disabled and C.muted or (opts.iconColor or C.gold), 2)
-    tx = x + 30
+  if opts.focused and not opts.disabled then
+    theme.set(C.goldText)
+    lg.rectangle("line", x - 1.5, by - 1.5, w + 3, h + 3)
   end
-  plates.print(title, plates.fit(title, 20, w - (tx - x) - 8), tx, by + 3, opts.disabled and C.muted or (opts.titleColor or C.white))
-  if desc then gfx.textf(desc, theme.T.body(), x + 9, by + 29, w - 18, "left", opts.disabled and C.muted or C.paper2) end
+  local tx = x + 8
+  if opts.icon then
+    require("src.ui.icons").draw(opts.icon, x + 15, by + 13, opts.disabled and C.muted or (opts.iconColor or C.gold), 2)
+    tx = x + 28
+  end
+  local tf = theme.font("bold", fitBold(title, 12, w - (tx - x) - 8))
+  gfx.text(title, tf, tx, by + 5, opts.disabled and C.muted or (opts.titleColor or C.white), { bg = col })
+  if desc then gfx.textf(desc, theme.T.body(), x + 8, by + 22, w - 16, "left", opts.disabled and C.muted or C.paper2, { bg = col }) end
   return clicked
 end
 
@@ -152,7 +168,7 @@ function M.infoBox(x, y, w, lines, img)
     cy = cy + ih + 4
   end
   for i, l in ipairs(lines) do
-    gfx.textf(l.text, l.font or theme.T.body(), x + pad, cy, w - pad * 2, l.align or "left", l.color or C.paper, { shadow = l.shadow })
+    gfx.textf(l.text, l.font or theme.T.body(), x + pad, cy, w - pad * 2, l.align or "left", l.color or C.paper, { bg = C.deep })
     cy = cy + hs[i]
   end
   return x, y, w, h

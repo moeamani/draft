@@ -15,6 +15,8 @@ M.HAND = 5
 M.GOBLETS = 7
 M.MAX_BOUTS = 12
 M.COAT_EDGE = 3
+-- Stolen Lives: losing a duel costs a life; losing it by this many Paws or more costs two
+M.CRUSH = 5
 
 -- Cushion upholstery, bought at the market and kept for the festival (the Hands bring their own).
 M.CUSHION_KINDS = {
@@ -31,18 +33,21 @@ M.other = other
 
 local function newSide(setup)
   local deck, counts = {}, {}
+  local mods = setup.mods or traits.baseMods()
   for i, c in ipairs(setup.deck) do
-    deck[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def }
+    local d = c.def or cards.getDef(c)
+    deck[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, captive = c.captive, owner = c.owner }
+    -- Stolen Lives: every cat starts the match with its full lives (a captive is down to 1)
+    deck[i].lives = c.captive and 1 or (cards.maxLives(d) + (mods.extraLives or 0))
     counts[c.id] = (counts[c.id] or 0) + 1
   end
-  local mods = setup.mods or traits.baseMods()
   local omen = setup.omen or {}
   local g = math.max(1, M.GOBLETS + mods.goblets + (omen.goblets or 0))
   local cushions = {}
   for i = 1, M.CUSHIONS do cushions[i] = setup.cushions and setup.cushions[i] or false end
   return {
     name = setup.name, deck = deck, discard = {}, hand = {}, mods = mods, goblets = g, maxGoblets = g,
-    cushions = cushions, omenHand = omen.hand or 0,
+    cushions = cushions, omenHand = omen.hand or 0, lost = {}, taken = {},
     nineUsed = {}, counts = counts, vengeance = false, secondWindUsed = false, boutsWon = 0, duelsWon = 0,
     scored = {}, placed = { false, false, false }, shown = {},
   }
@@ -321,6 +326,8 @@ local function compute(s, P, lead, soft)
         local diff = pa - pb + (w == 1 and 0.5 or -0.5) * (d.tie and 1 or 0)
         local p = 1 / (1 + math.exp(-diff / 2.2))
         d.p = p
+        -- the chance each side is crushed (loses by M.CRUSH or more)
+        d.pCrush = { 1 / (1 + math.exp(-(-diff - (M.CRUSH - 0.5)) / 2.2)), 1 / (1 + math.exp(-(diff - (M.CRUSH - 0.5)) / 2.2)) }
         local sw1, sw2 = swatsFor(1, a, false), swatsFor(2, b, false)
         rec.deal[1] = rec.deal[1] + p * sw1
         rec.deal[2] = rec.deal[2] + (1 - p) * sw2
@@ -395,6 +402,32 @@ local function apply(s, rec)
     local sd = s.sides[si]
     sd.vengeance = sd.mods.vengeful and rec.deal[other(si)] > rec.deal[si]
   end
+  -- Stolen Lives: a cat that loses a duel loses a life; out of lives, the winner captures it.
+  -- A captive (one of your cats fighting for a Hand) is at 1 life: beat it and it comes home.
+  rec.wounds = {}
+  local captured = {}
+  for i = 1, N do
+    local d = rec.duels[i]
+    if d.reason == "duel" and d.winner > 0 then
+      local l = other(d.winner)
+      local inf = rec.info[l][i]
+      if inf.kind == "cat" and inf.def.ability ~= "ninelives" then
+        local c = inf.inst
+        local cost = (d.margin or 0) >= M.CRUSH and 2 or 1
+        c.lives = (c.lives or cards.maxLives(inf.def)) - cost
+        local w = { side = l, uid = c.uid, slot = i, left = math.max(0, c.lives), cost = cost, crushed = cost == 2 }
+        if c.lives <= 0 then
+          w.captured = true
+          w.rescued = c.captive and l == 2 or nil
+          captured[c.uid] = true
+          s.sides[l].lost[#s.sides[l].lost + 1] = c
+          s.sides[d.winner].taken[#s.sides[d.winner].taken + 1] = c
+        end
+        d.wound = w
+        rec.wounds[#rec.wounds + 1] = w
+      end
+    end
+  end
   -- duel winners earn experience; cards leave the cushions
   rec.returns = {}
   for i = 1, N do
@@ -414,7 +447,9 @@ local function apply(s, rec)
       if c then
         local _, idx = findInHand(sd, c.uid)
         if idx then table.remove(sd.hand, idx) end
-        if defOf(c).ability == "ninelives" and not sd.nineUsed[c.uid] then
+        if captured[c.uid] then
+          -- carried off the table: it doesn't go back to the discard pile
+        elseif defOf(c).ability == "ninelives" and not sd.nineUsed[c.uid] then
           sd.nineUsed[c.uid] = true
           sd.hand[#sd.hand + 1] = c
           rec.returns[#rec.returns + 1] = c.uid
@@ -534,6 +569,20 @@ local function choose(s, si, foeView, style, leading)
       local c = pl[i]
       if c then
         local d = defOf(c)
+        local du = r.duels[i]
+        -- a cat that could run out of lives risks capture: weigh that chance
+        local lives = c.lives or cards.maxLives(d)
+        if d.kind == "unit" and lives <= 2 and d.ability ~= "ninelives" and du.reason == "duel" then
+          local capP
+          if du.pCrush then
+            local loseP = si == 1 and (1 - du.p) or du.p
+            capP = lives <= 1 and loseP or du.pCrush[si]
+          else
+            local lost = du.winner ~= si
+            capP = (lost and (lives <= 1 or (du.margin or 0) >= M.CRUSH)) and 1 or 0
+          end
+          v = v - (style.guard or 1.2) * capP
+        end
         if d.kind == "unit" then
           v = v - style.conserve * cards.paws(c)
           if leading and M.backOf(c) ~= "dark" then v = v - 0.15 end

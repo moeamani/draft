@@ -22,6 +22,7 @@ M.CHARMS = {
   lucky = { name = "Lucky Tail", desc = "You win every tie.", price = 45, icon = "star" },
   drum = { name = "Festival Drum", desc = "When you lead, your cats get +1 Paw.", price = 40, icon = "drum" },
   candle = { name = "Witch's Candle", desc = "Your Shadow cats get +1 Paw.", price = 40, icon = "candle" },
+  scruff = { name = "Scruff Ribbon", desc = "Your cats have 1 more life, so they're harder to capture.", price = 50, icon = "heart" },
 }
 M.IDS = {}
 for k in pairs(M.CHARMS) do M.IDS[#M.IDS + 1] = k end
@@ -46,6 +47,7 @@ function M.apply(m, charms)
     elseif c == "lucky" then m.lucky = true
     elseif c == "drum" then m.drum = true
     elseif c == "candle" then m.coatPaws.shadow = (m.coatPaws.shadow or 0) + 1
+    elseif c == "scruff" then m.extraLives = m.extraLives + 1
     end
   end
 end

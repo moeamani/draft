@@ -1,4 +1,6 @@
--- Pixel drawing helpers. Everything is drawn in virtual pixels on integer coordinates.
+-- Drawing helpers. Shapes are drawn in virtual pixels on integer coordinates; text is drawn with
+-- fonts rasterised at the real screen resolution (theme.K canvas pixels per virtual pixel), so it
+-- stays sharp. Every text colour goes through theme.readable() against the ground it sits on.
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
@@ -15,14 +17,14 @@ function M.box(x, y, w, h, col, a)
   lg.rectangle("fill", x + w - 1, y + 1, 1, h - 2)
 end
 
--- The one panel style: a dithered palette plate (Figma texture) with a 1px outline and a drop
--- shadow. opts.accent (or the older opts.border) adds a 2px coloured strip along the top.
+-- The one panel style: a flat pixel plate with a 1px outline, a bevel and a drop shadow.
+-- opts.accent (or opts.border) adds a 2px coloured strip along the top.
 function M.panel(x, y, w, h, col, opts)
   opts = opts or {}
   local a = opts.alpha or 1
   x, y, w, h = floor(x), floor(y), floor(w), floor(h)
   if opts.shadow ~= false then
-    theme.set(C.black, 0.5 * a)
+    theme.set(C.black, 0.45 * a)
     lg.rectangle("fill", x + 1, y + 2, w, h)
   end
   local plates = require("src.ui.plates")
@@ -34,96 +36,133 @@ function M.panel(x, y, w, h, col, opts)
   end
 end
 
+-- ---------------------------------------------------------------- text
+
+local function snap(v) local k = theme.K; return floor(v * k + 0.5) / k end
+
+local function useFont(font)
+  local f = font:real()
+  lg.setFont(f)
+  return f
+end
+
+-- Text colour after the WCAG check. Pure black or white with no ground given is taken as a
+-- deliberate choice for a known plate (black on gold, white on red) and left alone.
+local function inkFor(col, opts)
+  if opts.raw then return col end
+  if not opts.bg then
+    local l = theme.luminance(col)
+    if l < 0.01 or l > 0.92 then return col end
+  end
+  return theme.readable(col, opts.bg or C.ink2, opts.ratio)
+end
+
+-- One line of text. opts: align ("left" | "center" | "right"), bg (the ground, for contrast),
+-- shadow (true for a soft drop shadow over busy art), alpha, raw (skip the contrast check)
 function M.text(str, font, x, y, col, opts)
   opts = opts or {}
-  lg.setFont(font)
-  local w = font:getWidth(str)
+  str = tostring(str)
+  local f = useFont(font)
+  local k = theme.K
+  local w = f:getWidth(str) / k
   local ox = 0
-  if opts.align == "center" then ox = -floor(w / 2) elseif opts.align == "right" then ox = -w end
-  x, y = floor(x + ox), floor(y)
-  if opts.shadow ~= false then
-    theme.set(opts.shadowCol or C.black, (opts.alpha or 1) * 0.85)
-    lg.print(str, x + (opts.sx or 0), y + (opts.sy or 1))
+  if opts.align == "center" then ox = -w / 2 elseif opts.align == "right" then ox = -w end
+  x, y = snap(x + ox), snap(y)
+  if opts.shadow == true then
+    theme.set(C.black, (opts.alpha or 1) * 0.8)
+    lg.print(str, x + 0.5, y + 0.75, 0, 1 / k, 1 / k)
   end
-  theme.set(col, opts.alpha)
-  lg.print(str, x, y)
+  theme.set(inkFor(col, opts), opts.alpha)
+  lg.print(str, x, y, 0, 1 / k, 1 / k)
   return w
 end
 
--- Text with a full 1px outline (for numbers over art).
+-- Text with a dark outline (numbers over art).
 function M.outlined(str, font, x, y, col, opts)
   opts = opts or {}
-  lg.setFont(font)
-  local w = font:getWidth(str)
-  if opts.align == "center" then x = x - floor(w / 2) elseif opts.align == "right" then x = x - w end
-  x, y = floor(x), floor(y)
+  str = tostring(str)
+  local f = useFont(font)
+  local k = theme.K
+  local w = f:getWidth(str) / k
+  if opts.align == "center" then x = x - w / 2 elseif opts.align == "right" then x = x - w end
+  x, y = snap(x), snap(y)
   theme.set(opts.outline or C.black, opts.alpha)
-  for dx = -1, 1 do for dy = -1, 1 do if dx ~= 0 or dy ~= 0 then lg.print(str, x + dx, y + dy) end end end
-  lg.print(str, x, y + 2)
+  local d = 0.75
+  for dx = -1, 1 do
+    for dy = -1, 1 do
+      if dx ~= 0 or dy ~= 0 then lg.print(str, x + dx * d, y + dy * d, 0, 1 / k, 1 / k) end
+    end
+  end
   theme.set(col, opts.alpha)
-  lg.print(str, x, y)
+  lg.print(str, x, y, 0, 1 / k, 1 / k)
   return w
 end
 
+-- Wrapped text. Returns its height in virtual pixels.
 function M.textf(str, font, x, y, w, align, col, opts)
   opts = opts or {}
-  lg.setFont(font)
-  x, y = floor(x), floor(y)
-  if opts.shadow ~= false then
-    theme.set(C.black, (opts.alpha or 1) * 0.85)
-    lg.printf(str, x, y + 1, w, align)
+  str = tostring(str)
+  local f = useFont(font)
+  local k = theme.K
+  x, y = snap(x), snap(y)
+  if opts.shadow == true then
+    theme.set(C.black, (opts.alpha or 1) * 0.8)
+    lg.printf(str, x + 0.5, y + 0.75, w * k, align or "left", 0, 1 / k, 1 / k)
   end
-  theme.set(col, opts.alpha)
-  lg.printf(str, x, y, w, align)
-  local _, lines = font:getWrap(str, w)
-  return #lines * font:getHeight()
+  theme.set(inkFor(col, opts), opts.alpha)
+  lg.printf(str, x, y, w * k, align or "left", 0, 1 / k, 1 / k)
+  local _, lines = f:getWrap(str, w * k)
+  return #lines * f:getHeight() / k
 end
 
 function M.wrapHeight(str, font, w)
-  local _, lines = font:getWrap(str, w)
+  local _, lines = font:getWrap(tostring(str), w)
   return #lines * font:getHeight()
 end
 
 -- Title text with per-letter bobbing.
 function M.wavy(str, font, cx, y, col, t, amp, opts)
   opts = opts or {}
-  lg.setFont(font)
-  local x = floor(cx - font:getWidth(str) / 2)
+  useFont(font)
+  local k = theme.K
+  local x = cx - font:getWidth(str) / 2
   amp = amp or 2
+  theme.set(inkFor(col, opts), opts.alpha)
   for i = 1, #str do
     local ch = str:sub(i, i)
-    local dy = floor(math.sin(t * 2.4 + i * 0.5) * amp + 0.5)
-    theme.set(C.black, opts.alpha)
-    lg.print(ch, x + 1, y + dy + 2)
-    theme.set(col, opts.alpha)
-    lg.print(ch, x, y + dy)
+    local dy = math.sin(t * 2.4 + i * 0.5) * amp
+    lg.print(ch, snap(x), snap(y + dy), 0, 1 / k, 1 / k)
     x = x + font:getWidth(ch)
   end
 end
 
 -- Short all-caps label (section headings, small tags).
-function M.label(str, x, y, col, align)
-  return M.text(str:upper(), theme.T.label(), x, y, col or C.pale, { align = align })
+function M.label(str, x, y, col, align, opts)
+  opts = opts or {}
+  opts.align = align
+  return M.text(str:upper(), theme.T.label(), x, y, col or C.pale, opts)
 end
 
 M.CHIP_H = 13
 function M.chip(str, x, y, kind)
   local font = theme.T.small()
-  local w = font:getWidth(str) + 8
-  local bg, fg
-  if kind == "strength" then bg, fg = C.redDark, C.paper
-  elseif kind == "weakness" then bg, fg = theme.hex("#1f6b45"), C.paper
-  elseif kind == "gold" then bg, fg = C.goldDark, C.paper
-  else bg, fg = C.ink2, C.paper2 end
+  local w = math.ceil(font:getWidth(str)) + 8
+  local bg
+  if kind == "strength" then bg = C.redDark
+  elseif kind == "weakness" then bg = theme.hex("#1f6b45")
+  elseif kind == "gold" then bg = C.goldDark
+  else bg = C.ink2 end
   M.box(x, y, w, M.CHIP_H, C.black)
   M.box(x + 1, y + 1, w - 2, M.CHIP_H - 2, bg)
-  M.text(str, font, x + 4, y + 1, fg, { shadow = false })
+  M.text(str, font, x + 4, y + 1.5, C.paper, { bg = bg })
   return w
 end
 
+-- Darken everything (behind overlays). Covers the whole window, margins included.
 function M.dim(a)
-  lg.setColor(0.01, 0.03, 0.02, a or 0.75)
-  lg.rectangle("fill", -10, -10, theme.W + 20, theme.H + 20)
+  lg.setColor(0.01, 0.03, 0.02, a or 0.78)
+  local ox, oy = G and G.OX or 0, G and G.OY or 0
+  lg.rectangle("fill", -ox - 2, -oy - 2, (G and G.VW or theme.W) + 4, (G and G.VH or theme.H) + 4)
 end
 
 return M

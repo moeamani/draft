@@ -143,6 +143,10 @@ function M.nemesisDeck(r, n, tier)
     local legends = util.filter(cards.DRAFTABLE, function(c) return c.rarity == "legendary" and (c.coat == n.coat or c.ability == n.style) end)
     if #legends > 0 then deck[#deck + 1] = inst(rng.pick(r, legends).id, 1) end
   end
+  -- Stolen Lives: the cats this Hand captured from you fight for them now
+  for _, c in ipairs(n.captives or {}) do
+    deck[#deck + 1] = { uid = c.uid, id = c.id, def = c.def, level = c.level, xp = 0, captive = true, owner = c.owner }
+  end
   return rng.shuffle(r, deck)
 end
 

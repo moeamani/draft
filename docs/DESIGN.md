@@ -2,64 +2,73 @@
 
 ## Art direction
 
-Everything follows the Figma file (the title frames and the "title cards" of the card sheet), so
-every screen uses the same handful of parts:
+The references are clean pixel art: crisp clusters, bold dark outlines, limited hue-shifted
+palettes, no noise. Every screen follows that, with the Figma file's palette, logo and title cards:
 
-- **One dither.** Figma's Dither effect is Bayer 16x16 at 8 levels per channel, with 2px cells.
-  - It is ported as `fdither` in `src/ui/shaders.lua`, at one cell per virtual pixel (2 screen pixels, as in Figma).
-  - Every surface goes through it: the backdrop, plates, title cards, serif text, card faces and backs, portraits, and the Figma art.
-  - That gives one consistent dot texture on every flat colour.
-- **Title cards** (`src/ui/plates.lua`):
-  - A palette plate with a white Ancizar Serif label.
-  - Featured cards add the mascot silhouette run through a port of Figma's **Lens distortion** effect (anamorphic chromatic mode). That paints the cyan, pink and white streaks of the "Ability" card, or the full spectrum of the black "Power" card.
-  - They're used for screen titles, panel headers, the HUD, banners, plaques and stalls.
-- **Plates.** Panels, buttons, cushions and the bars on a card face are dithered palette plates with a 1px outline. Buttons carry serif labels that shrink to fit.
-- **Two type families.**
-  - Ancizar Serif (static Regular and Italic) for display type. It is always baked and dithered, like the Figma cards.
-  - Jersey 10/15/20/25 at their native pixel sizes for everything you need to read.
-- **One palette** from Figma: `#0e2119` ink, `#e8483b` red, `#2471fc` / `#2378f7` blue, `#d3a200` gold, `#47e7fd` cyan and `#f4f1e8` cream, plus black for the Power plate.
-- **The logo** is the two-tone Figma lockup: a red "D" and cream "raft", with the red cat, and the tagline "Four Hands." in cream with *One Arena* in red italic. The title screen is the Figma title frame.
-- **Cat illustrations** (`src/ui/art.lua`) are bust portraits painted with plain primitives in three layers:
-  - **Backdrop** by coat: an Ember hall with pennants and embers, a rainy Tide shore, a Gilt sunburst over a castle, a Shadow night with the moon. The Hands get blood red and flames.
-  - **Figure**: outfit (plate, mail, tunic, robe, rags, apron, cape with ermine), ears, a two-tone shaded head, a fur pattern (tabby, tuxedo, points, patches, smoke, fluff), the face, headwear and props. It gets a 1px dark outline. Dark cats also get a moonlit rim.
-  - **Glow**: whiskers, orbs, candle flames, sparkles, notes and runes, drawn after the outline.
-  - Everything is painted at 2x, box-filtered down and run through the Figma dither, so it matches the title cards.
-  - `SPEC` gives the named cats their signature looks: Artheline's crown and Sword Hammer, Merline's hat and orb, the Alley Stray's eyepatch and fishbone. Other cats are dressed by their type, ability, rarity and seed. Litter cats bring kittens, Purr cats hum notes and Hex cats trail runes.
-  - Tricks get small scenes: the storm, the fog with eyes, the cat asleep in the sunbeam, the box with ears.
-  - Card faces show the art at 50x48. The inspect panel, tooltips and the Cattery show it at 100x96.
-- **Card faces**: the rarity frame, the illustration, the name on its coat's colour (so the coat reads at a glance), the ability, and a sword or orb badge for the type.
-- **Card backs** are small title cards:
-  - Ember, Tide and Gilt use their coat's plate with the mascot smear.
-  - Shadow cats and tricks share the black Power plate with its spectrum smear.
-- **The backdrop** (`stage` shader) is dithered ink green with a soft, static pool of light.
-  - The match and the VS screen add a table top in perspective, with the rival looming beyond it.
-  - Hand matches and defeats use the blood-red stage.
-- **No shimmer.** Nothing animates the dither:
-  - The light never moves.
-  - Resting cards draw 1:1 on whole pixels, with no idle wobble, tilt or foil.
-  - Cards are only drawn scaled or rotated while dealing, flipping or moving fast.
-  - The CRT filter is optional (F2) and off by default.
-
-### Without shaders (Switch)
-
-LÖVE Potion can't compile GLSL, so `src/platform.lua` switches to a shader-free path that keeps the same look:
-
-- The backdrops and the mascot smears are baked to PNG by `tools/switch/bake_assets.py`, a numpy port of the `stage` and `smear` shaders. It reads the presets, ramps and tints from `src/ui/bakes.lua`, so the game and the baker share one source.
-- Plates and title cards get a 16x16 Bayer dot tile in place of the `fdither` pass.
-- Nothing uses custom meshes. Gradients are 1px rows, glows are stacked circles, and moving cards are drawn scaled and rotated.
-
-See [SWITCH.md](SWITCH.md).
+- **Pixel art at its real size.** Cats, cards, plates and icons are drawn at their true pixel size
+  on a 640x360 grid, with no anti-aliasing, dither or blur. Bigger views (the inspect panel, the
+  Cattery, portraits) are exact 2x or 3x enlargements, so pixels stay square and crisp.
+- **One dithered surface.** Only the backdrop (`stage` in `src/ui/shaders.lua`) keeps the Figma
+  Dither effect (Bayer 16x16, 8 levels per channel). Everything on top of it is flat.
+- **Plates** (`src/ui/plates.lua`) are flat palette fills with a 1px dark outline, notched corners
+  and a 1px bevel. Panels, buttons, cushions and card plates all use them.
+- **Title cards** (the Figma "Card Name / Ability / Power" plates) are plates with the mascot's
+  chromatic smear on one end as an accent, and a live serif label.
+- **Cat illustrations** (`src/ui/art.lua`) are bust portraits in three layers:
+  - **Backdrop** by coat, in three flat bands: an Ember hall with pennants and embers, a rainy
+    Tide shore, a Gilt sunburst over a castle, a Shadow night with the moon. The Hands get blood red
+    and flames.
+  - **Figure**: outfit (plate, mail, tunic, robe, rags, apron, cape with ermine), ears, a two-tone
+    head, a fur pattern (tabby, tuxedo, points, patches, smoke, fluff), headwear and props. Stray
+    single pixels are cleaned up, then the face is stamped in pixel by pixel (eyes per expression:
+    calm, wide, smug, fierce, happy, menace; nose, mouth, fangs, tongue), and the figure gets a 1px
+    outline. Shadow cats and the Hands get a coloured rim outside it, like moonlight.
+  - **Glow**: whiskers, orbs, flames, sparkles, notes and runes, with no outline.
+  - `SPEC` gives the named cats their signature looks: Artheline's crown and Sword Hammer,
+    Merline's hat and orb, the Alley Stray's eyepatch and fishbone. The rest are dressed by type,
+    ability, rarity and seed.
+  - Tricks are small scenes: the storm, the fog with eyes, the cat asleep in the sunbeam, the box
+    with ears.
+- **Card faces**: the rarity frame, the 50x48 illustration, the name on its coat's colour, the
+  ability, a type badge and the cat's hearts. Names, abilities and Paws are live text.
+- **The menu** is a festival night: bunting, your champion facing the Four Hands, and the logo.
 
 ### Readable type
 
-| Role | Font | Size |
-| --- | --- | --- |
-| Titles, names, buttons (baked and dithered) | Ancizar Serif | 13–34 px |
-| Anything you need to read (rules, card text, logs) | Jersey 15 | 15 px |
-| Numbers | Jersey 20 / 25 | 20 / 25 px |
-| Names on cards, chips, short labels | Jersey 10 | 10 px |
+Text is never pixel art. Fonts are rasterised at the screen's real resolution (K canvas pixels per
+virtual pixel, set from the window), so type is sharp at any size and on Retina screens:
 
-The match has an **inspect panel** on the right in place of tiny tooltips. Hover any card and its full text appears there in Jersey 15. With nothing hovered, it explains the current bout.
+| Role | Font | Size (virtual px) |
+| --- | --- | --- |
+| Titles, plates, names on title cards | Ancizar Serif (the Figma font) | 13–34 |
+| Anything you read: rules, card text, dialogue | Atkinson Hyperlegible | 10–11.5 |
+| Buttons, numbers, labels | Atkinson Hyperlegible Bold | 7.5–18 |
+
+Atkinson Hyperlegible was designed by the Braille Institute for low-vision readers. A body line is
+20px tall at 720p and 30px at 1080p.
+
+### Contrast (WCAG 2.x AA)
+
+- Every text colour token passes 4.5:1 on every dark ground (deep, ink, ink2, ink3, night). Plate
+  colours pass 4.5:1 with white labels (gold takes black). `tests/run.lua` checks all of it.
+- `gfx.text` runs every colour through `theme.readable(fg, bg)`, which lightens (or darkens) a
+  colour that misses 4.5:1 against its ground, so a stray red or blue label can't fail.
+
+### The window
+
+- The game is laid out on a 640x360 safe area. The visible area grows to fill any window shape:
+  the backdrop covers the margin, so there are no black bars (on a 16:10 Mac it's 640x400).
+- Everything is drawn into one canvas at K = ceil(scale) canvas pixels per virtual pixel, then shown
+  at exactly the window's size. At whole scales (720p, 1080p, 1440p) it's pixel-perfect.
+- Fullscreen is the desktop kind (F11, Alt+Enter, Ctrl+Cmd+F, or Settings) and is remembered.
+- The old bug: the scale was snapped down to multiples of 0.5, so a 1440x900 screen showed the
+  1280x720 game in the middle with black all round. The new layout has no snapping.
+
+### Without shaders (Switch)
+
+LÖVE Potion can't compile GLSL, so `src/platform.lua` switches the one shader-dependent surface, the
+backdrop, to PNGs baked by `tools/switch/bake_assets.py`. Everything else is shader-free already.
+The pixel cleanup pass reads canvases back; where that isn't possible it is skipped.
 
 ## The match: three cushions
 
@@ -147,12 +156,67 @@ The Hands upholster their own cushions as they rise: one at level 5, two at leve
 
 The engine (`match.compute`) records every modifier on every card. The UI replays those numbers, so the floating "+3 Coat edge" and "-2 Hexed" texts are exactly what decided each duel.
 
+### Stolen Lives
+
+The new core rule, and the nemesis system's teeth:
+
+- Every cat brings **lives** (hearts) into a match: 2 for commons and rares, 3 for epics and
+  legendaries (`cards.LIVES`, +1 with the Scruff Ribbon charm).
+- The loser of a duel loses a life. A **crushing** loss, by `match.CRUSH` (5) Paws or more, costs
+  two. Naps, fog and unopposed swats cost nothing. Nine Lives cats never lose lives.
+- At 0 lives the winner **captures** the cat (`apply` in `src/core/match.lua`): it leaves the
+  table, not to the discard pile, and is carried across.
+- After the match (`game.settleLives`):
+  - your captured cats leave your pride. A **Hand** keeps them (`n.captives`, up to 6) and fields
+    them in its deck, a level higher, marked YOURS and down to 1 life. A **stray** pawns them:
+    they turn up at the Mews Market for 15–50 fish.
+  - beat one of your captives in a duel and it comes home. Beat the Hand and every captive comes
+    home.
+  - the rival cats you captured are your **spoils**: they head the reward offer after a win.
+  - a pride never drops below 8: the Arena lends guards.
+- The UI: hearts on every card (shown as they were until the duel takes them), "-1 life",
+  "Crushed! -2 lives", "CAPTURED!" and "RESCUED!" as the cats change sides, a red **!** on a
+  placed cat that could be captured, and the hub and Four Hands screens list who holds whom.
+- The AI weighs the chance a cat on its last lives gets captured (`style.guard`).
+- In the simulation you lose about 0.56 cats a match (half to Hands), capture about 1, and rescue
+  about 0.1 a match.
+
 ### The AI
 
 - **Leading**, it scores every placement of its hand against unknown "phantom" cards built from your deck's average Paws. It slightly prefers dark backs, which give nothing away.
 - **Answering**, it sees only your backs, the same information you get. Each back becomes a phantom of that coat with your average Paws for it.
 - Duels against phantoms count as probabilities. Personality sets the noise, how much it hoards strong cats, and how much it fears losing goblets.
 - `match.suggest` is the same search for the player's side. The autotest and the balance simulation use it.
+
+## Story mode: "Stray to Champion"
+
+`src/core/story.lua` holds the chapters and the script; `src/scenes/story.lua` is the road map and
+`src/scenes/cutscene.lua` plays the scenes (portrait, name plate, typed lines, Skip).
+
+| Chapter | Festival | Omen | Goal |
+| --- | --- | --- | --- |
+| Prologue: The Bin Yard | practice match with Old Bedimew | | finish the tutorial, then name your cat |
+| I: Midsummer | Midsummer Festival of Claws | Ember +1 | reach the knockouts |
+| II: The Harvest Moot | Harvest Moot | Gilt +1 | defeat the Fourth Hand |
+| III: The Winter Yowl | Winter Yowl | coat edge +4 | reach the semi-finals |
+| IV: Moonlit Mews | Moonlit Mews | Shadow +1 | reach the final |
+| V: The Gilded Saucer | Tourney of the Gilded Saucer | +1 goblet | win and dethrone the First Hand |
+
+- The Hands' lines are spoken by whoever holds each rank when you play the chapter: the nemesis
+  system keeps running between chapters, so the story's villains can change.
+- Your pride, charms and the Hands' captives carry from chapter to chapter. Failing a chapter offers
+  a retry with your pride as it was when the chapter began (the captives taken in the failed
+  attempt go back too).
+- Story and free festivals have separate saves (`story.lua`, `festival.lua`).
+
+### The tutorial
+
+`src/core/tutorial.lua` deals fixed hands for a 4-goblet match against Old Bedimew, who leads bout 1
+with an Ember back, a Gilt back and a dark-backed Sunbeam. Eleven lessons walk through coat backs,
+the coat edge, placing (each step waits for the right card on the right cushion, with a bouncing
+arrow), Charge, lives and capture (your Barn Brawler crushes his Squire Kitten), tricks, and
+leading. Charge is locked until the lesson asks for it; after the lessons the match plays out
+normally.
 
 ## The Cattery
 
@@ -190,29 +254,29 @@ A collection that lasts across festivals (`save.seen`). Every cat you own, and e
 
 ## Balance snapshot
 
-`luajit tests/run.lua` plays 90 festivals with the AI choosing for you. It takes the first reward and never shops, so it never upholsters a cushion:
+`luajit tests/run.lua` plays 90 festivals with the AI choosing for you. It takes the first reward
+(spoils first) and never shops, so it never upholsters a cushion or buys back a pawned cat:
 
-- About 58–62% of matches won, about 44–47% against Hands, and about 4.2 bouts per match. The range covers two seed sets. The sim is chaotic, so single-seed numbers move by about ±5% with any change.
-- About 11–17% of festivals won, and about a third of festivals end in the groups.
+- About 62% of matches won, about 51% against Hands, and about 4.2 bouts per match.
+- About 13% of festivals won; a quarter end in the groups.
+- The sim is chaotic: any change moves single-seed numbers by about ±5%.
 
 Tuning knobs:
-- Goblets per side: `match.GOBLETS`.
-- Coat edge: `match.COAT_EDGE`.
+- Goblets per side: `match.GOBLETS`. Coat edge: `match.COAT_EDGE`. Crushing margin: `match.CRUSH`.
+- Lives: `cards.LIVES`. Captives a Hand keeps: `game.MAX_CAPTIVES`. Pawn prices: `game.PAWN_PRICE`.
 - Hex strength: `compute` in `src/core/match.lua`.
 - Stage scaling (hand size, extra goblets): `game.setupMatch`. Hands get one extra goblet per 5 levels.
 - Bond strength: `cards.BOND_PAWS`. Cushion price and the Hands' cushions: `game.CUSHION_PRICE`, `game.handCushions`.
-- Card Paws: `src/core/cards.lua`.
-- Reward quality: `game.RARITY_WEIGHTS`.
-- Stray ratings: `festival.create`.
+- Card Paws: `src/core/cards.lua`. Reward quality: `game.RARITY_WEIGHTS`. Stray ratings: `festival.create`.
 
 ## From the Figma file
 
 | Figma | In game |
 | --- | --- |
-| Title frame: two-tone "Draft" lockup and tagline | title screen, victory summary (`assets/img/logo.png`) |
+| Title frame: two-tone "Draft" lockup and tagline | main menu, victory summary (`assets/img/logo.png`) |
 | Title cards: Card Name, Type, Ability, Power, Rarity | `plates.titleCard`, used for every heading, banner, plaque, stall and card back |
-| Dither effect (Bayer 16x16, 8 levels, 2px) | `fdither` shader, applied to every surface |
-| Lens distortion effect (anamorphic, chromatic) | `smear` shader: title-card streaks, card backs, the VS portrait |
+| Dither effect (Bayer 16x16, 8 levels, 2px) | the `stage` backdrop only |
+| Lens distortion effect (anamorphic, chromatic) | baked once (`tools/switch/bake_assets.py`), drawn as the title-card and card-back accent |
 | Red/blue cat mascot | window icon; its silhouette drives the smear (`assets/img/mascot-silhouette.png`) |
 | Shadow creature with flames | defeat summary |
 | Card sheet (Artheline, Merline, the Black Cats) | the first entries in `src/core/cards.lua`, with signature looks in `art.lua` |
@@ -222,4 +286,5 @@ Tuning knobs:
 - Trick cards that move between cushions after the reveal.
 - Bond quests: a market or event that offers the missing partner of a cat you own.
 - Cattery rewards: unlock a starting cat or a cosmetic backdrop for finding every bond.
+- A ransom: pay fish to a Hand to buy back one captive between festivals.
 - Music beyond the generated ambient loop.

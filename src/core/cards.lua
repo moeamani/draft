@@ -10,7 +10,7 @@ M.ABILITIES = {
   hex = { name = "Black Cat", desc = "The cat facing it loses 2 Paws." },
   litter = { name = "Litter", desc = "+2 Paws for each of your other cats of its coat this bout." },
   pounce = { name = "Pounce", desc = "With the coat edge, +3 more Paws." },
-  ninelives = { name = "Nine Lives", desc = "Comes back to your hand after the bout (once per match)." },
+  ninelives = { name = "Nine Lives", desc = "Never loses a life, so it can't be captured. Comes back to your hand after the bout (once per match)." },
   stray = { name = "Stray", desc = "Unopposed, it knocks off 2 goblets." },
   groom = { name = "Groom", desc = "When it swats, set one of your goblets back up." },
   purr = { name = "Purr", desc = "The cats on the cushions beside it get +2 Paws." },
@@ -165,6 +165,13 @@ function M.shortName(d)
   local n = d.name:gsub("^Sir ", ""):gsub("^The ", ""):gsub("^King ", "")
   n = n:gsub(" of .*$", ""):gsub(" the .*$", ""):gsub(" le .*$", "")
   return n
+end
+
+-- Stolen Lives: how many lost duels a cat survives in one match before the rival captures it.
+M.LIVES = { common = 2, rare = 2, epic = 3, legendary = 3 }
+function M.maxLives(d)
+  if d.kind ~= "unit" then return 0 end
+  return M.LIVES[d.rarity] or 2
 end
 
 function M.paws(inst)

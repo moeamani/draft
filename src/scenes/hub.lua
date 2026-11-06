@@ -65,6 +65,16 @@ function S:draw()
   if widgets.button("h_stand", 8, ly, 296, 20, f.stage == "group" and "All groups and the bracket" or "Full standings", { font = T.body() }) then overlays.standings(f) end
   ly = ly + 24
   gfx.panel(8, ly, 296, 238 - ly, C.deep)
+  -- story mode: the chapter's goal
+  if run.story then
+    local story = require("src.core.story")
+    local ch = story.chapter(save)
+    if ch then
+      local met = story.goalMet(save)
+      gfx.text((met and "Goal reached: " or "Goal: ") .. ch.goalText, T.bold(), 14, ly + 3, met and C.green or C.goldText, { bg = C.deep })
+      ly = ly + 16
+    end
+  end
   -- the festival's omen: one rule twist for every match here
   local omen = festival.omen(f)
   if omen then
@@ -107,8 +117,17 @@ function S:draw()
     gfx.text("Threat", T.body(), 624 - stars * 10 - 6, 84, C.muted, { align = "right" })
     if n then
       local cy = overlays.traitChips(n, 320, 142, 304)
-      local last = n.history[#n.history]
-      if last and cy < 172 then gfx.textf(last.text, T.body(), 320, cy + 4, 140, "left", C.muted) end
+      local caps = n.captives or {}
+      if #caps > 0 then
+        local names = {}
+        for i = 1, math.min(3, #caps) do names[i] = cards.shortName(cards.getDef(caps[i])) end
+        local more = #caps > 3 and (" and " .. (#caps - 3) .. " more") or ""
+        gfx.textf(("Holds your %s%s. Beat them, or beat %s, to bring %s home."):format(table.concat(names, ", "), more, #caps > 1 and "each one" or "it", #caps > 1 and "them" or "it"),
+          T.body(), 320, cy + 4, 146, "left", C.redText, { bg = C.deep })
+      else
+        local last = n.history[#n.history]
+        if last and cy < 172 then gfx.textf(last.text, T.body(), 320, cy + 4, 140, "left", C.muted, { bg = C.deep }) end
+      end
     else
       gfx.textf("Beat a stray and it will squeal one of the Hands' secrets.", T.body(), 320, 142, 300, "left", C.paper2)
     end

@@ -120,6 +120,17 @@ function M.cardLines(def, inst, inf)
     for _, m in ipairs(inf.mods) do parts[#parts + 1] = signed(m.amount) .. " " .. m.text end
     lines[#lines + 1] = { text = table.concat(parts, ", ") .. " = " .. math.max(0, inf.paws) .. " Paws", color = C.green }
   end
+  if def.kind == "unit" then
+    local max = cards.maxLives(def)
+    if def.ability == "ninelives" then
+      lines[#lines + 1] = { text = "Can't be captured.", color = C.pale }
+    elseif inst and inst.captive then
+      lines[#lines + 1] = { text = "Your cat, captured by the rival. It's down to 1 life: beat it and it comes home.", color = C.redText }
+    else
+      local left = inst and inst.lives or max
+      lines[#lines + 1] = { text = ("Lives %d/%d. A lost duel costs 1, a crushing loss (by %d+) costs 2. At 0 the rival captures it."):format(left, max, require("src.core.match").CRUSH), color = C.pale }
+    end
+  end
   if inst and inst.level and inst.level > 1 then
     lines[#lines + 1] = { text = cards.LEVEL_TITLES[inst.level] .. " (level " .. inst.level .. ")", color = C.pale }
   end

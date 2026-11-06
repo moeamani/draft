@@ -28,9 +28,10 @@ function M.omen(f) return f and f.omen and M.OMENS[f.omen] or nil end
 -- round-robin pairings by group slot
 local ROUNDS = { { { 1, 2 }, { 3, 4 } }, { { 1, 3 }, { 2, 4 } }, { { 1, 4 }, { 2, 3 } } }
 
-function M.create(save, seed)
+-- festIndex (optional): which festival of the cycle (story chapters pick theirs).
+function M.create(save, seed, festIndex)
   local r = rng.new(seed)
-  local fest = FESTIVALS[(save.runs - 1) % #FESTIVALS + 1]
+  local fest = FESTIVALS[festIndex or ((save.runs - 1) % #FESTIVALS + 1)]
   local f = {
     name = "The " .. fest[1], omen = fest[2], entrants = {}, groups = {}, results = {},
     stage = "group", round = 1, bracket = { qf = {}, sf = {}, final = {} }, champion = nil,

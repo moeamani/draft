@@ -92,6 +92,21 @@ function S:header()
   for _, t in ipairs(out.intel) do
     y = y + gfx.textf(t, T.body(), 110, y, 420, "center", C.green) + 3
   end
+  -- Stolen Lives: what changed hands
+  local lost = {}
+  for _, c in ipairs(out.captured or {}) do lost[#lost + 1] = cards.CARDS[c.id] and cards.CARDS[c.id].name or c.id end
+  if #lost > 0 then
+    local where = self.n and (self.n.name .. " keeps them. Beat " .. self.n.name .. " to bring them home.") or "The stray will pawn them at the Mews Market."
+    y = y + gfx.textf("Captured: " .. table.concat(lost, ", ") .. ". " .. where, T.body(), 90, y + 2, 460, "center", C.redText) + 5
+  end
+  local back = {}
+  for _, id in ipairs(out.rescued or {}) do back[#back + 1] = cards.CARDS[id] and cards.CARDS[id].name or id end
+  if #back > 0 then
+    y = y + gfx.textf("Rescued: " .. table.concat(back, ", ") .. " came home!", T.body(), 90, y + 2, 460, "center", C.goldText) + 5
+  end
+  if (out.guards or 0) > 0 then
+    y = y + gfx.textf("Your pride is thin: the Arena lends you " .. out.guards .. " guard" .. (out.guards > 1 and "s" or "") .. ".", T.body(), 90, y + 2, 460, "center", C.muted) + 5
+  end
   return y
 end
 
@@ -122,8 +137,16 @@ function S:draw()
       end
     end
   elseif self.step == "cards" then
-    plates.print("Choose a cat to join your pride", 20, 320, math.max(y + 2, 168), C.white, { align = "center" })
+    local spoils = self.out.spoils and next(self.out.spoils) ~= nil
+    plates.print(spoils and "Spoils: choose a cat to join your pride" or "Choose a cat to join your pride", 20, 320, math.max(y + 2, 168), C.white, { align = "center" })
     local i = self.picker and self.picker:draw()
+    if self.picker and self.out.spoils then
+      for k, v in ipairs(self.picker.views) do
+        if self.out.spoils[self.out.cardChoices[k]] then
+          gfx.chip("captured", math.floor(v.x - 20), math.floor(v.y - 52), "gold")
+        end
+      end
+    end
     if i then
       local v = self.picker.views[i]
       game.addCard(run, self.out.cardChoices[i])

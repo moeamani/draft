@@ -20,7 +20,8 @@ local T = theme.T
 function S:enter()
   self.t = 0
   self.stock = game.makeMarket(G.save.run)
-  self.picker = picker.new(self.stock.cards, { x = 196, y = 142, scale = 1, gap = 16, dealFrom = { 196, 420 } })
+  local n = #self.stock.cards
+  self.picker = picker.new(self.stock.cards, { x = 196, y = 142, scale = 1, gap = n > 4 and 8 or 16, dealFrom = { 196, 420 } })
 end
 
 function S:update(dt)
@@ -41,12 +42,21 @@ function S:draw()
     else
       run.fish = run.fish - c.price
       c.sold = true
-      game.addCard(run, c.id)
+      if c.pawn then
+        game.buyBack(run, c)
+        fx.toast(cards.getDef(c).name .. " is back in your pride.", "good")
+      else
+        game.addCard(run, c.id)
+      end
       sfx.play("coin")
       local v = self.picker.views[i]
       fx.burst(v.x, v.y, C.gold, 20, 120)
       G.persist()
     end
+  end
+  for k, c in ipairs(self.stock.cards) do
+    local v = self.picker.views[k]
+    if c.pawn and not c.sold and v then gfx.chip("yours: pawned", math.floor(v.x - 28), math.floor(v.y - 52), "strength") end
   end
   gfx.text("Hover a card to read it. Click to buy.", T.body(), 196, 214, C.muted, { align = "center" })
   self:drawUpholsterer(run)

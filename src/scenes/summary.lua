@@ -58,6 +58,11 @@ function S:draw()
     gfx.text(st[2], T.body(), x, sy + 31, C.paper2, { align = "center" })
   end
   if widgets.button("s_br", 180, sy + 66, 132, 28, "Final bracket", { font = T.body() }) then overlays.standings(f) end
+  if run.story then
+    -- story mode: the chapter's verdict comes next
+    if widgets.button("s_go", 320, sy + 66, 160, 28, "Continue the story", { color = C.red }) then G.scenes.story.endChapter() end
+    return
+  end
   if widgets.button("s_go", 320, sy + 66, 160, 28, "The Arena moves on", { color = C.red, font = T.body() }) then
     self.news = game.arenaMovesOn(save)
     if #self.news == 0 then self.news = { "The Hands lick their wounds and wait." } end
@@ -82,7 +87,7 @@ function S:drawNews()
     G.persist()
     G.go("hub", { fresh = true })
   end
-  if widgets.button("n_title", 324, 318, 136, 30, "Title") then G.go("title") end
+  if widgets.button("n_title", 324, 318, 136, 30, "Main menu") then G.go("menu") end
 end
 
 return S

@@ -30,7 +30,7 @@ end
 
 function M.newSave(playerName, seed)
   local save = {
-    version = 2, playerName = playerName, rng = rng.new(seed or os.time()), hands = {}, fallen = {},
+    version = 3, playerName = playerName, rng = rng.new(seed or os.time()), hands = {}, fallen = {},
     chronicle = {}, runs = 0, victories = 0, nextId = 0, bestRing = 0, run = nil,
   }
   for rank = 1, 4 do save.hands[rank] = nemesis.generate(save.rng, nid(save), 5 - rank, 0) end
@@ -231,6 +231,7 @@ function M.resolveMatch(save, ctx)
   run.nextGoblets = 0
   local n = ctx.nemesis
   if n then n.met = true end
+  M.settleLives(save, ctx, out)
   local pd = 10 + 10 * math.abs(math.max(0, me.goblets) - math.max(0, them.goblets))
 
   if won then
@@ -248,9 +249,19 @@ function M.resolveMatch(save, ctx)
       end
     end
     local quality = n and 3 or (ctx.stage ~= "group" and 2 or (ctx.tier >= 2 and 1 or 0))
-    out.cardChoices = M.rollCards(run.rng, 3, quality)
+    -- the rival cats you captured come first; the rest of the offer is drawn as before
+    local offer = {}
+    for _, id in ipairs(out.spoilIds) do if #offer < 3 and not util.contains(offer, id) then offer[#offer + 1] = id end end
+    out.spoils = {}
+    for _, id in ipairs(offer) do out.spoils[id] = true end
+    for _, id in ipairs(M.rollCards(run.rng, 3, quality)) do
+      if #offer < 3 and not util.contains(offer, id) then offer[#offer + 1] = id end
+    end
+    out.cardChoices = offer
     if n or ctx.stage ~= "group" then out.charmChoices = M.charmOffer(run, 2) end
     if n then
+      run.beatHands = run.beatHands or {}
+      run.beatHands[n.id] = true
       out.line = nemesis.speak(run.rng, n, "beaten", save.playerName)
     else
       local targets = util.filter(save.hands, nemesis.hasSecrets)
@@ -359,6 +370,66 @@ end
 M.CARD_PRICE = { common = 14, rare = 28, epic = 48, legendary = 85 }
 M.REMOVE_PRICE, M.UPGRADE_PRICE = 20, 25
 
+-- ---------------------------------------------------------------- Stolen Lives
+
+M.PAWN_PRICE = { common = 15, rare = 25, epic = 35, legendary = 50 }
+M.MAX_CAPTIVES = 6
+
+-- After a match: your cats that ran out of lives go to the rival (a Hand keeps them; a stray
+-- pawns them at the market), your captives beaten back come home, and the rival cats you
+-- captured become spoils you can pick from. Beating a Hand frees every captive they hold.
+function M.settleLives(save, ctx, out)
+  local run = save.run
+  local s = ctx.state
+  local me, them = s.sides[1], s.sides[2]
+  local n = ctx.nemesis
+  out.captured, out.rescued, out.spoilIds = {}, {}, {}
+  save.capc = save.capc or 0
+  local function bringHome(c)
+    M.addCard(run, c.id, c.level)
+    if c.def then run.deck[#run.deck].def = c.def end
+    out.rescued[#out.rescued + 1] = c.id
+  end
+  for _, c in ipairs(me.lost) do
+    local _, idx = util.find(run.deck, function(x) return x.uid == c.uid end)
+    if idx then table.remove(run.deck, idx) end
+    out.captured[#out.captured + 1] = { id = c.id, by = ctx.opp.name, hand = n ~= nil }
+    if n then
+      n.captives = n.captives or {}
+      save.capc = save.capc + 1
+      table.insert(n.captives, { id = c.id, def = c.def, level = math.min(3, (c.level or 1) + 1), xp = 0, uid = "cap" .. save.capc,
+        captive = true, owner = save.playerName, chapter = save.story and save.story.chapter or nil })
+      if #n.captives > M.MAX_CAPTIVES then table.remove(n.captives, 1) end
+      nemLog(save, n, "Captured " .. cards.getDef(c).name .. " from " .. save.playerName .. ".")
+    else
+      local f = run.festival
+      f.pawnshop = f.pawnshop or {}
+      table.insert(f.pawnshop, { id = c.id, def = c.def, level = c.level or 1, price = M.PAWN_PRICE[cards.getDef(c).rarity] or 20, by = ctx.opp.name })
+    end
+  end
+  for _, c in ipairs(them.lost) do
+    if c.captive and n then
+      bringHome(c)
+      for i, cap in ipairs(n.captives or {}) do if cap.uid == c.uid then table.remove(n.captives, i); break end end
+    elseif not c.captive and cards.CARDS[c.id] and not cards.CARDS[c.id].token then
+      out.spoilIds[#out.spoilIds + 1] = c.id
+    end
+  end
+  if n and s.result == "win" and n.captives and #n.captives > 0 then
+    for _, c in ipairs(n.captives) do bringHome(c) end
+    n.captives = {}
+  end
+  -- a pride can't shrink below 8: the Arena lends guards to fill the gaps
+  out.guards = 0
+  while #run.deck < 8 do
+    M.addCard(run, "guard")
+    out.guards = out.guards + 1
+  end
+end
+
+-- How many of the player's cats each Hand holds.
+function M.captiveCount(n) return n.captives and #n.captives or 0 end
+
 -- The Hands upholster their own cushions as they rise: one at level 5, two at level 7.
 function M.handCushions(n)
   local out = { false, false, false }
@@ -389,6 +460,12 @@ function M.makeMarket(run)
   end
   stock.cushion = rng.pick(run.rng, offers)
   stock.cushion.price = M.CUSHION_PRICE
+  -- the pawnbroker: cats strays captured from you this festival, for sale back to you
+  local pawned = run.festival.pawnshop or {}
+  for k = math.max(1, #pawned - 1), #pawned do
+    local p = pawned[k]
+    if p then stock.cards[#stock.cards + 1] = { id = p.id, def = p.def, level = p.level, price = p.price, sold = false, pawn = p } end
+  end
   for _, id in ipairs(M.rollCards(run.rng, 4, festival.tier(run.festival) >= 4 and 2 or 1)) do
     stock.cards[#stock.cards + 1] = { id = id, price = M.CARD_PRICE[cards.CARDS[id].rarity], sold = false }
   end
@@ -404,6 +481,14 @@ function M.upgradeCard(run, uid)
   c.level = c.level + 1
   c.xp = cards.XP_FOR_LEVEL[c.level]
   return true
+end
+
+-- Buy back a pawned cat.
+function M.buyBack(run, item)
+  M.addCard(run, item.id, item.level)
+  if item.def then run.deck[#run.deck].def = item.def end
+  local list = run.festival.pawnshop or {}
+  for i, p in ipairs(list) do if p == item.pawn then table.remove(list, i); break end end
 end
 
 function M.removeCard(run, uid)

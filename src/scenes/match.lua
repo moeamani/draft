@@ -38,10 +38,19 @@ local CUSHION_NAMES = { "Left", "Middle", "Right" }
 
 S.bg = { preset = "match" }
 
-function S:enter()
+function S:enter(p)
   local save = G.save
-  self.ctx = game.setupMatch(save)
-  G.persist()
+  p = p or {}
+  self.tut = nil
+  if p.tutorial then
+    -- the prologue's practice match against Old Bedimew
+    local tutorial = require("src.core.tutorial")
+    self.ctx = tutorial.setup()
+    self.tut = tutorial.new(self)
+  else
+    self.ctx = game.setupMatch(save)
+    G.persist()
+  end
   self.s = self.ctx.state
   self.t = 0
   self.views, self.board, self.rviews, self.leaving = {}, {}, {}, {}
@@ -54,9 +63,13 @@ function S:enter()
   self.gob = { self.s.sides[1].goblets, self.s.sides[2].goblets }
   self.blink = 3
   local n = self.ctx.nemesis
-  self.portrait, self.eyes = art.entrant(save, self.ctx.opp, 128, true)
+  if self.tut then
+    self.portrait, self.eyes = art.character("bedimew", 128, true)
+  else
+    self.portrait, self.eyes = art.entrant(save, self.ctx.opp, 128, true)
+  end
   S.bg = { preset = "match", ramp = n and "blood" or "felt" }
-  fx.banner(festival.stageLabel(save.run.festival), "Knock all of their goblets off the table", n and C.red or C.gold, 0, 160)
+  fx.banner(self.tut and "Practice match" or festival.stageLabel(save.run.festival), "Knock all of their goblets off the table", n and C.red or C.gold, 0, 160)
   self:at(1.0, function() self:beginBout() end)
 end
 
@@ -85,6 +98,7 @@ end
 
 function S:rivalCard(i, c)
   local v = cardview.new(c, RDECK_X, RDECK_Y, 0.5)
+  v.livesShown = (self.livesBefore and self.livesBefore[c.uid]) or c.lives
   v.flip, v.tflip = -1, -1
   v.backKind = match.backOf(c)
   if self.s.sides[2].shown[i] and not self.busyResolve then v.tflip = 1 end
@@ -155,6 +169,10 @@ end
 
 function S:charge()
   if self.busy or self.finished then return end
+  if self.tut and not self.tut:allowCharge() then
+    fx.toast("Follow Bedimew's lesson first.", "info")
+    return
+  end
   local s = self.s
   local placed = 0
   for i = 1, 3 do if self.slots[i] then placed = placed + 1 end end
@@ -167,6 +185,15 @@ function S:charge()
   local slots = { self.slots[1], self.slots[2], self.slots[3] }
   local rec = match.commit(s, slots)
   if not rec then return end
+  -- hearts show what each cat had before this bout, until its duel takes them
+  local before = {}
+  for _, w in ipairs(rec.wounds or {}) do before[w.uid] = w.left + w.cost end
+  self.livesBefore = before
+  for i = 1, 3 do
+    local uid = slots[i]
+    if uid and self.views[uid] then self.views[uid].livesShown = before[uid] or self.views[uid].inst.lives end
+    if self.rviews[i] then self.rviews[i].livesShown = before[self.rviews[i].inst.uid] or self.rviews[i].inst.lives end
+  end
   self.busy, self.busyResolve, self.drag = true, true, nil
   self.rec = rec
   for i = 1, 3 do
@@ -321,6 +348,30 @@ function S:duel(i, du, rec)
       line = line .. (du.swats > 1 and (". " .. du.swats .. " goblets fall.") or ". A goblet falls.")
       self:knock(3 - du.winner, du.swats)
       if du.winner == 1 then sfx.play("cheer", 1, 0.5) end
+      local w = du.wound
+      if w and lv then
+        lv.livesShown = w.left
+        if w.captured then
+          lv.captured = w.rescued and "rescued" or "captured"
+          local mx = w.side == 1 and MY_X[i] or RIVAL_X[i]
+          local my = w.side == 1 and MY_Y or RIVAL_Y
+          if w.rescued then
+            fx.float(mx, my + 6, "RESCUED!", C.goldText, true)
+            fx.burst(mx, my, C.gold, 24, 140)
+          else
+            fx.float(mx, my + 6, w.side == 1 and "CAPTURED!" or "Captured!", w.side == 1 and C.redText or C.goldText, true)
+            fx.burst(mx, my, w.side == 1 and C.red or C.gold, 20, 120)
+          end
+          fx.addShake(5)
+          sfx.play(w.side == 1 and "lose" or "chip", 1.2, 0.7)
+          local who = cards.shortName(linf.def)
+          if w.rescued then line = line .. " " .. who .. " is yours again!"
+          elseif w.side == 1 then line = line .. " " .. who .. " is captured!"
+          else line = line .. " You capture " .. who .. "!" end
+        else
+          self:popText(lv, w.crushed and "Crushed! -2 lives" or "-1 life", C.redText, 14)
+        end
+      end
       if du.groom then fx.float(du.winner == 1 and MY_X[i] or RIVAL_X[i], (du.winner == 1 and MY_Y or RIVAL_Y) + 30, "Groom: +1 goblet", C.green) end
     else
       line = ("%s: nobody swats."):format(where)
@@ -338,7 +389,12 @@ function S:clearBoard(rec)
     local v = self.board[i]
     if v then
       v.dim, v.paws = 0, nil
-      if returns[v.inst.uid] and util.find(self.s.sides[1].hand, function(c) return c.uid == v.inst.uid end) then
+      if v.captured then
+        -- carried off to the rival's side of the table
+        v:setTarget(RDECK_X, RDECK_Y - 10, 0.5, 0.8)
+        v.leaveT = 0.8
+        self.leaving[#self.leaving + 1] = v
+      elseif returns[v.inst.uid] and util.find(self.s.sides[1].hand, function(c) return c.uid == v.inst.uid end) then
         self.views[v.inst.uid] = v
         self:popText(v, "Nine Lives: back to hand", C.cyan)
       else
@@ -348,7 +404,12 @@ function S:clearBoard(rec)
       end
     end
     local r = self.rviews[i]
-    if r then
+    if r and r.captured then
+      -- yours now: off to your pile
+      r:setTarget(DECK_X, DECK_Y, 0.5, -0.8)
+      r.leaveT = 0.8
+      self.leaving[#self.leaving + 1] = r
+    elseif r then
       r:setTarget(RDECK_X + 60, RDECK_Y - 60, 0.5, 0.6)
       r.leaveT = 0.6
       self.leaving[#self.leaving + 1] = r
@@ -365,6 +426,22 @@ function S:finish()
   fx.banner(won and "Victory!" or "Defeat", won and "The crowd roars" or "The crowd groans", won and C.gold or C.red, 0, 160)
   sfx.play(won and "win" or "lose")
   if won then for i = 1, 4 do fx.burst(160 + i * 64, 150, C.gold, 16, 140) end end
+  if self.tut then
+    -- the prologue goes on, win or lose
+    local story = require("src.core.story")
+    self:at(1.8, function()
+      G.go("cutscene", {
+        lines = story.lines(G.save, "prologue_outro"), bg = { preset = "menu" },
+        onDone = function()
+          G.save.story.done[0] = true
+          G.save.story.chapter = math.max(1, G.save.story.chapter)
+          G.persist()
+          G.go("story")
+        end,
+      })
+    end)
+    return
+  end
   local out = game.resolveMatch(G.save, self.ctx)
   G.persist()
   self:at(1.8, function() G.go("result", { ctx = self.ctx, out = out }) end)
@@ -374,6 +451,7 @@ end
 
 function S:update(dt)
   self.t = self.t + dt
+  if self.tut then self.tut:update(dt) end
   for i = #self.timeline, 1, -1 do
     local e = self.timeline[i]
     e.t = e.t - dt
@@ -428,8 +506,18 @@ function S:update(dt)
       local uid = self.slots[i]
       if uid and self.views[uid] then
         local inf = pr.info[1][i]
-        self.views[uid].paws = (inf.kind == "cat" or inf.kind == "box") and math.max(0, inf.paws) or nil
-        self.views[uid].previewInfo = inf
+        local v = self.views[uid]
+        v.paws = (inf.kind == "cat" or inf.kind == "box") and math.max(0, inf.paws) or nil
+        v.previewInfo = inf
+        -- would this cat be captured if it loses here?
+        local du = pr.duels[i]
+        local lives = v.inst.lives or 2
+        local risk = 0
+        if inf.kind == "cat" and inf.def.ability ~= "ninelives" and du.reason == "duel" and lives <= 2 then
+          if du.pCrush then risk = lives <= 1 and (1 - du.p) or du.pCrush[1]
+          elseif du.winner == 2 and (lives <= 1 or (du.margin or 0) >= match.CRUSH) then risk = 1 end
+        end
+        v.risk = risk >= 0.45
       end
     end
   end
@@ -443,7 +531,7 @@ function S:update(dt)
     local hov = c.uid == self.hoverUid and not self.drag
     v.hovered = hov
     v.selected = false
-    v.paws, v.previewInfo = nil, nil
+    v.paws, v.previewInfo, v.risk = nil, nil, nil
     v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 22 or 0), 1, 0)
   end
   for i = 1, 3 do
@@ -597,7 +685,7 @@ function S:drawPlaques()
   gfx.panel(8, 292, 168, 60, C.deep)
   plates.header(8, 292, 168, 26, C.ink3, me.name, { size = 18 })
   gfx.text(("Deck %d  Discard %d"):format(#me.deck, #me.discard), T.body(), 14, 318, C.paper2)
-  hud.charmRow(save.run, 14, 335)
+  if save.run and not self.tut then hud.charmRow(save.run, 14, 335) end
 end
 
 function S:inspectLines()
@@ -649,8 +737,64 @@ function S:infoFor(v)
   end
 end
 
+-- Bedimew's lesson, in place of the inspect panel while the tutorial runs.
+function S:drawTutorial()
+  local tut = self.tut
+  local st = tut:step()
+  gfx.panel(PX, PY, PW, PH, C.deep)
+  plates.header(PX, PY, PW, 24, C.goldDark, "Old Bedimew", { size = 18, streak = 0.43 })
+  local me = art.character("bedimew", 48)
+  gfx.box(PX + 6, PY + 30, 50, 50, C.black)
+  lg.setColor(1, 1, 1)
+  lg.draw(me, PX + 7, PY + 31)
+  gfx.text(("Lesson %d of %d"):format(tut.i, #tut.STEPS), T.small(), PX + 62, PY + 34, C.muted, { bg = C.deep })
+  local y = PY + 86
+  y = y + gfx.textf(st.text, theme.font("body", 10.5), PX + 8, y, PW - 16, "left", C.paper, { bg = C.deep }) + 8
+  if st.next then
+    if widgets.button("tut_next", PX + 8, PY + PH - 34, PW - 16, 26, st.last and "Let's fight" or "Next", { color = C.red }) then
+      sfx.play("click")
+      tut:advance()
+    end
+  end
+end
+
+function S:drawHighlights()
+  local st = self.tut and self.tut:step()
+  if not st or not st.target then return end
+  local pulse = 0.65 + 0.35 * math.sin(self.t * 6)
+  local bob = math.floor(math.sin(self.t * 5) * 2 + 0.5)
+  local function frame(x, y, w, h)
+    theme.set(C.goldText, pulse)
+    lg.rectangle("fill", x, y, w, 2); lg.rectangle("fill", x, y + h - 2, w, 2)
+    lg.rectangle("fill", x, y, 2, h); lg.rectangle("fill", x + w - 2, y, 2, h)
+  end
+  local function arrow(x, y)
+    theme.set(C.black)
+    lg.polygon("fill", x - 7, y - 1, x + 7, y - 1, x, y + 8)
+    theme.set(C.goldText)
+    lg.polygon("fill", x - 5, y, x + 5, y, x, y + 6)
+  end
+  if st.target[1] == "cushion" then
+    local i = st.target[2]
+    frame(MY_X[i] - 36, MY_Y - 47, 72, 94)
+    arrow(MY_X[i], MY_Y - 58 + bob)
+  elseif st.target[1] == "charge" then
+    frame(PX - 3, 306, PW + 6, 48)
+  end
+  if st.card then
+    for _, c in ipairs(self:handList()) do
+      local v = self.views[c.uid]
+      if v and v.def.id == st.card and not (self.drag and self.drag.uid == c.uid) then
+        frame(v.x - 31, v.y - 42, 62, 84)
+        arrow(v.x, v.y - 54 + bob)
+      end
+    end
+  end
+end
+
 function S:drawPanel()
   local s = self.s
+  if self.tut and self.tut:active() then return self:drawTutorial() end
   gfx.panel(PX, PY, PW, PH, C.deep)
   local x, y, w = PX + 7, PY + 28, PW - 14
   local lines, def = self:inspectLines()
@@ -756,9 +900,10 @@ function S:draw()
     end
   end
   self:drawPlaques()
+  self:drawHighlights()
   -- right column
   if widgets.button("m_rules", PX, 8, 52, 18, "Rules", { font = T.body() }) then overlays.help() end
-  if widgets.button("m_deck", PX + 56, 8, 52, 18, "Pride", { font = T.body() }) then overlays.deck(G.save.run.deck) end
+  if widgets.button("m_deck", PX + 56, 8, 52, 18, "Pride", { disabled = self.tut ~= nil or not G.save.run }) then overlays.deck(G.save.run.deck) end
   if widgets.button("m_menu", PX + 112, 8, 52, 18, "Menu", { font = T.body() }) then overlays.pause() end
   self:drawPanel()
   local idle = not self.busy and not self.finished

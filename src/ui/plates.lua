@@ -1,136 +1,88 @@
--- Baked surfaces in the style of the Figma title cards.
---   * plate:     a flat palette colour with a soft top light and a 1px outline
---   * titleCard: a plate with the mascot silhouette smeared by the chromatic lens, and a serif label
---   * text:      serif type on its own (names, headings drawn straight onto other surfaces)
--- Everything is composed smooth (antialiased type, gradients, the smear) and then quantised once
--- with the Figma dither (Bayer 16x16, 8 levels per channel), so every surface shares one texture.
--- Results are cached; the cache is trimmed when it grows.
--- Without runtime shaders (LÖVE Potion on Switch) the same surfaces are built from the PNGs that
--- tools/switch/bake_assets.py renders with identical math, plus an ordered-dither tile overlay.
+-- Plates and title cards: the building blocks of every panel, button, heading and card face.
+--
+-- A plate is clean pixel art: a flat palette fill, a 1px dark outline with notched corners and a
+-- 1px bevel (light along the top, dark along the bottom). No dither, no gradients.
+-- Title cards (the Figma "Card Name / Ability / Power" plates) add the mascot's chromatic smear
+-- along one end as an accent. Their labels are live serif text, drawn sharp at screen resolution.
 local bakes = require("src.ui.bakes")
-local shaders = require("src.ui.shaders")
+local gfx = require("src.ui.gfx")
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
 local M = {}
 local C = theme.c
+
+-- small LRU-ish cache of baked canvases
 local cache, order = {}, {}
 local LIMIT = 400
-
-local function remember(key, value)
-  cache[key] = value
+local function remember(key, v)
+  cache[key] = v
   order[#order + 1] = key
   if #order > LIMIT then
     local old = table.remove(order, 1)
-    local v = cache[old]
-    if v and v.canvas then v.canvas:release() end
+    local o = cache[old]
+    if o and o.canvas then o.canvas:release() end
     cache[old] = nil
   end
-  return value
-end
-
-local function newCanvas(w, h)
-  local c = lg.newCanvas(math.max(1, w), math.max(1, h))
-  c:setFilter("nearest", "nearest")
-  return c
 end
 
 local function colKey(c) return ("%.3f,%.3f,%.3f"):format(c[1], c[2], c[3]) end
 
--- Canvases that still hold premultiplied colour (only on the shader-free path) and must be drawn
--- with the premultiplied blend mode.
-local premul = setmetatable({}, { __mode = "k" })
-M.premultiplied = premul
+local function newCanvas(w, h)
+  local cv = lg.newCanvas(math.max(1, w), math.max(1, h))
+  cv:setFilter("nearest", "nearest")
+  return cv
+end
 
--- Bayer 16x16, the same threshold matrix as the shader (src/ui/shaders.lua).
-local function fract(x) return x - math.floor(x) end
-local function b2(x, y) x, y = math.floor(x), math.floor(y); return fract(x / 2 + y * y * 0.75) end
-local function bayer4(x, y) return b2(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
-local function bayer8(x, y) return bayer4(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
-function M.bayer16(x, y) return bayer8(0.5 * x, 0.5 * y) * 0.25 + b2(x, y) end
-
--- Shader-free stand-in for the dither: a 16x16 tile of light and dark dots that gives flat colours
--- the same fine texture.
-local tile
-local function ditherTile()
-  if tile then return tile end
-  tile = newCanvas(16, 16)
+local function begin(cv)
   lg.push("all")
   lg.origin()
-  lg.setScissor()
-  lg.setCanvas(tile)
+  lg.setScissor() -- baking happens mid-frame, maybe inside a clipped overlay
+  lg.setCanvas(cv)
   lg.clear(0, 0, 0, 0)
-  for y = 0, 15 do
-    for x = 0, 15 do
-      local t = M.bayer16(x, y)
-      if t >= 0.5 then lg.setColor(1, 1, 1, (t - 0.5) * 0.16) else lg.setColor(0, 0, 0, (0.5 - t) * 0.22) end
-      lg.rectangle("fill", x, y, 1, 1)
-    end
+end
+M.begin = begin
+
+-- ---------------------------------------------------------------- plates
+
+-- opts: outline (colour or false), bevel (false to skip), notch (false for square corners)
+function M.plate(w, h, color, opts)
+  w, h = math.floor(w), math.floor(h)
+  opts = opts or {}
+  local outline = opts.outline == nil and C.black or opts.outline
+  local key = ("plate:%d:%d:%s:%s:%s:%s"):format(w, h, colKey(color), outline and colKey(outline) or "-", tostring(opts.bevel), tostring(opts.notch))
+  if cache[key] then return cache[key].canvas end
+  local cv = newCanvas(w, h)
+  begin(cv)
+  local i = outline and 1 or 0
+  if outline then
+    theme.set(outline)
+    lg.rectangle("fill", 1, 0, w - 2, h)
+    lg.rectangle("fill", 0, 1, w, h - 2)
+    if opts.notch == false then lg.rectangle("fill", 0, 0, w, h) end
+  end
+  theme.set(color)
+  lg.rectangle("fill", i, i, w - 2 * i, h - 2 * i)
+  if opts.bevel ~= false and h > 4 and w > 4 then
+    theme.set(theme.shade(color, 0.22))
+    lg.rectangle("fill", i, i, w - 2 * i, 1)
+    theme.set(theme.shade(color, -0.32))
+    lg.rectangle("fill", i, h - i - 1, w - 2 * i, 1)
   end
   lg.pop()
-  return tile
+  remember(key, { canvas = cv })
+  return cv
 end
 
-local function texture(w, h)
-  local t = ditherTile()
-  lg.setColor(1, 1, 1, 1)
-  for y = 0, h - 1, 16 do
-    for x = 0, w - 1, 16 do lg.draw(t, x, y) end
-  end
-end
+-- ---------------------------------------------------------------- the smear accent
 
--- Quantise a canvas with the Figma dither into a fresh canvas (straight alpha). Without the shader
--- the canvas is kept as it is (premultiplied) and flagged for drawing.
-local function dither(src, w, h, alphaCut)
-  if not shaders.fdither then
-    premul[src] = true
-    return src, true
-  end
-  local out = newCanvas(w, h)
-  lg.push("all")
-  lg.origin()
-  lg.setScissor()
-  lg.setCanvas(out)
-  lg.clear(0, 0, 0, 0)
-  lg.setBlendMode("replace", "premultiplied")
-  if shaders.fdither then
-    lg.setShader(shaders.fdither)
-    shaders.fdither:send("alphaCut", alphaCut and 1 or 0)
-  end
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(src, 0, 0)
-  lg.pop()
-  return out
-end
-M.dither = dither
-
-local function begin(canvas, r, g, b, a)
-  lg.push("all")
-  lg.origin()
-  lg.setScissor()
-  lg.setShader()
-  lg.setCanvas(canvas)
-  lg.clear(r or 0, g or 0, b or 0, a or 0)
-end
-
--- A vertical gradient, one row at a time (no custom meshes, which LÖVE Potion lacks).
-local function vgrad(x, y, w, h, top, bottom)
-  for i = 0, h - 1 do
-    local t = h > 1 and i / (h - 1) or 0
-    lg.setColor(top[1] + (bottom[1] - top[1]) * t, top[2] + (bottom[2] - top[2]) * t, top[3] + (bottom[3] - top[3]) * t, 1)
-    lg.rectangle("fill", x, y + i, w, 1)
-  end
-end
-M.vgrad = vgrad
-
--- The baked smear PNG closest to a tint (shader-free path).
 local smearImages = {}
-local function bakedSmear(tint, aberration)
+local function smearFor(tint, aberration)
   local best, bestD
   for _, sm in ipairs(bakes.SMEARS) do
     local c = theme.hex(sm.tint)
     local d = (c[1] - tint[1]) ^ 2 + (c[2] - tint[2]) ^ 2 + (c[3] - tint[3]) ^ 2
-    if (aberration >= 0.9) == (sm.aberration >= 0.9) then d = d * 0.5 end
+    if ((aberration or 0) >= 0.9) == (sm.aberration >= 0.9) then d = d * 0.5 end
     if not bestD or d < bestD then best, bestD = sm, d end
   end
   local file = bakes.smearFile(best.name)
@@ -142,232 +94,121 @@ local function bakedSmear(tint, aberration)
   return smearImages[file] or nil
 end
 
--- The mascot silhouette in `tint`, smeared sideways by the chromatic lens, premultiplied.
--- The effect is worked out on a square frame (as in Figma) but only the middle `band` rows that a
--- title card shows are rendered.
-local function smear(side, tint, aberration, band)
-  band = math.min(side, band or side)
-  local key = ("smear:%d:%d:%s:%.2f"):format(side, band, colKey(tint), aberration)
-  if cache[key] then return cache[key].canvas, cache[key].pm end
-  if not shaders.smear then
-    -- straight-alpha PNG baked offline with the same lens math, scaled to this card
-    local img = bakedSmear(tint, aberration)
-    local out = newCanvas(side, band)
-    begin(out)
-    if img then
-      lg.setColor(1, 1, 1, 1)
-      lg.draw(img, 0, -math.floor((side - band) / 2), 0, side / img:getWidth(), side / img:getHeight())
-    end
-    lg.pop()
-    remember(key, { canvas = out, pm = false })
-    return out, false
-  end
-  local sil = newCanvas(side, side)
-  sil:setFilter("linear", "linear")
-  local img = G.images["mascot-silhouette"]
-  begin(sil)
-  lg.setColor(tint[1], tint[2], tint[3], 1)
-  if img then lg.draw(img, 0, 0, 0, side / img:getWidth(), side / img:getHeight()) end
-  lg.pop()
-  local out = newCanvas(side, band)
-  begin(out)
-  lg.setBlendMode("replace", "premultiplied")
-  if shaders.smear then
-    lg.setShader(shaders.smear)
-    shaders.smear:send("size", { side, side })
-    shaders.smear:send("amount", 1.0)
-    shaders.smear:send("aberration", aberration)
-  end
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(sil, 0, -math.floor((side - band) / 2))
-  lg.pop()
-  sil:release()
-  remember(key, { canvas = out, pm = true })
-  return out, true
-end
+-- ---------------------------------------------------------------- title cards
 
--- A plain plate. opts: outline (colour or false), light (0..1 top highlight), shade (0..1 bottom shade)
-function M.plate(w, h, color, opts)
-  w, h = math.floor(w), math.floor(h)
-  opts = opts or {}
-  local outline = opts.outline == nil and C.black or opts.outline
-  local key = ("plate:%d:%d:%s:%s:%.2f:%.2f"):format(w, h, colKey(color), outline and colKey(outline) or "-", opts.light or 0.08, opts.shade or 0.12)
-  if cache[key] then return cache[key].canvas end
-  local raw = newCanvas(w, h)
-  begin(raw)
-  local inset = outline and 1 or 0
-  if outline then
-    theme.set(outline)
-    lg.rectangle("fill", 0, 0, w, h)
-  end
-  vgrad(inset, inset, w - inset * 2, h - inset * 2, theme.mix(color, C.paper, opts.light or 0.08), theme.darken(color, 1 - (opts.shade or 0.12)))
-  if not shaders.fdither then texture(w, h) end
-  lg.pop()
-  local out = dither(raw, w, h, false)
-  if out ~= raw then raw:release() end
-  remember(key, { canvas = out })
-  return out
-end
+local Card = {}
+Card.__index = Card
+function Card:getDimensions() return self.w, self.h end
+function Card:getWidth() return self.w end
+function Card:getHeight() return self.h end
 
--- A Figma title card. opts: label, size (serif px), italic, labelColor, streak (aberration 0..1, nil
--- for none), streakTint, align ("center" | "left"), pad, outline, light
+-- A title card: plate, smear accent (opts.streak: 0.43 for the colour plates, 1.0 for the
+-- black "Power" plate) and an optional live serif label.
+-- opts: label, size, align ("center" | "left"), pad, labelColor, italic, streak, outline
 function M.titleCard(w, h, color, opts)
   w, h = math.floor(w), math.floor(h)
   opts = opts or {}
-  local size = opts.size or math.max(12, math.floor(h * 0.62))
-  if opts.label and opts.label ~= "" then size = M.fit(opts.label, size, w - 2 * (opts.pad or 8), opts.italic) end
-  local labelColor = opts.labelColor or C.white
-  local key = ("title:%d:%d:%s:%s:%d:%s:%s:%s:%s:%s"):format(w, h, colKey(color), opts.label or "", size, tostring(opts.italic),
-    colKey(labelColor), tostring(opts.streak), opts.align or "center", tostring(opts.outline))
-  if cache[key] then return cache[key].canvas end
-  local raw = newCanvas(w, h)
-  begin(raw, color[1], color[2], color[3], 1)
-  if opts.light ~= false then
-    vgrad(0, 0, w, h, theme.mix(color, C.paper, 0.05), theme.darken(color, 0.9))
+  local outline = opts.outline == nil and C.black or opts.outline
+  local key = ("title:%d:%d:%s:%s:%s"):format(w, h, colKey(color), tostring(opts.streak), outline and colKey(outline) or "-")
+  local canvas
+  if cache[key] then canvas = cache[key].canvas
+  else
+    canvas = newCanvas(w, h)
+    local base = M.plate(w, h, color, { outline = outline })
+    begin(canvas)
+    lg.setColor(1, 1, 1)
+    lg.draw(base, 0, 0)
+    if opts.streak then
+      local img = smearFor(color, opts.streak)
+      if img then
+        -- the smear sits on the far end of the card, the way the Figma cards place it
+        local side = math.max(h * 2.4, w * 0.55)
+        local i = outline and 1 or 0
+        lg.setScissor(i, i + 1, w - 2 * i, h - 2 * i - 2)
+        lg.setColor(1, 1, 1, opts.streak >= 0.9 and 0.95 or 0.8)
+        lg.draw(img, w - side * 0.92, (h - side) / 2, 0, side / img:getWidth(), side / img:getHeight())
+        lg.setScissor()
+      end
+    end
+    lg.pop()
+    remember(key, { canvas = canvas })
   end
-  if opts.streak then
-    local sm, pm = smear(w, opts.streakTint or color, opts.streak, h)
-    if pm then lg.setBlendMode("alpha", "premultiplied") end
-    lg.setColor(1, 1, 1, 1)
-    lg.draw(sm, 0, 0)
-    lg.setBlendMode("alpha", "alphamultiply")
-  end
-  if not shaders.fdither then texture(w, h) end
+  local card = setmetatable({ canvas = canvas, w = w, h = h, color = color }, Card)
   if opts.label and opts.label ~= "" then
-    local f = theme.serif(size, opts.italic)
-    lg.setFont(f)
-    local tw = f:getWidth(opts.label)
-    local tx = opts.align == "left" and (opts.pad or 8) or math.floor((w - tw) / 2)
-    local ty = math.floor((h - f:getHeight()) / 2)
-    theme.set(labelColor)
-    lg.print(opts.label, tx, ty)
+    card.label = opts.label
+    card.size = M.fit(opts.label, opts.size or math.max(12, math.floor(h * 0.62)), w - 2 * (opts.pad or 8), opts.italic)
+    card.align, card.pad, card.italic = opts.align or "center", opts.pad or 8, opts.italic
+    card.labelColor = opts.labelColor or (theme.luminance(color) > 0.3 and C.black or C.white)
   end
-  if opts.outline then
-    theme.set(opts.outline)
-    lg.rectangle("fill", 0, 0, w, 1)
-    lg.rectangle("fill", 0, h - 1, w, 1)
-    lg.rectangle("fill", 0, 0, 1, h)
-    lg.rectangle("fill", w - 1, 0, 1, h)
-  end
-  lg.pop()
-  local out = dither(raw, w, h, false)
-  if out ~= raw then raw:release() end
-  remember(key, { canvas = out })
-  return out
+  return card
 end
 
--- Serif text on a transparent background, dithered. Returns canvas, width, height.
--- opts: italic, shadow (colour for a 1px drop shadow)
-function M.text(str, size, color, opts)
-  opts = opts or {}
-  str = tostring(str)
-  local key = ("text:%s:%d:%s:%s:%s"):format(str, size, colKey(color), tostring(opts.italic), opts.shadow and colKey(opts.shadow) or "-")
-  local hit = cache[key]
-  if hit then return hit.canvas, hit.w, hit.h end
-  local f = theme.serif(size, opts.italic)
-  local w, h = f:getWidth(str) + 3, f:getHeight() + 2
-  local raw = newCanvas(w, h)
-  begin(raw)
-  lg.setFont(f)
-  if opts.shadow then
-    theme.set(opts.shadow)
-    lg.print(str, 1, 1)
-  end
-  theme.set(color)
-  lg.print(str, 0, 0)
-  lg.pop()
-  local out = dither(raw, w, h, false)
-  if out ~= raw then raw:release() end
-  remember(key, { canvas = out, w = w, h = h })
-  return out, w, h
-end
+-- ---------------------------------------------------------------- serif text
 
 function M.textWidth(str, size, italic) return theme.serif(size, italic):getWidth(tostring(str)) end
 
--- The largest size (down to 10px) at which str fits in width.
+-- The largest size (down to 9px) at which str fits in width.
 function M.fit(str, size, width, italic)
-  while size > 10 and M.textWidth(str, size, italic) > width do size = size - 1 end
+  while size > 9 and M.textWidth(str, size, italic) > width do size = size - 1 end
   return size
 end
 
--- Bake any smooth image (Figma art) to a given width with the same dither.
-function M.image(img, w, alphaCut)
-  local key = ("image:%s:%d:%s"):format(tostring(img), w, tostring(alphaCut))
-  if cache[key] then return cache[key].canvas end
+-- Serif text drawn straight onto the frame. align: "left" | "center" | "right". opts.bg: ground.
+function M.print(str, size, x, y, color, opts)
+  opts = opts or {}
+  return gfx.text(str, theme.serif(size, opts.italic), x, y, color, { align = opts.align, alpha = opts.alpha, bg = opts.bg, shadow = opts.shadow })
+end
+
+-- ---------------------------------------------------------------- images
+
+local Pic = {}
+Pic.__index = Pic
+function Pic:getDimensions() return self.w, self.h end
+function Pic:getWidth() return self.w end
+function Pic:getHeight() return self.h end
+
+-- A smooth image (Figma art) shown at a given width, drawn with smooth filtering at screen resolution.
+function M.image(img, w)
   local h = math.floor(img:getHeight() * w / img:getWidth() + 0.5)
-  local raw = newCanvas(w, h)
-  begin(raw)
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(img, 0, 0, 0, w / img:getWidth(), h / img:getHeight())
-  lg.pop()
-  local out = dither(raw, w, h, alphaCut ~= false)
-  if out ~= raw then raw:release() end
-  remember(key, { canvas = out })
-  return out
+  return setmetatable({ img = img, w = w, h = h }, Pic)
 end
 
--- Smeared silhouette of any image (used for portraits on the VS screen).
-function M.smearImage(img, side, aberration)
-  if not shaders.smear then return nil end -- needs the live lens shader
-  local key = ("smearimg:%s:%d:%.2f"):format(tostring(img), side, aberration)
-  if cache[key] then return cache[key].canvas end
-  local src = newCanvas(side, side)
-  src:setFilter("linear", "linear")
-  begin(src)
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(img, 0, 0, 0, side / img:getWidth(), side / img:getHeight())
-  lg.pop()
-  local out = newCanvas(side, side)
-  begin(out)
-  lg.setBlendMode("replace", "premultiplied")
-  if shaders.smear then
-    lg.setShader(shaders.smear)
-    shaders.smear:send("size", { side, side })
-    shaders.smear:send("amount", 1.0)
-    shaders.smear:send("aberration", aberration)
+-- ---------------------------------------------------------------- drawing
+
+function M.draw(obj, x, y, alpha)
+  if not obj then return end
+  local a = alpha or 1
+  x, y = math.floor(x), math.floor(y)
+  local mt = getmetatable(obj)
+  if mt == Pic then
+    lg.setColor(1, 1, 1, a)
+    lg.draw(obj.img, x, y, 0, obj.w / obj.img:getWidth(), obj.h / obj.img:getHeight())
+    return
   end
-  lg.setColor(1, 1, 1, 1)
-  lg.draw(src, 0, 0)
-  lg.pop()
-  src:release()
-  local d = dither(out, side, side, false)
-  if d ~= out then out:release() end
-  remember(key, { canvas = d })
-  return d
+  if mt == Card then
+    lg.setColor(1, 1, 1, a)
+    lg.draw(obj.canvas, x, y)
+    if obj.label then
+      local f = theme.serif(obj.size, obj.italic)
+      local ty = y + (obj.h - f:getHeight()) / 2 - 0.5
+      local tx = obj.align == "left" and x + obj.pad or x + obj.w / 2
+      gfx.text(obj.label, f, tx, ty, obj.labelColor, { align = obj.align == "left" and "left" or "center", alpha = a, bg = obj.color })
+    end
+    return
+  end
+  lg.setColor(1, 1, 1, a)
+  lg.draw(obj, x, y)
 end
 
--- Draw helpers -----------------------------------------------------------------
-
--- Draw a baked canvas multiplied by a colour (used for the console stand-in for the VS smear).
--- blend "add" makes it glow.
+-- Draw a baked canvas multiplied by a colour (the VS screen's colour ghosts). blend "add" glows.
 function M.drawTint(canvas, x, y, color, alpha, blend)
   if not canvas then return end
   local a = alpha or 1
   local mode, am = lg.getBlendMode()
-  if premul[canvas] then
-    lg.setBlendMode(blend or "alpha", "premultiplied")
-    lg.setColor(color[1] * a, color[2] * a, color[3] * a, a)
-  else
-    lg.setBlendMode(blend or "alpha")
-    lg.setColor(color[1], color[2], color[3], a)
-  end
+  lg.setBlendMode(blend or "alpha")
+  lg.setColor(color[1], color[2], color[3], a)
   lg.draw(canvas, math.floor(x), math.floor(y))
   lg.setBlendMode(mode, am)
-end
-
-function M.draw(canvas, x, y, alpha)
-  if not canvas then return end
-  local a = alpha or 1
-  if premul[canvas] then
-    local mode, am = lg.getBlendMode()
-    lg.setBlendMode("alpha", "premultiplied")
-    lg.setColor(a, a, a, a)
-    lg.draw(canvas, math.floor(x), math.floor(y))
-    lg.setBlendMode(mode, am)
-    return
-  end
-  lg.setColor(1, 1, 1, a)
-  lg.draw(canvas, math.floor(x), math.floor(y))
 end
 
 -- A title-card strip used as a heading. opts as titleCard, plus align defaults to "left".
@@ -375,19 +216,13 @@ function M.header(x, y, w, h, color, label, opts)
   opts = opts or {}
   local o = { label = label, align = opts.align or "left", pad = opts.pad or 8, size = opts.size or math.max(12, math.floor(h * 0.7)),
     streak = opts.streak, italic = opts.italic, labelColor = opts.labelColor, outline = opts.outline == nil and C.black or opts.outline }
-  theme.set(C.black, 0.5)
+  theme.set(C.black, 0.45)
   lg.rectangle("fill", math.floor(x) + 1, math.floor(y) + 2, w, h)
   M.draw(M.titleCard(w, h, color, o), x, y)
 end
 
--- Serif text drawn straight onto the frame. align: "left" | "center" | "right"
-function M.print(str, size, x, y, color, opts)
-  opts = opts or {}
-  local c, w = M.text(str, size, color, opts)
-  local ox = 0
-  if opts.align == "center" then ox = -math.floor(w / 2) elseif opts.align == "right" then ox = -w end
-  M.draw(c, x + ox, y, opts.alpha)
-  return w
-end
+-- Kept for older callers: there is no dither pass any more.
+function M.dither(src) return src end
+function M.smearImage() return nil end
 
 return M

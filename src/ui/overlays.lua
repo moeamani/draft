@@ -61,7 +61,7 @@ end
 
 function M.nemesisCard(n, rank, x, y, w, h)
   gfx.panel(x, y, w, h, C.deep)
-  plates.header(x, y, w, 16, C.night, rank > 0 and nemesis.RANK_TITLES[rank] or n.status, { size = 13, streak = 1.0, pad = 6 })
+  plates.header(x, y, w, 16, C.night, rank > 0 and nemesis.RANK_TITLES[rank] or n.status, { size = 11, streak = 1.0, pad = 5 })
   local p = art.nemesis(n, rank, 48)
   gfx.box(x + 5, y + 19, 50, 50, C.black)
   lg.setColor(1, 1, 1)
@@ -71,11 +71,14 @@ function M.nemesisCard(n, rank, x, y, w, h)
   gfx.textf(n.epithet, T.body(), x + 60, y + 40, w - 64, "left", C.muted)
   local coat = cards.COATS[n.coat]
   gfx.text("Level " .. n.level, T.body(), x + 6, y + 71, C.paper)
+
   gfx.text(coat.name .. " coat", T.body(), x + 62, y + 71, coat.color)
   icons.draw("skull", x + w - 40, y + 8, C.paper)
   gfx.text(tostring(n.wins), T.small(), x + w - 33, y + 2, C.paper, { shadow = false })
   icons.draw("sword", x + w - 18, y + 8, C.paper)
   gfx.text(tostring(n.losses), T.small(), x + w - 11, y + 2, C.paper, { shadow = false })
+  local caps = n.captives and #n.captives or 0
+  if caps > 0 then gfx.text(("Holds %d of your cats"):format(caps), T.small(), x + 6, y + h - 14, C.redText, { bg = C.deep }) end
   local cy = M.traitChips(n, x + 6, y + 90, w - 12)
   if h > 130 then
     local hy = cy + 4
@@ -250,9 +253,12 @@ function M.cattery()
   local GX, GY = 16, 44
   function ov:draw()
     local save = G.save
-    local seen = (save and save.seen) or {}
+    local seen = {}
+    for _, sv in pairs(G.saves or {}) do for id in pairs(sv.seen or {}) do seen[id] = true end end
+    if save then for id in pairs(save.seen or {}) do seen[id] = true end end
     M.frame(8, 8, theme.W - 16, theme.H - 16, "The Cattery")
-    local n, total = save and game.seenCount(save) or 0, #list
+    local n, total = 0, #list
+    for _, d in ipairs(list) do if seen[d.id] then n = n + 1 end end
     gfx.text(("%d of %d found"):format(n, total), T.body(), 250, 13, C.paper)
     local hover
     for i, d in ipairs(list) do
@@ -348,6 +354,9 @@ function M.help()
       para("The two cards on each cushion duel. The higher Paws wins and swats a goblet off the loser's side of the table. A cat facing an empty cushion or a trick walks in unopposed and swats too. Ties go to the leader.")
       para("Coat edge: Ember beats Gilt, Gilt beats Tide, Tide beats Ember. The winning coat gets +" .. match.COAT_EDGE .. " Paws. Shadow has no edge either way.")
       para("Knock every goblet off the rival's side to win the match.", C.gold)
+      head("Lives and captures")
+      para("Every cat brings hearts into a match: 2, or 3 for epic and legendary cats. Losing a duel costs one heart; losing by 5 or more Paws costs two. With no hearts left, the rival captures the cat.")
+      para("The Four Hands keep the cats they capture and send them back at you, marked YOURS and down to one heart: beat one to bring it home, or beat the Hand to free them all. Strays pawn theirs at the market. The rival cats you capture are your spoils.")
 
     elseif self.tab == 2 then
       head("Cat abilities")
@@ -402,7 +411,7 @@ function M.pause()
       G.settings.muted = sfx.toggleMute(); G.saveSettings()
     end
     if widgets.button("p_quit", bx, y + 136, bw, 28, "Save and quit") then
-      G.persist(); G.closeOverlay(); G.go("title")
+      G.persist(); G.closeOverlay(); G.go("menu")
     end
   end
   G.openOverlay(ov)

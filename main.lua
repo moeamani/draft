@@ -1,6 +1,13 @@
 -- Draft - Four Hands. One Arena.
--- A roguelike cat card battler with a nemesis system. Built with LÖVE 11; also runs on LÖVE Potion
--- (Nintendo Switch homebrew) through the platform layer.
+-- A roguelike cat-knight card game with a nemesis system. Built with LÖVE 11; also runs on
+-- LÖVE Potion (Nintendo Switch homebrew) through the platform layer.
+--
+-- Rendering: the game is laid out on a 640x360 virtual grid (the "safe area"). The window can be
+-- any shape: the virtual area grows to fill it (the backdrop covers the extra margin, so there
+-- are never black bars), and the safe area sits in the middle. Everything is drawn into one
+-- canvas at K canvas pixels per virtual pixel (K = the window scale, rounded up), so pixel art
+-- stays crisp and text is rasterised at the real screen resolution. The canvas is then shown
+-- at exactly the window's size.
 local platform = require("src.platform") -- first: fills in what LÖVE Potion lacks
 local bakes = require("src.ui.bakes")
 local input = require("src.input")
@@ -14,50 +21,106 @@ local cardview = require("src.ui.cardview")
 local lg = love.graphics
 
 G = {
-  save = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
-  scenes = {}, trans = nil, settings = { screen = "plain", music = true },
+  save = nil, saves = {}, mode = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
+  scenes = {}, trans = nil,
+  settings = { muted = false, fullscreen = false, shake = true },
+  -- the visible virtual area and where the 640x360 safe area sits in it
+  VW = 640, VH = 360, OX = 0, OY = 0, K = 2,
 }
 
-local W, H, SC = theme.W, theme.H, theme.SCALE
-local canvas
-local SAVE_FILE = "save.lua"
+local W, H = theme.W, theme.H
 local SETTINGS_FILE = "settings.lua"
+local SAVE_FILES = { story = "story.lua", free = "festival.lua" }
+G.SAVE_VERSION = 3
 
-local SCENES = { "title", "hub", "vs", "match", "result", "market", "event", "summary" }
+G.SCENE_LIST = { "menu", "story", "cutscene", "hub", "vs", "match", "result", "market", "event", "summary" }
+
+-- ---------------------------------------------------------------- saves
+
+-- Two save slots: the story campaign and free festivals. G.save is the active one.
+function G.useMode(mode)
+  G.mode = mode
+  G.save = G.saves[mode]
+end
+
+function G.setSave(save)
+  G.saves[G.mode] = save
+  G.save = save
+end
 
 function G.persist()
-  if G.save then
+  if G.save and G.mode then
     require("src.core.game").noteDeck(G.save)
-    love.filesystem.write(SAVE_FILE, util.serialize(G.save))
+    love.filesystem.write(SAVE_FILES[G.mode], util.serialize(G.save))
   end
 end
 
-function G.wipeSave()
-  love.filesystem.remove(SAVE_FILE)
-  G.save = nil
+function G.wipeSave(mode)
+  mode = mode or G.mode
+  love.filesystem.remove(SAVE_FILES[mode])
+  G.saves[mode] = nil
+  if G.mode == mode then G.save = nil end
 end
 
-local function loadSave()
-  if not love.filesystem.getInfo(SAVE_FILE) then return nil end
-  local s = util.deserialize(love.filesystem.read(SAVE_FILE))
-  if s and s.version == 2 then return s end
+local function loadSave(mode)
+  local file = SAVE_FILES[mode]
+  if not love.filesystem.getInfo(file) then return nil end
+  local s = util.deserialize(love.filesystem.read(file))
+  if s and s.version == G.SAVE_VERSION then return s end
   return nil
-end
-
--- Screen modes: plain (default, the crisp Figma dither) <-> CRT
-local SCREEN_MODES = { plain = "crt", crt = "plain" }
-function G.cycleScreen()
-  G.settings.screen = SCREEN_MODES[G.settings.screen] or "plain"
-  G.saveSettings()
-end
-
-function G.screenLabel()
-  return G.settings.screen == "crt" and "CRT" or "plain"
 end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
 
--- Scene switch with a dithered wipe.
+-- ---------------------------------------------------------------- the window
+
+local canvas
+local view = { s = 2, k = 2, dpi = 1 }
+
+local function layout()
+  local pw, ph = lg.getPixelDimensions()
+  local dpi = (lg.getDPIScale and lg.getDPIScale()) or 1
+  local s = math.min(pw / W, ph / H)
+  local k = math.max(1, math.ceil(s - 0.001))
+  local vw, vh = pw / s, ph / s
+  G.VW, G.VH = vw, vh
+  G.OX, G.OY = math.floor((vw - W) / 2), math.floor((vh - H) / 2)
+  G.K = k
+  theme.setScale(k)
+  local cw, ch = math.ceil(vw * k), math.ceil(vh * k)
+  if not canvas or canvas:getWidth() ~= cw or canvas:getHeight() ~= ch then
+    if canvas then canvas:release() end
+    local ok, cv = pcall(lg.newCanvas, cw, ch, { dpiscale = 1 })
+    canvas = ok and cv or lg.newCanvas(cw, ch)
+  end
+  canvas:setFilter(math.abs(k - s) < 0.001 and "nearest" or "linear", "linear")
+  view.s, view.k, view.dpi = s, k, dpi
+end
+
+function love.resize() layout() end
+
+function G.toggleFullscreen(on)
+  if on == nil then on = not love.window.getFullscreen() end
+  love.window.setFullscreen(on, "desktop")
+  G.settings.fullscreen = on
+  G.saveSettings()
+  layout()
+end
+
+-- window units (mouse, touch) -> virtual safe-area coordinates
+function G.toVirtual(x, y)
+  return x * view.dpi / view.s - G.OX, y * view.dpi / view.s - G.OY
+end
+
+-- scissor rectangles are in canvas pixels
+function G.scissor(x, y, w, h)
+  local k = view.k
+  return math.floor((x + G.OX) * k), math.floor((y + G.OY) * k), math.ceil(w * k), math.ceil(h * k)
+end
+
+-- ---------------------------------------------------------------- scenes
+
+-- Scene switch with a clean stepped wipe.
 function G.go(name, params, instant)
   if instant or not G.scene then
     G.overlay = nil
@@ -73,22 +136,7 @@ function G.go(name, params, instant)
 end
 
 function G.openOverlay(ov) G.overlay = ov end
--- scissor rectangles are in canvas pixels, not virtual pixels
-function G.scissor(x, y, w, h) return x * SC, y * SC, w * SC, h * SC end
 function G.closeOverlay() G.overlay = nil end
-
--- the canvas is W*SC x H*SC; this returns how it maps onto the window
-local function viewport()
-  local ww, wh = lg.getDimensions()
-  local s = math.min(ww / (W * SC), wh / (H * SC))
-  if s >= 1 then s = math.floor(s * 2) / 2 end -- prefer clean multiples when we can
-  return s, math.floor((ww - W * SC * s) / 2), math.floor((wh - H * SC * s) / 2)
-end
-
-function G.toVirtual(x, y)
-  local s, ox, oy = viewport()
-  return (x - ox) / (s * SC), (y - oy) / (s * SC)
-end
 
 function love.load(args)
   platform.init(args)
@@ -108,17 +156,16 @@ function love.load(args)
     local id = love.image.newImageData("assets/img/mascot.png")
     love.window.setIcon(id)
   end)
-  canvas = lg.newCanvas(W * SC, H * SC)
-  canvas:setFilter("linear", "linear")
   if love.filesystem.getInfo(SETTINGS_FILE) then
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
-    if not SCREEN_MODES[G.settings.screen] then G.settings.screen = "plain" end
   end
+  if G.settings.fullscreen and not platform.console then pcall(love.window.setFullscreen, true, "desktop") end
+  layout()
   if G.settings.muted then sfx.toggleMute() end
-  for _, n in ipairs(SCENES) do G.scenes[n] = require("src.scenes." .. n) end
-  G.save = loadSave()
-  G.go("title", {}, true)
+  for _, n in ipairs(G.SCENE_LIST) do G.scenes[n] = require("src.scenes." .. n) end
+  G.saves.story, G.saves.free = loadSave("story"), loadSave("free")
+  G.go("menu", {}, true)
   sfx.startMusic()
   for i, a in ipairs(args or {}) do
     if a == "--autotest" then
@@ -139,7 +186,7 @@ function love.update(dt)
   if G.trans then
     widgets.top = "none"
     local tr = G.trans
-    tr.t = tr.t + dt * 2.6
+    tr.t = tr.t + dt * 3
     if tr.phase == "in" and tr.t >= 1 then
       G.overlay = nil
       G.sceneName = tr.name
@@ -160,22 +207,23 @@ function love.update(dt)
   if G.autotest then G.autotest.update(dt) end
 end
 
+-- ---------------------------------------------------------------- the backdrop
+
 local hex = theme.hex
 local function rgb(h) local c = hex(h); return { c[1], c[2], c[3] } end
 local stageImages = {}
 
 -- Every scene sits on one of the backdrop presets in src/ui/bakes.lua ("menu", "vs", "match"),
--- in ink green or blood red. With shaders it is computed live; without (LÖVE Potion) the same
--- picture is drawn from the PNG baked by tools/switch/bake_assets.py.
-local function drawBackground()
+-- in ink green or blood red: the only dithered surface in the game. It fills the whole window.
+local function drawBackground(cw, ch)
   local bg = (G.scene and G.scene.bg) or {}
   local preset = bakes.STAGES[bg.preset or "menu"] or bakes.STAGES.menu
   local rampName = bakes.RAMPS[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
   local ramp = bakes.RAMPS[rampName]
   local sh = shaders.stage
   if sh then
-    sh:send("res", { W * SC, H * SC })
-    sh:send("pix", SC)
+    sh:send("pix", view.k)
+    sh:send("origin", { G.OX, G.OY })
     sh:send("horizon", preset.horizon)
     sh:send("light", preset.light)
     sh:send("radius", preset.radius)
@@ -186,7 +234,7 @@ local function drawBackground()
     sh:send("edge", rgb(ramp.edge))
     lg.setShader(sh)
     lg.setColor(1, 1, 1)
-    lg.rectangle("fill", 0, 0, W * SC, H * SC)
+    lg.rectangle("fill", 0, 0, cw, ch)
     lg.setShader()
     return
   end
@@ -199,27 +247,41 @@ local function drawBackground()
   local img = stageImages[file]
   if img then
     lg.setColor(1, 1, 1)
-    lg.draw(img, 0, 0, 0, W * SC / img:getWidth(), H * SC / img:getHeight())
+    lg.draw(img, 0, 0, 0, cw / img:getWidth(), ch / img:getHeight())
   else
     theme.set(hex(ramp.baseA))
-    lg.rectangle("fill", 0, 0, W * SC, H * SC)
+    lg.rectangle("fill", 0, 0, cw, ch)
+  end
+end
+
+-- A stepped wipe: columns of ink drop in, staggered left to right.
+local function drawWipe(p, cw, ch)
+  local cols = 16
+  local colW = math.ceil(cw / cols)
+  theme.set(theme.c.deep)
+  for c = 0, cols - 1 do
+    local pc = math.max(0, math.min(1, p * 1.6 - c / cols * 0.6))
+    local h = math.floor(pc * ch / view.k + 0.5) * view.k
+    lg.rectangle("fill", c * colW, 0, colW, h)
   end
 end
 
 function love.draw()
+  local cw, ch = canvas:getWidth(), canvas:getHeight()
   lg.setCanvas(canvas)
   lg.clear(theme.c.ink)
-  drawBackground()
+  drawBackground(cw, ch)
   lg.push()
-  lg.scale(SC, SC)
+  lg.scale(view.k, view.k)
+  lg.translate(G.OX, G.OY)
   local sx, sy = fx.shakeOffset()
+  if G.settings.shake == false then sx, sy = 0, 0 end
   lg.translate(sx, sy)
   widgets.layer = "scene"
   if G.scene and G.scene.draw then G.scene:draw() end
   if G.overlay then
     widgets.layer = "overlay"
-    lg.setColor(0.01, 0.03, 0.02, 0.78)
-    lg.rectangle("fill", -20, -20, W + 40, H + 40)
+    require("src.ui.gfx").dim(0.78)
     G.overlay:draw()
   end
   widgets.layer = G.overlay and "overlay" or "scene"
@@ -228,35 +290,17 @@ function love.draw()
   input.draw()
   lg.pop()
   if G.trans then
-    local p = math.min(1, G.trans.phase == "in" and G.trans.t or (1 - G.trans.t))
-    if shaders.wipe then
-      shaders.wipe:send("progress", p)
-      shaders.wipe:send("tint", { 0.03, 0.06, 0.05 })
-      lg.setShader(shaders.wipe)
-      lg.rectangle("fill", 0, 0, W * SC, H * SC)
-      lg.setShader()
-    else
-      lg.setColor(0.03, 0.06, 0.05, p)
-      lg.rectangle("fill", 0, 0, W * SC, H * SC)
-    end
+    drawWipe(math.min(1, G.trans.phase == "in" and G.trans.t or (1 - G.trans.t)), cw, ch)
   end
   lg.setCanvas()
-
   lg.clear(0, 0, 0)
-  local s, ox, oy = viewport()
-  if G.settings.screen == "crt" and shaders.post then
-    shaders.post:send("res", { W * SC, H * SC })
-    shaders.post:send("rows", H)
-    shaders.post:send("curvature", 0.6)
-    shaders.post:send("flash", fx.flash * 0.2)
-    lg.setShader(shaders.post)
-  end
   lg.setColor(1, 1, 1)
-  lg.draw(canvas, ox, oy, 0, s, s)
-  lg.setShader()
+  lg.draw(canvas, 0, 0, 0, view.s / view.k / view.dpi)
   widgets.endFrame()
   if G.autotest then G.autotest.afterDraw() end
 end
+
+-- ---------------------------------------------------------------- input
 
 function love.mousemoved(_, _, _, _, istouch)
   if not istouch then input.mode = "mouse" end
@@ -290,11 +334,10 @@ function love.touchreleased(_, x, y)
   widgets.released, widgets.down = true, false
 end
 
--- Controllers: A clicks under the cursor, B backs out of overlays, + opens the menu,
--- X is Enter (Charge!, Fight!), Y clears your cushions, L/R scroll.
+-- Controllers: A clicks under the cursor, B backs out, + opens the menu, X is Enter, Y clears.
 local function back()
   if G.overlay and G.overlay.dismissable ~= false then G.closeOverlay()
-  elseif G.sceneName == "title" and G.scene.naming then love.keypressed("escape") end
+  elseif G.scene and G.scene.back then G.scene:back() end
 end
 
 function love.gamepadpressed(_, button)
@@ -302,7 +345,10 @@ function love.gamepadpressed(_, button)
   if button == "a" then widgets.pressed, widgets.down = true, true
   elseif button == "b" then back()
   elseif input.KEYS[button] then love.keypressed(input.KEYS[button])
-  elseif input.SCROLL[button] then love.wheelmoved(0, input.SCROLL[button]) end
+  elseif input.SCROLL[button] then love.wheelmoved(0, input.SCROLL[button])
+  elseif button == "dpup" or button == "dpdown" then
+    if G.scene and G.scene.nav and not G.overlay then G.scene:nav(button == "dpup" and -1 or 1) end
+  end
 end
 
 function love.gamepadreleased(_, button)
@@ -310,13 +356,9 @@ function love.gamepadreleased(_, button)
 end
 
 function love.keypressed(k)
-  if k == "f11" or (k == "return" and love.keyboard.isDown("lalt", "ralt")) then
-    love.window.setFullscreen(not love.window.getFullscreen(), "desktop")
-    return
-  end
-  if k == "f2" then
-    G.cycleScreen()
-    fx.toast("Screen: " .. G.screenLabel())
+  local mac = love.keyboard.isDown("lgui", "rgui") and love.keyboard.isDown("lctrl", "rctrl") and k == "f"
+  if k == "f11" or mac or (k == "return" and love.keyboard.isDown("lalt", "ralt")) then
+    G.toggleFullscreen()
     return
   end
   if k == "f3" then
@@ -336,6 +378,7 @@ function love.wheelmoved(_, dy)
 end
 
 function love.textinput(t)
+  if G.overlay and G.overlay.textinput then G.overlay:textinput(t) return end
   if G.scene and G.scene.textinput then G.scene:textinput(t) end
 end
 
