@@ -14,7 +14,11 @@ A pixel-art roguelike card game about cat knights, with a nemesis system and the
 - **A CRT screen** (on by default; Settings or F2 turns it off): gentle curvature, scanlines, bloom and a colour fringe, over a slow animated paint swirl on the menus.
 - **Readable.** Text is drawn at your screen's real resolution in Atkinson Hyperlegible (titles in Ancizar Serif), and every text colour is checked for WCAG AA contrast (4.5:1). Fullscreen fills any screen shape, Macs included, with no black bars.
 
-![The rival leads; you answer](docs/screenshots/04_match_place.png)
+![The rival leads; you answer (with the CRT screen on)](docs/screenshots/04_match_place.png)
+
+![Winners hold their cushions and warm up; a feat medal slides in](docs/screenshots/25_match_seated.png)
+
+![Renown: titles, feats and the crests they unlock](docs/screenshots/23_renown.png)
 
 ![Some of the cats](docs/screenshots/cats.png)
 
