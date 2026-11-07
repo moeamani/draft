@@ -10,7 +10,9 @@ local icons = require("src.ui.icons")
 local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
+local hud = require("src.ui.hud")
 local plates = require("src.ui.plates")
+local renown = require("src.core.renown")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -55,6 +57,11 @@ end
 
 function S:continue()
   game.afterMatch(G.save)
+  if G.save.run.phase == "over" then
+    renown.noteRun(G.profile, G.save)
+    G.addRenown(renown.runRenown(G.save))
+    G.award(renown.runFeats(G.profile, G.save))
+  end
   G.persist()
   if G.save.run.phase == "over" then G.go("summary")
   else G.go("hub", { notes = self.out.notes }) end
@@ -112,6 +119,10 @@ end
 
 function S:draw()
   local run = G.save.run
+  local out = self.out
+  if out.renownBefore then
+    hud.renownBar(10, 334, 200, out.renownBefore, out.renownAfter or out.renownBefore, (self.t - 0.5) / 1.4)
+  end
   local y = self:header()
   if self.step == "loss" then
     if self.n then gfx.text(self.n.name .. " will remember this, and grow stronger.", T.body(), 320, y + 8, C.paper2, { align = "center" }) end
@@ -128,6 +139,7 @@ function S:draw()
     for i, o in ipairs(opts) do
       if widgets.choice("fate_" .. o[1], 24 + (i - 1) * 200, ty + 36, 192, 84, o[2], o[3], { color = o[4], disabled = o[5] }) then
         local txt = game.decideFate(G.save, n, o[1])
+        G.award({ renown.FATE_FEAT[o[1]] })
         local sit = o[1] == "slay" and "slain" or o[1] == "recruit" and "recruit" or "brand"
         local line = nemesis.speak({ s = math.floor(love.math.random() * 2 ^ 30) + 1 }, n, sit, G.save.playerName)
         G.persist()

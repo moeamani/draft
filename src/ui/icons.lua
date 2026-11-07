@@ -36,6 +36,8 @@ S.cross = {
   "...kkk...", "...kxk...", "...kxk...", "kkkkxkkkk", "kxxxwxxxk", "kkkkxkkkk", "...kxk...", "...kxk...", "...kkk..." }
 S.note = {
   "....kkkk.", "....kxxk.", "....kxk..", "....kxk..", "....kxk..", ".kkkkxk..", "kxxxkxk..", "kxxxk.k..", ".kkk....." }
+S.medal = {
+  "kk.....kk", "kxk...kxk", ".kxk.kxk.", "..kkkkk..", ".kwwxxxk.", "kwxxwxxdk", "kxxwwwxdk", ".kxxxxdk.", "..kkkkk.." }
 S.notes = {
   "..kkkkkkk", "..kxxxxxk", "..kxkkkxk", "..kxk.kxk", "..kxk.kxk", "kkkxk.kxk", "kxxxkkkxk", "kxxk.kxxk", ".kk...kk." }
 S.up = {

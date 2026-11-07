@@ -53,7 +53,7 @@ local function newSide(setup)
     name = setup.name, deck = deck, discard = {}, hand = {}, mods = mods, goblets = g, maxGoblets = g,
     cushions = cushions, omenHand = omen.hand or 0, lost = {}, taken = {}, seated = { false, false, false },
     nineUsed = {}, counts = counts, vengeance = false, secondWindUsed = false, boutsWon = 0, duelsWon = 0,
-    scored = {}, placed = { false, false, false }, shown = {},
+    scored = {}, placed = { false, false, false }, shown = {}, livesLost = 0, hotSeats = 0,
   }
 end
 
@@ -421,6 +421,7 @@ local function apply(s, rec)
         local c = inf.inst
         local cost = (d.margin or 0) >= M.CRUSH and 2 or 1
         c.lives = (c.lives or cards.maxLives(inf.def)) - cost
+        s.sides[l].livesLost = (s.sides[l].livesLost or 0) + cost
         local w = { side = l, uid = c.uid, slot = i, left = math.max(0, c.lives), cost = cost, crushed = cost == 2 }
         if c.lives <= 0 then
           w.captured = true
@@ -454,8 +455,10 @@ local function apply(s, rec)
       local c = rec.cards[si][i]
       local inf = rec.info[si][i]
       if c and rec.duels[i].winner == si and inf.kind == "cat" and not captured[c.uid] then
-        c.warmth = math.min(M.WARMTH_MAX, (c.warmth or 0) + 1)
+        local was = c.warmth or 0
+        c.warmth = math.min(M.WARMTH_MAX, was + 1)
         c.held = (c.held or 0) + 1
+        if was < M.HOT and c.warmth >= M.HOT then sd.hotSeats = (sd.hotSeats or 0) + 1 end
         sd.seated[i] = c
         rec.stays[si][i] = c.warmth
       else

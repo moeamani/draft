@@ -315,6 +315,90 @@ function M.cattery()
   G.openOverlay(ov)
 end
 
+-- ---------------------------------------------------------------- Renown
+
+-- The crest grid, shared by the Renown screen and the picker. Returns the crest clicked.
+local function crestGrid(x0, y0, pickable, chosen)
+  local hud = require("src.ui.hud")
+  local renown = require("src.core.renown")
+  local p = G.profile
+  local picked
+  for i, c in ipairs(renown.CRESTS) do
+    local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+    local x, y = x0 + col * 202, y0 + row * 74
+    local open = renown.unlocked(p, c.id)
+    local clicked, over = widgets.click("crest_" .. c.id, x, y, 196, 70)
+    local sel = chosen == c.id
+    gfx.panel(x, y, 196, 70, (pickable and over and open) and C.ink3 or (open and C.ink2 or C.deep), { border = sel and C.gold or nil })
+    hud.crest(c.id, x + 22, y + 26, 1, not open)
+    gfx.text(fit(T.bold(), c.name, 150), T.bold(), x + 42, y + 5, open and C.white or C.muted)
+    gfx.textf(c.desc, T.small(), x + 42, y + 20, 148, "left", open and C.paper2 or C.muted)
+    local tag = open and (sel and "Chosen" or (pickable and "Choose" or "Unlocked")) or ("Renown level " .. c.level)
+    gfx.text(tag, T.label(), x + 42, y + 57, open and (sel and C.goldText or C.green) or C.redText)
+    if clicked and open then picked = c.id end
+  end
+  return picked
+end
+
+-- Renown: your level and title, lifetime stats, every feat and every crest.
+function M.renown(tab)
+  local hud = require("src.ui.hud")
+  local renown = require("src.core.renown")
+  local ov = { tab = tab or 1, t = 0 }
+  function ov:update(dt) self.t = self.t + dt end
+  function ov:draw()
+    local p = G.profile
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "Renown", C.goldDark)
+    for i, name in ipairs({ "Feats", "Crests" }) do
+      if widgets.button("rn_t" .. i, 380 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
+    end
+    local L = renown.level(p.renown)
+    local got, total = renown.featCount(p)
+    plates.print(renown.title(L), 18, 20, 42, C.goldText)
+    hud.renownBar(20, 64, 240, p.renown, p.renown)
+    local _, into, need = renown.level(p.renown)
+    gfx.text(("%d / %d to level %d"):format(into, need, L + 1), T.small(), 264, 70, C.muted)
+    local st = p.stats
+    local line = ("Matches %d   Wins %d   Captures %d   Rescues %d   Hot Seats %d   Crowns %d")
+      :format(st.matches, st.wins, st.captures, st.rescues, st.hotSeats, st.champions)
+    gfx.text(line, T.small(), 20, 90, C.paper2)
+    gfx.text(("Feats %d of %d"):format(got, total), T.bold(), 620, 44, C.paper, { align = "right" })
+    if self.tab == 1 then
+      for i, f in ipairs(renown.FEATS) do
+        local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+        local x, y = 16 + col * 204, 106 + row * 26
+        local has = p.feats[f.id]
+        gfx.box(x, y, 198, 24, has and C.ink2 or C.deep)
+        icons.draw("medal", x + 11, y + 12, has and C.gold or C.ink3)
+        gfx.text(fit(T.bold(), f.name, 130), T.bold(), x + 22, y + 1, has and C.white or C.muted)
+        if f.renown > 0 then gfx.text("+" .. f.renown, T.label(), x + 194, y + 3, has and C.goldText or C.muted, { align = "right" }) end
+        gfx.text(fit(T.small(), f.desc, 172), T.small(), x + 22, y + 13, has and C.paper2 or C.muted)
+      end
+    else
+      gfx.textf("Crests are starting loadouts for a Free Festival. Earn Renown to unlock more.", T.body(), 20, 106, 600, "left", C.paper2)
+      crestGrid(16, 124, false, p.crest)
+    end
+  end
+  G.openOverlay(ov)
+end
+
+-- Choose a Crest before a Free Festival. onPick(id) runs with the choice.
+function M.crests(onPick)
+  local ov = {}
+  function ov:draw()
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "Choose your Crest", C.goldDark)
+    gfx.textf("Your Crest shapes the pride you start the festival with. Earn Renown to unlock more.", T.body(), 20, 46, 600, "left", C.paper2)
+    local id = crestGrid(16, 70, true, G.profile.crest)
+    if id then
+      G.profile.crest = id
+      G.saveProfile()
+      G.closeOverlay()
+      onPick(id)
+    end
+  end
+  G.openOverlay(ov)
+end
+
 -- ---------------------------------------------------------------- rules
 
 local TABS = { "Bouts", "Cats", "Tricks", "Bonds", "Festival" }
@@ -387,6 +471,8 @@ function M.help()
       head("The Four Hands")
       para("The Arena's four Warlords enter every festival and remember you. Their traits start hidden: beat strays, pay the rat, carry a Spyglass, or watch a trait fire mid-match to learn them.")
       para("A Hand who beats you grows stronger. Beat one and choose their fate: Slay (they forfeit, and may return), Recruit if you never lost a bout (they join your pride, and may betray you), or Brand (a weakness, and a grudge).")
+      head("Renown")
+      para("Every match earns Renown, in both modes, and Feats earn a lump more. Renown levels unlock Crests: starting loadouts you choose when a Free Festival begins.")
       if G.platform and G.platform.console then
         para("Controls: stick or d-pad moves the paw, A picks up and places, X charges, Y takes your cards back, B closes, + opens the menu, L and R scroll. You can also tap and drag on the touchscreen.", C.muted)
       else

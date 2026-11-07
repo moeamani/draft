@@ -88,7 +88,7 @@ function M.rollCards(r, n, quality)
   return out
 end
 
-function M.startRun(save)
+function M.startRun(save, crest)
   save.runs = save.runs + 1
   local run = {
     rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, fish = 25, deck = {}, charms = {},
@@ -96,9 +96,31 @@ function M.startRun(save)
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
   M.dealStarterDeck(run)
+  M.applyCrest(run, crest)
   run.festival = festival.create(save, rng.int(run.rng, 1e9) + 1)
   save.run = run
   return run
+end
+
+-- A Crest (unlocked with Renown) tilts the starting pride: extra cats of a coat or rarity, a
+-- charm, an upholstered cushion or a fatter purse.
+function M.applyCrest(run, crestId)
+  local c = require("src.core.renown").CREST[crestId or "stray"]
+  run.crest = c and c.id or "stray"
+  if not c or c.id == "stray" then return end
+  if c.coat then
+    local pool = util.filter(cards.DRAFTABLE, function(d)
+      return d.kind == "unit" and d.coat == c.coat and (d.rarity == "common" or d.rarity == "rare")
+    end)
+    for _ = 1, 2 do if #pool > 0 then M.addCard(run, rng.pick(run.rng, pool).id) end end
+  end
+  if c.rarity then
+    local pool = util.filter(cards.DRAFTABLE, function(d) return d.kind == "unit" and d.rarity == c.rarity end)
+    if #pool > 0 then M.addCard(run, rng.pick(run.rng, pool).id, c.rarity == "epic" and 2 or 1) end
+  end
+  if c.cushion then run.cushions[c.cushion[1]] = c.cushion[2] end
+  if c.fish then run.fish = run.fish + c.fish end
+  if c.charm then M.addCharm(run, c.charm) end
 end
 
 -- A random but playable starting pride: basics plus 10 random cats, at least 4 Physical and
@@ -675,6 +697,11 @@ M.EVENTS = {
 function M.arenaMovesOn(save)
   local run = save.run
   local news = {}
+  -- only once per festival (the summary screen and the menu can both ask)
+  if run then
+    if run.movedOn then return news end
+    run.movedOn = true
+  end
   local r = save.rng
   local f = run and run.festival
   if f then

@@ -14,6 +14,7 @@ local match = require("src.core.match")
 local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
+local renown = require("src.core.renown")
 local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
@@ -414,7 +415,8 @@ function S:duel(i, du, rec)
             fx.float(mx, my + 6, w.side == 1 and "CAPTURED!" or "Captured!", w.side == 1 and C.redText or C.goldText, true)
             fx.burst(mx, my, w.side == 1 and C.red or C.gold, 20, 120)
           end
-          fx.addShake(5)
+          fx.addShake(6)
+          G.hitstop = 0.14
           sfx.play(w.side == 1 and "lose" or "chip", 1.2, 0.7)
           local who = cards.shortName(linf.def)
           if w.rescued then line = line .. " " .. who .. " is yours again!"
@@ -422,6 +424,7 @@ function S:duel(i, du, rec)
           else line = line .. " You capture " .. who .. "!" end
         else
           self:popText(lv, w.crushed and "Crushed! -2 lives" or "-1 life", C.redText, 14)
+          if w.crushed then G.hitstop = 0.08; fx.addShake(4) end
         end
       end
       if du.groom then fx.float(du.winner == 1 and MY_X[i] or RIVAL_X[i], (du.winner == 1 and MY_Y or RIVAL_Y) + 30, "Groom: +1 goblet", C.green) end
@@ -435,6 +438,7 @@ function S:duel(i, du, rec)
 end
 
 function S:clearBoard(rec)
+  if not self.tut then G.award(renown.boutFeats(self.s, rec)) end
   local returns = {}
   for _, uid in ipairs(rec.returns or {}) do returns[uid] = true end
   local s = self.s
@@ -502,6 +506,7 @@ function S:finish()
   if self.tut then
     -- the prologue goes on, win or lose
     local story = require("src.core.story")
+    G.award({ "prologue" })
     self:at(1.8, function()
       G.go("cutscene", {
         lines = story.lines(G.save, "prologue_outro"), bg = { preset = "menu" },
@@ -517,6 +522,13 @@ function S:finish()
   end
   local out = game.resolveMatch(G.save, self.ctx)
   G.persist()
+  -- Renown for the match, then any feats it earned
+  local gain, lines = renown.matchRenown(self.ctx, out)
+  out.renownBefore, out.renownGain, out.renownLines = G.profile.renown, gain, lines
+  renown.noteMatch(G.profile, self.ctx, out)
+  G.addRenown(gain)
+  out.feats = G.award(renown.matchFeats(self.ctx, out, G.save))
+  out.renownAfter = G.profile.renown
   self:at(1.8, function() G.go("result", { ctx = self.ctx, out = out }) end)
 end
 

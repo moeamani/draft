@@ -3,11 +3,12 @@
 -- love.* calls, so the Python baker can read it. Re-run the baker after changing anything here.
 local M = {}
 
--- Backdrop presets for the `stage` shader. Every scene uses one of these.
+-- Backdrop presets for the `stage` shader. Every scene uses one of these. `swirl` animates a slow
+-- paint swirl with the live shader; the baked PNGs (no shaders) are drawn without it.
 M.STAGES = {
-  menu = { horizon = 0, light = { 0.5, 0.4 }, radius = 0.95, power = 0.95 },
-  vs = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0 },
-  match = { horizon = 100 / 360, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0 },
+  menu = { horizon = 0, light = { 0.5, 0.4 }, radius = 0.95, power = 0.95, swirl = 1.0 },
+  vs = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0, swirl = 0.7 },
+  match = { horizon = 100 / 360, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0, swirl = 0 },
 }
 
 -- Colour ramps: ink green for the room and table, blood red for Hand matches and defeats.

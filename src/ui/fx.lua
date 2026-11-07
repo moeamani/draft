@@ -3,7 +3,7 @@ local gfx = require("src.ui.gfx")
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
-local M = { particles = {}, floats = {}, banners = {}, toasts = {}, shake = 0, flash = 0, time = 0 }
+local M = { particles = {}, floats = {}, banners = {}, toasts = {}, medals = {}, shake = 0, flash = 0, time = 0 }
 local C = theme.c
 
 function M.reset()
@@ -38,6 +38,13 @@ function M.toast(text, kind)
   if #M.toasts > 3 then table.remove(M.toasts, 1) end
 end
 
+-- Feats and Renown levels: a medal slides in at the top right, one at a time. The queue
+-- survives scene changes (M.reset leaves it alone).
+function M.medal(title, desc, kind)
+  M.medals[#M.medals + 1] = { title = title, desc = desc, kind = kind or "feat", age = 0, life = 3.4 }
+  while #M.medals > 6 do table.remove(M.medals, 2) end
+end
+
 function M.addShake(a) M.shake = math.max(M.shake, a) end
 
 function M.update(dt)
@@ -50,6 +57,11 @@ function M.update(dt)
     p.vy = p.vy + 260 * dt
     p.x, p.y = p.x + p.vx * dt, p.y + p.vy * dt
     if p.age > p.life then table.remove(M.particles, i) end
+  end
+  local m = M.medals[1]
+  if m then
+    m.age = m.age + dt
+    if m.age > m.life then table.remove(M.medals, 1) end
   end
   for _, list in ipairs({ M.floats, M.banners, M.toasts }) do
     for i = #list, 1, -1 do
@@ -72,7 +84,10 @@ function M.draw()
   end
   for _, f in ipairs(M.floats) do
     local t = f.age / f.life
+    -- numbers punch in: a size up for the first beat, then settle
     local font = f.big and theme.T.huge() or theme.T.body()
+    if f.age < 0.07 then font = theme.font("bold", f.big and 27 or 14)
+    elseif f.age < 0.14 then font = theme.font("bold", f.big and 22 or 12) end
     local pop = t < 0.12 and -3 or 0
     local a = t > 0.7 and (1 - (t - 0.7) / 0.3) or 1
     gfx.outlined(f.text, font, f.x, f.y - math.floor(t * 22) + pop, f.color, { align = "center", alpha = a })
@@ -98,6 +113,7 @@ function M.draw()
       end
     end
   end
+  M.drawMedal()
   local y = 34
   for _, t in ipairs(M.toasts) do
     local a = math.min(1, t.age / 0.1) * (t.age > t.life - 0.3 and (t.life - t.age) / 0.3 or 1)
@@ -110,6 +126,45 @@ function M.draw()
     gfx.panel(theme.W / 2 - w / 2, y + dy, w, h, col, { alpha = a })
     gfx.textf(t.text, font, theme.W / 2 - w / 2 + 6, y + dy + 2, w - 12, "center", fg, { alpha = a, shadow = false })
     y = y + h + 4
+  end
+end
+
+function M.drawMedal()
+  local m = M.medals[1]
+  if not m then return end
+  local icons = require("src.ui.icons")
+  local level = m.kind == "level"
+  local w = 214
+  local font, small = theme.T.bold(), theme.T.small()
+  local dh = gfx.wrapHeight(m.desc or "", small, w - 44)
+  local h = math.max(34, 18 + dh + 4)
+  local enter = math.min(1, m.age / 0.25)
+  local leave = m.age > m.life - 0.3 and (m.life - m.age) / 0.3 or 1
+  local slide = math.floor((1 - enter) ^ 3 * (w + 20) + (1 - leave) * (w + 20))
+  local x, y = theme.W - w - 6 + slide, 6
+  local edge = level and C.cyan or C.gold
+  theme.set(C.black, 0.55)
+  lg.rectangle("fill", x + 2, y + 3, w, h)
+  theme.set(C.black)
+  lg.rectangle("fill", x - 1, y - 1, w + 2, h + 2)
+  theme.set(edge)
+  lg.rectangle("fill", x, y, w, h)
+  theme.set(level and C.blueDark or C.night)
+  lg.rectangle("fill", x + 1, y + 1, w - 2, h - 2)
+  -- the medal, swinging in
+  local swing = math.sin(m.age * 9) * math.max(0, 1 - m.age * 1.4) * 0.5
+  icons.draw(level and "star" or "medal", x + 18, y + h / 2, edge, 2, swing)
+  local label = level and "RENOWN" or "FEAT"
+  gfx.text(label, theme.T.label(), x + 36, y + 3, level and C.cyan or C.goldText)
+  local lw = theme.T.label():getWidth(label)
+  gfx.text(m.title, font, x + 40 + lw, y + 1, C.white)
+  gfx.textf(m.desc or "", small, x + 36, y + 16, w - 44, "left", C.paper2, { shadow = false })
+  -- a shine sweeps across as it lands
+  local sh = (m.age - 0.2) / 0.5
+  if sh > 0 and sh < 1 then
+    local sx = x + 8 + math.floor(sh * (w - 24))
+    lg.setColor(1, 1, 1, 0.22)
+    lg.polygon("fill", sx, y + 1, sx + 10, y + 1, sx + 4, y + h - 1, sx - 6, y + h - 1)
   end
 end
 

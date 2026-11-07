@@ -180,6 +180,13 @@ function View:update(dt)
   self.bounce = math.max(0, self.bounce - dt * 4)
   self.flip = self.flip + (self.tflip - self.flip) * math.min(1, dt * 12)
   if self.dying then self.dying = self.dying + dt * 1.4 end
+  -- a shine sweeps across a card when you first point at it
+  if self.hovered and not self.wasHovered then self.shine = 0 end
+  self.wasHovered = self.hovered
+  if self.shine then
+    self.shine = self.shine + dt * 2.4
+    if self.shine >= 1 then self.shine = nil end
+  end
   -- settle exactly, so resting cards land on whole pixels with no rotation
   if math.abs(self.tx - self.x) < 0.3 and math.abs(self.vx) < 2 then self.x, self.vx = self.tx, 0 end
   if math.abs(self.ty - self.y) < 0.3 and math.abs(self.vy) < 2 then self.y, self.vy = self.ty, 0 end
@@ -273,6 +280,16 @@ function View:draw(opts)
   lg.rectangle("fill", 1, lift, M.W, M.H)
   lg.setColor(k, k, k, alpha)
   lg.draw(tex, 0, 0)
+  if self.shine and not showBack and not self.dying then
+    -- a slanted band of light, clipped to the card row by row
+    local p = -14 + self.shine * (M.W + 28)
+    lg.setColor(1, 1, 1, 0.28 * alpha)
+    for y = 0, M.H - 1, 2 do
+      local x0 = p + (M.H - y) * 0.35 - M.H * 0.18
+      local a, b = math.max(0, math.floor(x0)), math.min(M.W, math.floor(x0 + 7))
+      if b > a then lg.rectangle("fill", a, y, b - a, 2) end
+    end
+  end
   if self.flash > 0 then -- a white wash over the card
     lg.setBlendMode("add")
     lg.setColor(self.flash * alpha, self.flash * alpha, self.flash * alpha, 1)

@@ -20,7 +20,7 @@ S.bg = { preset = "menu" }
 function S:enter()
   self.t = 0
   self.sel = 1
-  self.logo = plates.image(G.images.logo, 210)
+  self.logo = plates.image(G.images.logo, 184)
 end
 
 function S:update(dt) self.t = self.t + dt end
@@ -75,22 +75,33 @@ function S.askName(title, onDone)
   G.openOverlay(ov)
 end
 
+-- Pick a Crest (once more than one is unlocked), then run onPick(crestId).
+function S.pickCrest(onPick)
+  local renown = require("src.core.renown")
+  if #renown.crestsUnlocked(G.profile) <= 1 then return onPick("stray") end
+  overlays.crests(onPick)
+end
+
 local function startFree()
   G.useMode("free")
   local s = G.save
   if s and s.run and s.run.phase ~= "over" then G.go("hub") return end
   if s then
-    if s.run then game.arenaMovesOn(s) end
-    game.startRun(s)
-    G.persist()
-    G.go("hub", { fresh = true })
+    S.pickCrest(function(crest)
+      if s.run then game.arenaMovesOn(s) end
+      game.startRun(s, crest)
+      G.persist()
+      G.go("hub", { fresh = true })
+    end)
     return
   end
   S.askName("A new festival", function(name)
-    G.setSave(game.newSave(name, os.time()))
-    game.startRun(G.save)
-    G.persist()
-    G.go("hub", { fresh = true })
+    S.pickCrest(function(crest)
+      G.setSave(game.newSave(name, os.time()))
+      game.startRun(G.save, crest)
+      G.persist()
+      G.go("hub", { fresh = true })
+    end)
   end)
 end
 
@@ -121,7 +132,7 @@ function S.settings()
       G.settings.muted = sfxm.toggleMute(); G.saveSettings()
     end
     y = y + 34
-    if widgets.button("set_shake", x, y, w, 28, "Screen shake: " .. (G.settings.shake == false and "off" or "on")) then
+    if widgets.button("set_shake", x, y, w, 28, "Shake and swirl: " .. (G.settings.shake == false and "off" or "on")) then
       G.settings.shake = G.settings.shake == false; G.saveSettings()
     end
     y = y + 34
@@ -140,6 +151,12 @@ end
 local ITEMS = {
   { id = "story", label = "Story", sub = storyLine, act = startStory },
   { id = "free", label = "Free Festival", sub = freeLine, act = startFree },
+  { id = "renown", label = "Renown", sub = function()
+    local renown = require("src.core.renown")
+    local L = renown.level(G.profile.renown)
+    local got, total = renown.featCount(G.profile)
+    return ("Level %d: %s. Feats %d of %d"):format(L, renown.title(L), got, total)
+  end, act = function() overlays.renown() end },
   { id = "cattery", label = "The Cattery", sub = function() return "Every cat you've met" end, act = cattery },
   { id = "rules", label = "How to Play", sub = function() return "The rules, the coats, the tricks" end, act = function() overlays.help() end },
   { id = "settings", label = "Settings", sub = function() return "CRT, fullscreen, sound, saves" end, act = S.settings },
@@ -211,11 +228,11 @@ function S:draw()
     if widgets.button("menu_" .. it.id, x, y, w, h, it.label, { color = i == 1 and C.red or C.ink3, sub = it.sub and it.sub() or nil, focused = focused }) then
       it.act()
     end
-    y = y + h + 5
+    y = y + h + 4
   end
   local hint = G.platform.console and "D-pad choose   A select   B back" or "Arrow keys choose   Enter select   F11 fullscreen"
   gfx.text(hint, T.small(), 628, 346, C.muted, { align = "right", bg = C.ink })
-  gfx.text("v5", T.small(), 12, 346, C.muted, { bg = C.ink })
+  gfx.text("v6", T.small(), 12, 346, C.muted, { bg = C.ink })
 end
 
 function S:nav(d)

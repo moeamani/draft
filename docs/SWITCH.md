@@ -17,7 +17,8 @@ the backdrop from PNGs instead:
 
 | Effect | Desktop | Switch |
 | --- | --- | --- |
-| Backdrop (`stage`) | live shader | PNG baked from the same maths (`assets/switch/stage-*.png`) |
+| Backdrop (`stage`) | live shader, with an animated swirl on the menus | PNG baked from the same maths (`assets/switch/stage-*.png`), without the swirl |
+| CRT screen | on by default (Settings or F2) | not available (needs a shader) |
 | Smear accent on title cards and card backs | baked PNGs (`assets/switch/smear-*.png`) | the same PNGs |
 | Cat art cleanup pass (stray pixels) | canvas read-back | skipped if read-back isn't available |
 | Everything else (plates, cards, cats, text) | no shader | no shader |
@@ -32,8 +33,8 @@ python3 tools/switch/bake_assets.py
 
 The sound effects are synthesised at load as on desktop, at 11 kHz to keep start-up short.
 
-You can try the console paths on a desktop with `love . --console`: no shaders, the baked backdrop
-and the controller cursor. Text is drawn at the screen's resolution on the Switch too (1280x720
+You can try the console paths on a desktop with `love . --console`: no shaders (so no CRT), the
+baked backdrop and the controller cursor. Text is drawn at the screen's resolution on the Switch too (1280x720
 handheld, 1920x1080 docked), so docked play is sharp.
 
 ## Controls
@@ -85,7 +86,9 @@ The packer checks itself against a synthetic NRO:
 python3 tools/switch/nro.py selftest
 ```
 
-Saves go to LÖVE Potion's save directory on the SD card, under the identity `draft-four-hands`.
+Saves go to LÖVE Potion's save directory on the SD card, under the identity `draft-four-hands`:
+`story.lua`, `festival.lua`, `renown.lua` (Renown and feats) and `settings.lua`. If the game hits
+an error it writes `crash.log` there and goes back to the menu.
 
 ## Optional: an .nsp forwarder (Home menu icon)
 

@@ -31,6 +31,7 @@ G = {
 local W, H = theme.W, theme.H
 local SETTINGS_FILE = "settings.lua"
 local SAVE_FILES = { story = "story.lua", free = "festival.lua" }
+local PROFILE_FILE = "renown.lua"
 G.SAVE_VERSION = 3
 
 G.SCENE_LIST = { "menu", "story", "cutscene", "hub", "vs", "match", "result", "market", "event", "summary" }
@@ -71,6 +72,59 @@ local function loadSave(mode)
 end
 
 function G.saveSettings() love.filesystem.write(SETTINGS_FILE, util.serialize(G.settings)) end
+
+-- ---------------------------------------------------------------- Renown
+-- One profile for both modes: Renown, feats and lifetime stats (see src/core/renown.lua).
+local renown = require("src.core.renown")
+
+local function loadProfile()
+  if love.filesystem.getInfo(PROFILE_FILE) then
+    local ok, p = pcall(util.deserialize, love.filesystem.read(PROFILE_FILE))
+    if ok and p then return renown.fix(p) end
+  end
+  return renown.new()
+end
+
+function G.saveProfile() if G.profile then love.filesystem.write(PROFILE_FILE, util.serialize(G.profile)) end end
+
+local function announceLevels(ups)
+  for _, up in ipairs(ups or {}) do
+    local unlock = up.crests[1] and ("You are now " .. up.title .. ". Unlocked: " .. up.crests[1].name .. ".") or ("You are now " .. up.title .. ".")
+    fx.medal("Level " .. up.level, unlock, "level")
+  end
+end
+
+-- Earn feats by id (each only once). Shows a medal for each new one.
+function G.award(ids)
+  if not G.profile then return {} end
+  local got = {}
+  for _, id in ipairs(ids or {}) do
+    local f, ups = renown.earn(G.profile, id)
+    if f then
+      got[#got + 1] = f
+      fx.medal(f.name, f.desc .. (f.renown > 0 and ("  +" .. f.renown .. " Renown") or ""), "feat")
+      sfx.play("win", 1.3, 0.6)
+      announceLevels(ups)
+      if ups.legend then
+        local lf = renown.FEAT.legend
+        got[#got + 1] = lf
+        fx.medal(lf.name, lf.desc, "feat")
+      end
+    end
+  end
+  if #got > 0 then G.saveProfile() end
+  return got
+end
+
+-- Add Renown; returns the levels gained.
+function G.addRenown(n)
+  if not G.profile then return {} end
+  local ups = renown.gain(G.profile, n)
+  announceLevels(ups)
+  if renown.level(G.profile.renown) >= 10 then G.award({ "legend" }) end
+  G.saveProfile()
+  return ups
+end
 
 -- The CRT screen (on by default; needs shaders, so never on LÖVE Potion).
 local CRT_CURVE = 0.07
@@ -183,6 +237,7 @@ function love.load(args)
   if G.settings.muted then sfx.toggleMute() end
   for _, n in ipairs(G.SCENE_LIST) do G.scenes[n] = require("src.scenes." .. n) end
   G.saves.story, G.saves.free = loadSave("story"), loadSave("free")
+  G.profile = loadProfile()
   G.go("menu", {}, true)
   sfx.startMusic()
   for i, a in ipairs(args or {}) do
@@ -255,10 +310,16 @@ function update(dt)
       G.trans = nil
     end
   end
-  fx.update(dt)
+  -- hit-stop: a big moment (a capture, a crushing win) freezes the table for a beat
+  local sdt = dt
+  if (G.hitstop or 0) > 0 then
+    G.hitstop = G.hitstop - dt
+    sdt = dt * 0.06
+  end
+  fx.update(sdt)
   widgets.updateStates(dt)
   widgets.layer = "scene"
-  if G.scene and G.scene.update then G.scene:update(dt) end
+  if G.scene and G.scene.update then G.scene:update(sdt) end
   widgets.layer = "overlay"
   if G.overlay and G.overlay.update then G.overlay:update(dt) end
   if G.autotest then G.autotest.update(dt) end
@@ -289,6 +350,8 @@ local function drawBackground(cw, ch)
     sh:send("baseA", rgb(ramp.baseA))
     sh:send("baseB", rgb(ramp.baseB))
     sh:send("edge", rgb(ramp.edge))
+    sh:send("swirl", (bg.swirl or preset.swirl or 0) * (G.settings.shake == false and 0 or 1))
+    sh:send("time", G.time % 3600)
     lg.setShader(sh)
     lg.setColor(1, 1, 1)
     lg.rectangle("fill", 0, 0, cw, ch)

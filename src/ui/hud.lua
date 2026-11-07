@@ -43,4 +43,61 @@ function M.draw(run, opts)
   end
 end
 
+-- ---------------------------------------------------------------- Renown
+
+local CREST_LOOK = {
+  stray = { "steel", "paw" }, ember = { "ember", "burst" }, tide = { "tide", "orb" }, gilt = { "gilt", "diamond" },
+  moon = { "slate", "moon" }, velvet = { "velvet", "heart" }, merchant = { "goldDark", "fish" },
+  lion = { "red", "sword" }, royal = { "gold", "crown" },
+}
+
+local function crestColor(key)
+  if cards.COATS[key] then return cards.COATS[key].color end
+  if key == "velvet" then return theme.CUSHION.velvet.col end
+  return C[key] or C.steel
+end
+
+-- A heraldic shield for a Crest, centred on (x, y); about 20x24 at scale 1.
+function M.crest(id, x, y, scale, locked)
+  local love_ = love.graphics
+  scale = scale or 1
+  local look = CREST_LOOK[id] or CREST_LOOK.stray
+  local col = locked and C.ink3 or crestColor(look[1])
+  local function shield(w, h, c)
+    theme.set(c)
+    love_.polygon("fill", x - w, y - h, x + w, y - h, x + w, y + h * 0.3, x, y + h, x - w, y + h * 0.3)
+  end
+  shield(11 * scale, 13 * scale, C.black)
+  shield(10 * scale, 12 * scale, locked and C.ink2 or theme.darken(col, 0.55))
+  shield(8 * scale, 10 * scale, col)
+  -- a pale chief across the top
+  theme.set(C.white, locked and 0.08 or 0.22)
+  love_.rectangle("fill", x - 8 * scale, y - 10 * scale, 16 * scale, 4 * scale)
+  icons.draw(locked and "cross" or look[2], x, y + scale, locked and C.ink4 or C.paper, scale)
+end
+
+-- Renown bar: level badge, a bar from `from` to `to` (animated by t in 0..1) and the gain.
+function M.renownBar(x, y, w, from, to, t)
+  local renown = require("src.core.renown")
+  local love_ = love.graphics
+  local cur = from + (to - from) * math.min(1, math.max(0, t or 1))
+  local L, into, need = renown.level(math.floor(cur))
+  gfx.panel(x, y, w, 22, C.night, { border = C.goldDark })
+  icons.draw("star", x + 10, y + 11, C.gold)
+  gfx.text("Lv " .. L, T.bold(), x + 20, y + 4, C.goldText)
+  local bx = x + 52
+  local bw = w - 52 - (to > from and 40 or 6)
+  theme.set(C.black)
+  love_.rectangle("fill", bx, y + 7, bw, 8)
+  theme.set(C.ink2)
+  love_.rectangle("fill", bx + 1, y + 8, bw - 2, 6)
+  local fill = math.floor((bw - 2) * (into / math.max(1, need)))
+  theme.set(C.gold)
+  love_.rectangle("fill", bx + 1, y + 8, fill, 6)
+  theme.set(C.white, 0.35)
+  love_.rectangle("fill", bx + 1, y + 8, fill, 2)
+  if to > from then gfx.text("+" .. math.floor(to - from + 0.5), T.bold(), x + w - 6, y + 4, C.goldText, { align = "right" }) end
+  return L
+end
+
 return M

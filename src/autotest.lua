@@ -39,6 +39,9 @@ function M.start(dir)
   love.filesystem.createDirectory(M.dir)
   local save
   step(0.4, function()
+    -- a fresh Renown profile with a few levels, so the Renown and Crest screens have something to show
+    G.profile = require("src.core.renown").new()
+    G.profile.renown = 640
     save = game.newSave("Sir Whiskers", 4242)
     G.useMode("free")
     G.setSave(save)
@@ -126,7 +129,13 @@ function M.start(dir)
   step(1.2, function() shot("17_summary") end)
   step(0.2, function() G.scene.news = game.arenaMovesOn(save) end)
   step(1.0, function() shot("18_news") end)
+  step(0.2, function() G.go("menu", {}, true) end)
+  step(0.6, function() overlays.renown() end)
+  step(0.8, function() shot("23_renown") end)
+  step(0.2, function() G.closeOverlay(); overlays.crests(function() end) end)
+  step(0.8, function() shot("24_crests") end)
   step(0.2, function()
+    G.closeOverlay()
     for i = 1, 30 do game.noteSeen(save, cards.DRAFTABLE[i].id) end
     G.go("menu", {}, true)
     overlays.cattery()

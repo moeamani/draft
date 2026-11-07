@@ -59,6 +59,10 @@ function S.endChapter()
   local chapter = save.story.chapter
   local result = story.finishChapter(save)
   G.persist()
+  if result == "won" then
+    G.addRenown(30)
+    if save.story.chapter > story.LAST then G.award({ "storyteller" }) end
+  end
   G.go("cutscene", {
     lines = story.lines(save, result, chapter), bg = { preset = "vs", ramp = result == "won" and "felt" or "blood" },
     title = result == "won" and "Chapter complete" or "Chapter failed",

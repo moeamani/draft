@@ -4,6 +4,7 @@ local cards = require("src.core.cards")
 local festival = require("src.core.festival")
 local game = require("src.core.game")
 local match = require("src.core.match")
+local renown = require("src.core.renown")
 local traits = require("src.core.traits")
 local util = require("src.core.util")
 
@@ -335,12 +336,22 @@ test("random starter deck is balanced", function()
   end
 end)
 
+local SIM_FEATS = {}
 test("full festival simulation", function()
   local t = { runs = 0, champs = 0, matches = 0, wins = 0, handM = 0, handW = 0, exch = 0, place = {}, flawless = 0 }
+  local levelAfter = {}
+  local function earn(p, ids)
+    for _, id in ipairs(ids) do
+      SIM_FEATS[id] = (SIM_FEATS[id] or 0) + 1
+      renown.earn(p, id)
+    end
+  end
   for r = 1, 30 do
     local save = game.newSave("Sim", 500 + r)
-    for _ = 1, 3 do
-      local run = game.startRun(save)
+    local prof = renown.new()
+    for k = 1, 3 do
+      local crest = renown.crestsUnlocked(prof)
+      local run = game.startRun(save, crest[#crest].id)
       t.runs = t.runs + 1
       local guard = 0
       while run.phase == "hub" do
@@ -352,11 +363,15 @@ test("full festival simulation", function()
         while not s.over do
           g2 = g2 + 1
           if g2 > 20 then error("match stuck") end
-          match.autoplay(s, 0.3)
+          local rec = match.autoplay(s, 0.3)
+          earn(prof, renown.boutFeats(s, rec))
         end
         t.matches = t.matches + 1
         t.exch = t.exch + s.bout
         local out = game.resolveMatch(save, ctx)
+        renown.noteMatch(prof, ctx, out)
+        renown.gain(prof, (renown.matchRenown(ctx, out)))
+        earn(prof, renown.matchFeats(ctx, out, save))
         if ctx.nemesis then t.handM = t.handM + 1 end
         if out.flawless then t.flawless = t.flawless + 1 end
         if out.won then
@@ -367,6 +382,10 @@ test("full festival simulation", function()
         end
         game.afterMatch(save)
       end
+      renown.noteRun(prof, save)
+      renown.gain(prof, renown.runRenown(save))
+      earn(prof, renown.runFeats(prof, save))
+      levelAfter[k] = (levelAfter[k] or 0) + renown.level(prof.renown)
       local p = run.festival.placing or "?"
       t.place[p] = (t.place[p] or 0) + 1
       if p == "champion" then t.champs = t.champs + 1 end
@@ -388,6 +407,44 @@ test("full festival simulation", function()
   print(("sim: %d festivals, %d matches, %.0f%% won, vs Hands %.0f%%, %.1f bouts/match, %.0f%% flawless, champions %d | %s")
     :format(t.runs, t.matches, 100 * t.wins / t.matches, 100 * t.handW / math.max(1, t.handM), t.exch / t.matches,
       100 * t.flawless / t.matches, t.champs, table.concat(places, " ")))
+  local fl = {}
+  for _, f in ipairs(renown.FEATS) do fl[#fl + 1] = f.id .. "=" .. (SIM_FEATS[f.id] or 0) end
+  print(("renown: mean level after festival 1/2/3: %.1f / %.1f / %.1f | %s")
+    :format(levelAfter[1] / 30, levelAfter[2] / 30, levelAfter[3] / 30, table.concat(fl, " ")))
+end)
+
+test("renown: levels, feats once, crests unlock and apply", function()
+  local p = renown.new()
+  eq(renown.level(0), 1)
+  eq(renown.level(59), 1)
+  eq(renown.level(60), 2)
+  eq(#renown.crestsUnlocked(p), 1)
+  local f, ups = renown.earn(p, "champion")
+  eq(f.id, "champion")
+  eq(renown.earn(p, "champion"), nil, "a feat is earned once")
+  eq(#ups, 1)
+  eq(ups[1].crests[1].id, "ember")
+  eq(renown.unlocked(p, "ember"), true)
+  eq(renown.unlocked(p, "tide"), false)
+  local ups2 = renown.gain(p, renown.threshold(12))
+  eq(renown.level(p.renown), 12)
+  eq(#ups2, 10)
+  eq(p.feats.legend, nil, "legend is earned through earn/addRenown")
+  local q = renown.fix({ renown = 5, feats = {}, stats = { matches = 2 } })
+  eq(q.stats.wins, 0)
+  eq(q.crest, "stray")
+  for _, c in ipairs(renown.CRESTS) do
+    local save = game.newSave("Crest", 77)
+    local run = game.startRun(save, c.id)
+    eq(run.crest, c.id)
+    if c.charm then eq(run.charms[1], c.charm) end
+    if c.cushion then eq(run.cushions[c.cushion[1]], c.cushion[2]) end
+    if c.coat then
+      local n = 0
+      for _, x in ipairs(run.deck) do if cards.getDef(x).coat == c.coat then n = n + 1 end end
+      if n < 2 then error("crest " .. c.id .. " gave " .. n .. " " .. c.coat .. " cats") end
+    end
+  end
 end)
 
 print(("%d passed, %d failed"):format(passed, failed))

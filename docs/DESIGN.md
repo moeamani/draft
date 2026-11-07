@@ -9,7 +9,10 @@ palettes, no noise. Every screen follows that, with the Figma file's palette, lo
   on a 640x360 grid, with no anti-aliasing, dither or blur. Bigger views (the inspect panel, the
   Cattery, portraits) are exact 2x or 3x enlargements, so pixels stay square and crisp.
 - **One dithered surface.** Only the backdrop (`stage` in `src/ui/shaders.lua`) keeps the Figma
-  Dither effect (Bayer 16x16, 8 levels per channel). Everything on top of it is flat.
+  Dither effect (Bayer 16x16, 8 levels per channel). Everything on top of it is flat. On the menus
+  and the VS screen the backdrop carries a slow paint **swirl** (a spiral folded twice, drifting
+  with time) in the room's own greens; the dither turns it into moving pixel bands. The match
+  table stays still.
 - **Plates** (`src/ui/plates.lua`) are flat palette fills with a 1px dark outline, notched corners
   and a 1px bevel. Panels, buttons, cushions and card plates all use them.
 - **Title cards** (the Figma "Card Name / Ability / Power" plates) are plates with the mascot's
@@ -32,6 +35,29 @@ palettes, no noise. Every screen follows that, with the Figma file's palette, lo
 - **Card faces**: the rarity frame, the 50x48 illustration, the name on its coat's colour, the
   ability, a type badge and the cat's hearts. Names, abilities and Paws are live text.
 - **The menu** is a festival night: bunting, your champion facing the Four Hands, and the logo.
+
+### The CRT screen
+
+The finished frame goes to the window through a CRT pass (`crt` in `src/ui/shaders.lua`), on by
+default and switched off in Settings or with F2:
+
+- barrel curvature (`CRT_CURVE` in `main.lua`, 0.07), with the mouse warped through the same curve
+  (`shaders.warp`) so clicks land where the pointer looks;
+- one scanline per virtual pixel row, so the scanlines line up with the pixel art at any size;
+- a soft bloom on bright pixels, a chromatic fringe that grows towards the edges, a vignette and a
+  little grain.
+
+Without shaders (LÖVE Potion) there's no CRT and no swirl.
+
+### Juice
+
+- **Feat medals** slide in at the top right, one at a time, with a shine sweep (`fx.medal`). They
+  survive scene changes, so a feat earned on the last swat still shows on the result screen.
+- **Hit-stop**: a capture freezes the table for 0.14s, a crushing win for 0.08s (`G.hitstop`), with
+  a screen shake.
+- **Number pops**: floating numbers punch in two sizes larger and settle in 0.14s.
+- **Card shine**: a slanted band of light sweeps across a card the moment you point at it.
+- The Hot Seat burns: a flickering ring of fire around the card and a flame Warmth badge.
 
 ### Readable type
 
@@ -68,7 +94,8 @@ Atkinson Hyperlegible was designed by the Braille Institute for low-vision reade
 
 LÖVE Potion can't compile GLSL, so `src/platform.lua` switches the one shader-dependent surface, the
 backdrop, to PNGs baked by `tools/switch/bake_assets.py`. Everything else is shader-free already.
-The pixel cleanup pass reads canvases back; where that isn't possible it is skipped.
+The pixel cleanup pass reads canvases back; where that isn't possible it is skipped. The baked
+backdrops have no swirl, and there's no CRT pass.
 
 ## The match: three cushions
 
@@ -181,6 +208,24 @@ The new core rule, and the nemesis system's teeth:
 - In the simulation you lose about 0.56 cats a match (half to Hands), capture about 1, and rescue
   about 0.1 a match.
 
+### Hold the Cushion
+
+The rule that makes every bout matter twice:
+
+- A cat that **wins its duel stays seated** (face-up) instead of leaving the table, and gains a point
+  of **Warmth**: +1 Paw per point, up to `match.WARMTH_MAX` (5). Losers, the unopposed, the
+  sleeping, tricks and captured cats leave as before.
+- At `match.HOT` (3) Warmth the cat is a **Hot Seat**: every swat knocks off one more goblet.
+- A seated cat keeps its cushion: you fill only the empty ones. It's face-up, so the side that
+  answers sees exactly what it faces, and can aim a coat edge or a crushing cat at it.
+- **Pull back**: click a seated cat (or drop another card on it) to take it back into your hand. It
+  loses its Warmth. Pulling back is free, so the question each bout is whether a warm cat is worth
+  the risk of being crushed and captured.
+- The AI enumerates every subset of its seated cats to pull back, times every placement on the free
+  cushions, adding a keep bonus for Warmth and the capture risk (`choose` in `src/core/match.lua`).
+- In the simulation you have about 1.5 cats seated per bout (the rival 1.2), a Hot Seat about
+  every six bouts, and you pull back about one cat every two bouts.
+
 ### The AI
 
 - **Leading**, it scores every placement of its hand against unknown "phantom" cards built from your deck's average Paws. It slightly prefers dark backs, which give nothing away.
@@ -212,15 +257,59 @@ The new core rule, and the nemesis system's teeth:
 ### The tutorial
 
 `src/core/tutorial.lua` deals fixed hands for a 4-goblet match against Old Bedimew, who leads bout 1
-with an Ember back, a Gilt back and a dark-backed Sunbeam. Eleven lessons walk through coat backs,
-the coat edge, placing (each step waits for the right card on the right cushion, with a bouncing
-arrow), Charge, lives and capture (your Barn Brawler crushes his Squire Kitten), tricks, and
-leading. Charge is locked until the lesson asks for it; after the lessons the match plays out
+with an Ember back, a Gilt back and a dark-backed Sunbeam. Thirteen lessons walk through coat
+backs, the coat edge, placing (each step waits for the right card on the right cushion, with a
+bouncing arrow), Charge, lives and capture (your Barn Brawler crushes his Squire Kitten), tricks,
+holding the cushion (your winners stay seated with their Warmth), and leading. Charge is locked until the lesson asks for it; after the lessons the match plays out
 normally.
 
 ## The Cattery
 
 A collection that lasts across festivals (`save.seen`). Every cat you own, and every rival card you see face up, is recorded. The Cattery (from the title screen or the pause menu) shows all 43 cards in a grid, with `?` for the ones not found yet. Hover one to see its big illustration, Paws, coat, ability, bonds (marked when the partner isn't found yet) and flavour text.
+
+## Renown, Feats and Crests
+
+The progression that outlives every festival (`src/core/renown.lua`, saved on its own as
+`renown.lua`, so resetting a story or festival save keeps it):
+
+- **Renown** comes from every match, in both modes: 12 for a win (plus 4–10 in the knockouts, 8 for
+  beating a Hand, 5 for a flawless match), 4 for a loss, 3 per cat captured, 4 per cat brought
+  home, 2 per Hot Seat. A festival adds 10–50 by how far you got, and a story chapter 30. The
+  result screen fills a Renown bar.
+- **Levels** need 15·(L−1)·(L+2) Renown in total (60, 150, 270, 420, 600...). Each level gives a
+  title, from Nameless Stray to Lord of Cushions.
+- **25 Feats**, each earned once and worth 10–120 Renown, pop up as medals: at the table (Hot Seat,
+  Throne Warmer, Clean Sweep, Flattened, Legend Napper, Cat Burglar, Untouchable, Last Goblet
+  Standing, Blitz, Homecoming), at the festival (First Lesson, Hand Slayer, Kingslayer, Oathkeeper,
+  Mercy, No Quarter, Fat Cat, Through the Gate, Finalist, Champion) and over a life (Collector,
+  Dynasty, Colours, Stray No More, Living Legend).
+- **Crests** unlock with levels and are picked when a Free Festival starts:
+
+| Crest | Level | Start with |
+| --- | --- | --- |
+| Stray | 1 | the usual random pride |
+| Ember, Tide, Gilt | 2, 3, 4 | two more cats of that coat and its Banner charm |
+| Moon | 5 | two more Shadow cats and the Witch's Candle |
+| Velvet | 6 | a Velvet middle cushion and a Saucer of Cream |
+| Merchant | 7 | 40 more fish and the Fishbone Charm |
+| Lion | 9 | an Epic cat at level 2 and the Scruff Ribbon |
+| Royal | 12 | a Legendary cat and the Paper Crown |
+
+- Pacing in the simulation: level 3 after the first festival, 4.3 after the second, 5.5 after the
+  third. The Royal Crest takes about 14 festivals.
+- The Renown screen (main menu) lists the level, lifetime stats, every feat and every crest.
+
+## Crash safety
+
+`love.update` and `love.draw` run under `xpcall` (`safely` in `main.lua`). An error inside a frame
+is printed, appended to `crash.log` in the save folder (capped at 60 KB), the save is written, any
+canvas, shader, scissor or overlay is reset, and the game returns to the menu with a message. Four
+errors within three seconds fall through to LÖVE's error screen, so a broken menu can't loop.
+
+The crash hunt behind round 6 used a strict emulator (every draw call checks its arguments: numbers,
+polygon vertex counts, drawables) and a fuzzer that clicks recorded button rectangles, drags cards,
+presses keys and controller buttons, types text and pushes the game through its main flow, across
+thousands of frames per seed.
 
 ## The festival
 
@@ -254,18 +343,22 @@ A collection that lasts across festivals (`save.seen`). Every cat you own, and e
 
 ## Balance snapshot
 
-`luajit tests/run.lua` plays 90 festivals with the AI choosing for you. It takes the first reward
-(spoils first) and never shops, so it never upholsters a cushion or buys back a pawned cat:
+`luajit tests/run.lua` plays 90 festivals (30 players, 3 festivals each) with the AI choosing for
+you. Each player earns Renown and starts each festival with their best unlocked Crest. It takes the
+first reward (spoils first) and never shops, so it never upholsters a cushion or buys back a pawned
+cat:
 
-- About 62% of matches won, about 51% against Hands, and about 4.2 bouts per match.
-- About 13% of festivals won; a quarter end in the groups.
+- About 67% of matches won, about 57% against Hands, and about 3.9 bouts per match.
+- About 20% of festivals won; a quarter end in the groups.
 - The sim is chaotic: any change moves single-seed numbers by about ±5%.
 
 Tuning knobs:
 - Goblets per side: `match.GOBLETS`. Coat edge: `match.COAT_EDGE`. Crushing margin: `match.CRUSH`.
+- Warmth cap and the Hot Seat: `match.WARMTH_MAX`, `match.HOT`. AI noise per personality: `match.STYLES`.
+- Renown per match, festival and feat, level curve and Crests: `src/core/renown.lua`.
 - Lives: `cards.LIVES`. Captives a Hand keeps: `game.MAX_CAPTIVES`. Pawn prices: `game.PAWN_PRICE`.
 - Hex strength: `compute` in `src/core/match.lua`.
-- Stage scaling (hand size, extra goblets): `game.setupMatch`. Hands get one extra goblet per 5 levels.
+- Stage scaling (hand size, extra goblets): `game.setupMatch`. Hands get one extra goblet per 4 levels.
 - Bond strength: `cards.BOND_PAWS`. Cushion price and the Hands' cushions: `game.CUSHION_PRICE`, `game.handCushions`.
 - Card Paws: `src/core/cards.lua`. Reward quality: `game.RARITY_WEIGHTS`. Stray ratings: `festival.create`.
 
@@ -285,6 +378,7 @@ Tuning knobs:
 
 - Trick cards that move between cushions after the reveal.
 - Bond quests: a market or event that offers the missing partner of a cat you own.
-- Cattery rewards: unlock a starting cat or a cosmetic backdrop for finding every bond.
+- Cattery rewards: a Crest or a cosmetic backdrop for finding every bond.
+- Stakes: harder festivals (the Hands start with more goblets) unlocked by winning, for more Renown.
 - A ransom: pay fish to a Hand to buy back one captive between festivals.
 - Music beyond the generated ambient loop.

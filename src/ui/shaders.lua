@@ -36,6 +36,8 @@ extern vec3 baseA;
 extern vec3 baseB;
 extern vec3 edge;
 extern vec2 origin; // where the 640x360 safe area starts, in virtual pixels
+extern float swirl;  // 0..1: a slow paint swirl drifting through the light (menus)
+extern float time;
 vec4 effect(vec4 color, Image tex, vec2 uv0, vec2 sc) {
   vec2 V = vec2(640.0, 360.0);
   vec2 vp = floor(sc / pix) - origin;
@@ -43,6 +45,19 @@ vec4 effect(vec4 color, Image tex, vec2 uv0, vec2 sc) {
   vec2 d = (uv - light) * vec2(V.x / V.y, 1.0);
   float L = clamp(power * (1.0 - smoothstep(0.0, radius, length(d))), 0.0, 1.0);
   vec3 col = mix(baseA, baseB, L);
+  if (swirl > 0.0) {
+    // a spiral twisted by distance from the light, then folded a few times so it flows
+    vec2 p = d * 2.4;
+    float r = length(p);
+    float a = atan(p.y, p.x) + r * 1.9 - time * 0.11;
+    vec2 q = vec2(cos(a), sin(a)) * r;
+    q += 0.5 * vec2(sin(q.y * 2.3 + time * 0.23), cos(q.x * 1.9 - time * 0.19));
+    q += 0.35 * vec2(sin(q.y * 3.1 - time * 0.17), cos(q.x * 2.7 + time * 0.13));
+    float band = 0.5 + 0.5 * sin(q.x * 3.0 + q.y * 2.2);
+    float s = smoothstep(0.45, 0.95, band) * swirl * (0.3 + 0.7 * L);
+    col = mix(col, edge, s * 0.6);
+    col = mix(col, voidc, (1.0 - smoothstep(0.0, 0.3, band)) * swirl * 0.5);
+  }
   if (horizon > 0.0) {
     if (uv.y < horizon) {
       col = voidc;
