@@ -57,23 +57,38 @@ local function inkFor(col, opts)
   return theme.readable(col, opts.bg or C.ink2, opts.ratio)
 end
 
+-- Put one line of text with its line box's top-left at (x, y). Pixel fonts land on whole virtual
+-- pixels (baseline included) and get their faux-bold second pass; smooth fonts snap to screen pixels.
+local function put(font, f, str, x, y, k)
+  local p = font:pixel()
+  if p then
+    x = floor(x + 0.5)
+    local dy = font:drawY(y)
+    lg.print(str, x, dy, 0, 1 / k, 1 / k)
+    if p.faux then lg.print(str, x + 1, dy, 0, 1 / k, 1 / k) end
+  else
+    lg.print(str, snap(x), snap(y), 0, 1 / k, 1 / k)
+  end
+end
+M.put = put
+
 -- One line of text. opts: align ("left" | "center" | "right"), bg (the ground, for contrast),
--- shadow (true for a soft drop shadow over busy art), alpha, raw (skip the contrast check)
+-- shadow (true for a drop shadow over busy art), alpha, raw (skip the contrast check)
 function M.text(str, font, x, y, col, opts)
   opts = opts or {}
   str = tostring(str)
   local f = useFont(font)
   local k = theme.K
-  local w = f:getWidth(str) / k
+  local w = font:getWidth(str)
   local ox = 0
   if opts.align == "center" then ox = -w / 2 elseif opts.align == "right" then ox = -w end
-  x, y = snap(x + ox), snap(y)
+  x = x + ox
   if opts.shadow == true then
     theme.set(C.black, (opts.alpha or 1) * 0.8)
-    lg.print(str, x + 0.5, y + 0.75, 0, 1 / k, 1 / k)
+    if font:pixel() then put(font, f, str, x + 1, y + 1, k) else put(font, f, str, x + 0.5, y + 0.75, k) end
   end
   theme.set(inkFor(col, opts), opts.alpha)
-  lg.print(str, x, y, 0, 1 / k, 1 / k)
+  put(font, f, str, x, y, k)
   return w
 end
 
@@ -83,18 +98,18 @@ function M.outlined(str, font, x, y, col, opts)
   str = tostring(str)
   local f = useFont(font)
   local k = theme.K
-  local w = f:getWidth(str) / k
+  local w = font:getWidth(str)
   if opts.align == "center" then x = x - w / 2 elseif opts.align == "right" then x = x - w end
-  x, y = snap(x), snap(y)
   theme.set(opts.outline or C.black, opts.alpha)
-  local d = 0.75
+  local d = font:pixel() and 1 or 0.75
+  if font:pixel() then x, y = floor(x + 0.5), floor(y + 0.5) end
   for dx = -1, 1 do
     for dy = -1, 1 do
-      if dx ~= 0 or dy ~= 0 then lg.print(str, x + dx * d, y + dy * d, 0, 1 / k, 1 / k) end
+      if dx ~= 0 or dy ~= 0 then put(font, f, str, x + dx * d, y + dy * d, k) end
     end
   end
   theme.set(col, opts.alpha)
-  lg.print(str, x, y, 0, 1 / k, 1 / k)
+  put(font, f, str, x, y, k)
   return w
 end
 
@@ -104,6 +119,26 @@ function M.textf(str, font, x, y, w, align, col, opts)
   str = tostring(str)
   local f = useFont(font)
   local k = theme.K
+  if font:pixel() then
+    -- pixel fonts: wrap, then place each line on whole pixels
+    local _, lines = font:getWrap(str, w)
+    local lh = font:getHeight()
+    local function pass(dx, dy)
+      for i, line in ipairs(lines) do
+        local lw = font:getWidth(line)
+        local ox = 0
+        if align == "center" then ox = (w - lw) / 2 elseif align == "right" then ox = w - lw end
+        put(font, f, line, x + ox + dx, y + (i - 1) * lh + dy, k)
+      end
+    end
+    if opts.shadow == true then
+      theme.set(C.black, (opts.alpha or 1) * 0.8)
+      pass(1, 1)
+    end
+    theme.set(inkFor(col, opts), opts.alpha)
+    pass(0, 0)
+    return #lines * lh
+  end
   x, y = snap(x), snap(y)
   if opts.shadow == true then
     theme.set(C.black, (opts.alpha or 1) * 0.8)
@@ -123,7 +158,7 @@ end
 -- Title text with per-letter bobbing.
 function M.wavy(str, font, cx, y, col, t, amp, opts)
   opts = opts or {}
-  useFont(font)
+  local f = useFont(font)
   local k = theme.K
   local x = cx - font:getWidth(str) / 2
   amp = amp or 2
@@ -131,8 +166,8 @@ function M.wavy(str, font, cx, y, col, t, amp, opts)
   for i = 1, #str do
     local ch = str:sub(i, i)
     local dy = math.sin(t * 2.4 + i * 0.5) * amp
-    lg.print(ch, snap(x), snap(y + dy), 0, 1 / k, 1 / k)
-    x = x + font:getWidth(ch)
+    put(font, f, ch, x, y + dy, k)
+    x = x + f:getWidth(ch) / k
   end
 end
 

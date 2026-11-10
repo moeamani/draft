@@ -117,8 +117,8 @@ end
 function S.settings()
   local ov = {}
   function ov:draw()
-    overlays.frame(180, 52, 280, 266, "Settings")
-    local x, w, y = 196, 248, 92
+    overlays.frame(180, 24, 280, 318, "Settings")
+    local x, w, y = 196, 248, 62
     local sfxm = require("src.ui.sfx")
     if not G.platform.console then
       if widgets.button("set_fs", x, y, w, 28, "Fullscreen: " .. (love.window.getFullscreen() and "on" or "off")) then G.toggleFullscreen() end
@@ -127,6 +127,8 @@ function S.settings()
     if widgets.button("set_crt", x, y, w, 28, "CRT screen: " .. (G.crtOn() and "on" or "off"), { disabled = not require("src.ui.shaders").crt }) then
       G.cycleScreen()
     end
+    y = y + 34
+    if widgets.button("set_text", x, y, w, 28, "Text: " .. (G.settings.text == "smooth" and "smooth" or "pixel")) then G.cycleText() end
     y = y + 34
     if widgets.button("set_snd", x, y, w, 28, "Sound: " .. (sfxm.muted and "off" or "on")) then
       G.settings.muted = sfxm.toggleMute(); G.saveSettings()
@@ -159,7 +161,7 @@ local ITEMS = {
   end, act = function() overlays.renown() end },
   { id = "cattery", label = "The Cattery", sub = function() return "Every cat you've met" end, act = cattery },
   { id = "rules", label = "How to Play", sub = function() return "The rules, the coats, the tricks" end, act = function() overlays.help() end },
-  { id = "settings", label = "Settings", sub = function() return "CRT, fullscreen, sound, saves" end, act = S.settings },
+  { id = "settings", label = "Settings", sub = function() return "CRT, text, sound, saves" end, act = S.settings },
   { id = "quit", label = "Quit", act = function() love.event.quit() end },
 }
 

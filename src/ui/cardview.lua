@@ -55,6 +55,47 @@ local function abilColor(def)
   return def.ability == "none" and C.slate or C.blueDark
 end
 
+-- Cards are printed on cream paper: worn specks, a darker edge, a 2px margin. The illustration
+-- sits in a window framed in the rarity's colour (brown, blue, red, gold).
+local PAPER = { theme.hex("#ebe2c6"), theme.hex("#d6c8a3"), theme.hex("#bba882") }
+local INK = theme.hex("#3a2a1c")
+local RARITY_FRAME = { common = INK, rare = theme.hex("#2471fc"), epic = theme.hex("#c8382c"), legendary = theme.hex("#d3a200") }
+
+local function hash(x, y, s)
+  local n = math.sin(x * 12.9898 + y * 78.233 + (s or 0) * 3.7) * 43758.5453
+  return n - math.floor(n)
+end
+
+-- Paper over the whole card: outline with rounded corners, specks, a worn edge.
+local function paper(W, H, seed)
+  theme.set(C.black)
+  lg.rectangle("fill", 1, 0, W - 2, H)
+  lg.rectangle("fill", 0, 1, W, H - 2)
+  theme.set(PAPER[1])
+  lg.rectangle("fill", 1, 1, W - 2, H - 2)
+  for y = 1, H - 2 do
+    for x = 1, W - 2 do
+      local edge = x == 1 or y == 1 or x == W - 2 or y == H - 2
+      local r = hash(x, y, seed)
+      local c
+      if edge then c = r < 0.25 and PAPER[3] or PAPER[2]
+      elseif r < 0.05 then c = PAPER[2]
+      elseif r < 0.065 then c = PAPER[3] end
+      if c then theme.set(c); lg.rectangle("fill", x, y, 1, 1) end
+    end
+  end
+  -- worn corners
+  theme.set(C.black)
+  lg.rectangle("fill", 1, 1, 1, 1); lg.rectangle("fill", W - 2, 1, 1, 1)
+  lg.rectangle("fill", 1, H - 2, 1, 1); lg.rectangle("fill", W - 2, H - 2, 1, 1)
+end
+
+local function seedOf(str)
+  local n = 0
+  for i = 1, #str do n = (n * 31 + str:byte(i)) % 997 end
+  return n
+end
+
 local function renderFace(def, level)
   local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
   if faceCache[key] then return faceCache[key] end
@@ -63,17 +104,24 @@ local function renderFace(def, level)
   -- build the plates before switching canvases (they bake into their own canvases)
   local namePlate = plates.plate(50, 12, nameColor(def), { outline = false })
   local abilPlate = plates.plate(50, 11, abilColor(def), { outline = false })
-  local frame = plates.plate(W, H, rarityCol(def), { outline = C.black })
   local pic = art.card(def)
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
   begin(cv)
+  paper(W, H, seedOf(def.id))
+  -- the illustration window: rarity frame, then the art (trimmed by a pixel all round)
+  theme.set(RARITY_FRAME[def.rarity] or INK)
+  lg.rectangle("fill", 3, 3, 50, 48)
   lg.setColor(1, 1, 1)
-  lg.draw(frame, 0, 0)
-  theme.set(C.black)
-  lg.rectangle("fill", 2, 2, W - 4, H - 4)
-  lg.setColor(1, 1, 1)
+  lg.setScissor(4, 4, 48, 46)
   lg.draw(pic, 3, 3)
+  lg.setScissor()
+  if def.rarity == "legendary" then
+    -- gilt corners on the paper
+    theme.set(C.gold)
+    for _, p in ipairs({ { 2, 2 }, { W - 3, 2 }, { 2, H - 3 }, { W - 3, H - 3 } }) do lg.rectangle("fill", p[1], p[2], 1, 1) end
+  end
+  lg.setColor(1, 1, 1)
   lg.draw(namePlate, 3, 52)
   lg.draw(abilPlate, 3, 65)
   if unit then
@@ -91,30 +139,67 @@ local function renderFace(def, level)
 end
 M.face = renderFace
 
--- Card backs are little title cards: the coat's plate with the smeared mascot. Shadow cats and
--- tricks share the black "Power" plate with its full spectrum smear.
+-- Card backs: the same paper, and an ornate field in the coat's colour (a lattice, a ruled frame,
+-- corner knots and a medallion), like a deck of old playing cards. Shadow cats and tricks share
+-- the dark back.
 M.BACKS = {
-  ember = { plate = C.red, streak = 0.43, icon = "paw" },
-  tide = { plate = theme.hex("#2471fc"), streak = 0.43, icon = "paw" },
-  gilt = { plate = C.gold, streak = 0.43, icon = "paw" },
-  dark = { plate = C.night, streak = 1.0, icon = "moon" },
-  plain = { plate = C.ink3, streak = 0.43, icon = "paw" },
+  ember = { field = C.red, icon = "paw" },
+  tide = { field = theme.hex("#2471fc"), icon = "paw" },
+  gilt = { field = C.gold, icon = "paw" },
+  dark = { field = theme.hex("#171a26"), light = C.slate, icon = "moon" },
+  plain = { field = C.ink3, icon = "paw" },
 }
+
+local function ornament(x0, y0, w, h, spec, small)
+  local field = spec.field
+  local light = spec.light or theme.shade(field, 0.38)
+  local dark = theme.shade(field, -0.4)
+  theme.set(field)
+  lg.rectangle("fill", x0, y0, w, h)
+  local step = small and 6 or 8
+  local cx, cy = x0 + math.floor(w / 2), y0 + math.floor(h / 2)
+  local med = small and 5 or 10
+  for y = 0, h - 1 do
+    for x = 0, w - 1 do
+      local px, py = x0 + x, y0 + y
+      local d = math.abs(px - cx) + math.abs(py - cy)
+      local col
+      if x == 2 or y == 2 or x == w - 3 or y == h - 3 then
+        if x >= 2 and y >= 2 and x <= w - 3 and y <= h - 3 then col = light end -- the ruled frame
+      elseif x > 3 and y > 3 and x < w - 4 and y < h - 4 then
+        if d <= med then
+          col = d == med and light or dark -- the medallion
+        elseif (x + y) % step == 0 or (x - y) % step == 0 then
+          col = theme.mix(field, light, 0.55) -- the lattice
+        elseif (x + y) % step == step / 2 and (x - y) % step == step / 2 then
+          col = light -- a dot in every diamond
+        end
+      end
+      if col then theme.set(col); lg.rectangle("fill", px, py, 1, 1) end
+    end
+  end
+  -- corner knots
+  theme.set(light)
+  for _, c in ipairs({ { x0 + 3, y0 + 3 }, { x0 + w - 6, y0 + 3 }, { x0 + 3, y0 + h - 6 }, { x0 + w - 6, y0 + h - 6 } }) do
+    lg.rectangle("fill", c[1] + 1, c[2], 1, 3)
+    lg.rectangle("fill", c[1], c[2] + 1, 3, 1)
+  end
+  if not small then icons.draw(spec.icon, cx, cy, light) end
+end
+
 local backs = {}
 function M.back(kind)
   kind = kind or "plain"
   if backs[kind] then return backs[kind] end
   local spec = M.BACKS[kind] or M.BACKS.plain
   local W, H = M.W, M.H
-  local inner = plates.titleCard(W - 4, H - 4, spec.plate, { streak = spec.streak })
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
   begin(cv)
-  theme.set(C.black)
-  lg.rectangle("fill", 0, 0, W, H)
-  theme.set(C.paper)
-  lg.rectangle("fill", 1, 1, W - 2, H - 2)
-  plates.draw(inner, 2, 2)
+  paper(W, H, #kind * 17)
+  theme.set(theme.shade(spec.field, -0.55))
+  lg.rectangle("fill", 3, 3, W - 6, H - 6)
+  ornament(4, 4, W - 8, H - 8, spec)
   lg.pop()
   backs[kind] = cv
   return cv
@@ -125,17 +210,22 @@ local pile
 function M.pile()
   if pile then return pile end
   local w, h = 24, 32
-  local inner = plates.titleCard(w - 4, h - 4, C.ink3, { streak = 0.43 })
   pile = lg.newCanvas(w + 4, h + 4)
   pile:setFilter("nearest", "nearest")
   begin(pile)
-  for k = 2, 0, -1 do
+  for k = 2, 1, -1 do
     theme.set(C.black)
     lg.rectangle("fill", k * 2, 4 - k * 2, w, h)
-    theme.set(C.paper)
+    theme.set(PAPER[2])
     lg.rectangle("fill", k * 2 + 1, 5 - k * 2, w - 2, h - 2)
   end
-  plates.draw(inner, 2, 4)
+  lg.push()
+  lg.translate(0, 4)
+  paper(w, h, 5)
+  lg.pop()
+  theme.set(theme.shade(M.BACKS.plain.field, -0.55))
+  lg.rectangle("fill", 2, 6, w - 4, h - 4)
+  ornament(3, 7, w - 6, h - 6, M.BACKS.plain, true)
   lg.pop()
   return pile
 end
@@ -323,7 +413,8 @@ function View:drawText(opts, alpha, k)
   local ink = (unit and def.coat == "gilt") and C.black or C.white
   local name = cards.shortName(def)
   local nf = f
-  if nf:getWidth(name) > np[3] - 4 then nf = theme.font("body", 7.5) end
+  -- pixel text: every name in the same tiny face, like a printed card
+  if theme.textStyle == "pixel" or nf:getWidth(name) > np[3] - 4 then nf = theme.font("body", 7.5) end
   if nf:getWidth(name) > np[3] - 4 then name = name:match("^(%S+)") or name end
   gfx.text(name, nf, np[1] + np[3] / 2, np[2] + (np[4] - nf:getHeight()) / 2, unit and ink or C.cyan,
     { align = "center", alpha = alpha, bg = ncol })

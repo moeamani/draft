@@ -13,6 +13,7 @@ local bakes = require("src.ui.bakes")
 local input = require("src.input")
 local fx = require("src.ui.fx")
 local sfx = require("src.ui.sfx")
+local room = require("src.ui.room")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
 local util = require("src.core.util")
@@ -23,7 +24,7 @@ local lg = love.graphics
 G = {
   save = nil, saves = {}, mode = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
   scenes = {}, trans = nil,
-  settings = { muted = false, fullscreen = false, shake = true, crt = true },
+  settings = { muted = false, fullscreen = false, shake = true, crt = true, text = "pixel" },
   -- the visible virtual area and where the 640x360 safe area sits in it
   VW = 640, VH = 360, OX = 0, OY = 0, K = 2,
 }
@@ -133,6 +134,13 @@ function G.cycleScreen()
   G.settings.crt = not G.crtOn()
   G.saveSettings()
 end
+-- Pixel fonts on the art grid (default) or smooth, screen-resolution type.
+function G.cycleText()
+  G.settings.text = G.settings.text == "smooth" and "pixel" or "smooth"
+  theme.setTextStyle(G.settings.text)
+  G.saveSettings()
+end
+
 function G.screenLabel()
   if not shaders.crt then return "plain" end
   return G.crtOn() and "CRT" or "plain"
@@ -232,6 +240,7 @@ function love.load(args)
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
   end
+  theme.setTextStyle(G.settings.text)
   if G.settings.fullscreen and not platform.console then pcall(love.window.setFullscreen, true, "desktop") end
   layout()
   if G.settings.muted then sfx.toggleMute() end
@@ -338,6 +347,13 @@ local function drawBackground(cw, ch)
   local preset = bakes.STAGES[bg.preset or "menu"] or bakes.STAGES.menu
   local rampName = bakes.RAMPS[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
   local ramp = bakes.RAMPS[rampName]
+  -- the pixel-art rooms (table, wall), painted once per window shape
+  local roomImg = room.image(bg, G.VW, G.VH, G.OX, G.OY)
+  if roomImg then
+    lg.setColor(1, 1, 1)
+    lg.draw(roomImg, 0, 0, 0, view.k, view.k)
+    return
+  end
   local sh = shaders.stage
   if sh then
     sh:send("pix", view.k)

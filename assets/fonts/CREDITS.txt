@@ -1,4 +1,25 @@
 All fonts are licensed under the SIL Open Font License 1.1 (https://openfontlicense.org).
+Each font's licence and copyright notice is in the OFL-*.txt file named after it.
+
+Pixel text (the default; Settings > Text: pixel). Drawn on the game's pixel grid, one font pixel
+per art pixel:
+
+DraftPixel10.ttf, DraftPixel12.ttf  Modified Version of Fusion Pixel Font 10px and 12px proportional
+                                    (Copyright (c) 2022, TakWolf, https://github.com/TakWolf/fusion-pixel-font),
+                                    subset to Latin. Renamed because "Fusion Pixel" is a Reserved
+                                    Font Name. Licence: OFL-FusionPixel.txt. (Body text.)
+CoralPixels-Regular.ttf             Modified Version of Coral Pixels (Copyright 2024 The Coral Pixels
+                                    Project Authors): subset to Latin, and each glyph's colour layers
+                                    merged into one plain outline (LÖVE can't draw colour fonts).
+                                    Licence: OFL-CoralPixels.txt. (Bold text, numbers.)
+Jacquard12-Regular.ttf              Jacquard 12 (Copyright 2023 The Soft Type Project Authors),
+                                    subset to Latin. Licence: OFL-Jacquard12.txt. (Titles and signs.)
+Jersey15-Regular.ttf                Jersey 15 (Copyright 2023 The Soft Type Project Authors),
+                                    subset to Latin. Licence: OFL-Jersey15.txt. (Big numbers.)
+Micro5-Regular.ttf                  Micro 5 (Copyright 2023 The Soft Type Project Authors),
+                                    subset to Latin. Licence: OFL-Micro5.txt. (Tiny labels on cards.)
+
+Smooth text (Settings > Text: smooth). Rasterised at the screen's real resolution:
 
 AncizarSerif-Regular.ttf          https://fonts.google.com/specimen/Ancizar+Serif  (titles, as in the Figma file)
 AncizarSerif-Italic.ttf           (static weight-400 instances of the variable font)
@@ -6,8 +27,6 @@ AtkinsonHyperlegible-Regular.ttf  https://fonts.google.com/specimen/Atkinson+Hyp
 AtkinsonHyperlegible-Bold.ttf     (buttons, numbers, labels)
 AtkinsonHyperlegible-Italic.ttf   (narration)
 OFL-AtkinsonHyperlegible.txt      Atkinson Hyperlegible's licence (Copyright 2020 Braille Institute of America, Inc.)
-
-Fonts are rasterised at the screen's real resolution, never as pixel art.
 
 The logo, mascot and shadow-creature artwork (assets/img) comes from the project's Figma file.
 logo.png is the two-tone "Draft" lockup from the Figma title frame; mascot-silhouette.png is the

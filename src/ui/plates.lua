@@ -118,16 +118,22 @@ function M.titleCard(w, h, color, opts)
     begin(canvas)
     lg.setColor(1, 1, 1)
     lg.draw(base, 0, 0)
-    if opts.streak then
-      local img = smearFor(color, opts.streak)
-      if img then
-        -- the smear sits on the far end of the card, the way the Figma cards place it
-        local side = math.max(h * 2.4, w * 0.55)
-        local i = outline and 1 or 0
-        lg.setScissor(i, i + 1, w - 2 * i, h - 2 * i - 2)
-        lg.setColor(1, 1, 1, opts.streak >= 0.9 and 0.95 or 0.8)
-        lg.draw(img, w - side * 0.92, (h - side) / 2, 0, side / img:getWidth(), side / img:getHeight())
-        lg.setScissor()
+    if opts.streak and w >= 24 and h >= 12 then
+      -- an engraved sign: a ruled frame inset two pixels and a stud at each end
+      local i = outline and 1 or 0
+      local rule = opts.streak >= 0.9 and C.goldDark or theme.shade(color, 0.32)
+      local deep = theme.shade(color, -0.38)
+      theme.set(deep)
+      lg.rectangle("line", i + 2.5, i + 2.5, w - 2 * i - 5, h - 2 * i - 5)
+      theme.set(rule)
+      lg.rectangle("line", i + 1.5, i + 1.5, w - 2 * i - 3, h - 2 * i - 3)
+      local cy = math.floor(h / 2)
+      for _, sx in ipairs({ i + 5, w - i - 6 }) do
+        theme.set(deep)
+        lg.rectangle("fill", sx - 1, cy - 1, 3, 3)
+        theme.set(rule)
+        lg.rectangle("fill", sx, cy - 1, 1, 3)
+        lg.rectangle("fill", sx - 1, cy, 3, 1)
       end
     end
     lg.pop()
@@ -136,8 +142,8 @@ function M.titleCard(w, h, color, opts)
   local card = setmetatable({ canvas = canvas, w = w, h = h, color = color }, Card)
   if opts.label and opts.label ~= "" then
     card.label = opts.label
-    card.size = M.fit(opts.label, opts.size or math.max(12, math.floor(h * 0.62)), w - 2 * (opts.pad or 8), opts.italic)
-    card.align, card.pad, card.italic = opts.align or "center", opts.pad or 8, opts.italic
+    card.size = M.fit(opts.label, opts.size or math.max(12, math.floor(h * 0.62)), w - 2 * (opts.pad or 11), opts.italic)
+    card.align, card.pad, card.italic = opts.align or "center", opts.pad or 11, opts.italic
     card.labelColor = opts.labelColor or (theme.luminance(color) > 0.3 and C.black or C.white)
   end
   return card
@@ -214,7 +220,7 @@ end
 -- A title-card strip used as a heading. opts as titleCard, plus align defaults to "left".
 function M.header(x, y, w, h, color, label, opts)
   opts = opts or {}
-  local o = { label = label, align = opts.align or "left", pad = opts.pad or 8, size = opts.size or math.max(12, math.floor(h * 0.7)),
+  local o = { label = label, align = opts.align or "left", pad = opts.pad or 11, size = opts.size or math.max(12, math.floor(h * 0.7)),
     streak = opts.streak, italic = opts.italic, labelColor = opts.labelColor, outline = opts.outline == nil and C.black or opts.outline }
   theme.set(C.black, 0.45)
   lg.rectangle("fill", math.floor(x) + 1, math.floor(y) + 2, w, h)

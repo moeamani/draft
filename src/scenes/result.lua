@@ -37,7 +37,7 @@ function S:enter(p)
   self.t = 0
   self.n = self.ctx.nemesis
   local won = self.out.won
-  S.bg = { preset = "menu", ramp = won and "felt" or "blood" }
+  S.bg = { preset = "table", ramp = won and "felt" or "blood" }
   self.step = won and (self.n and "fate" or "cards") or "loss"
   if self.step == "cards" then self:makeCards() end
   self.portrait = art.entrant(G.save, self.ctx.opp, 48)

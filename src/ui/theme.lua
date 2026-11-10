@@ -72,6 +72,12 @@ end
 
 -- K: canvas pixels per virtual pixel (set by main.lua whenever the window changes).
 M.K = 2
+
+-- Two text styles. "pixel" (the default) draws pixel fonts on the art's own grid, one font pixel
+-- per virtual pixel, so type and art share the same chunky pixels. "smooth" rasterises
+-- Atkinson Hyperlegible and Ancizar Serif at the screen's real resolution.
+M.textStyle = "pixel"
+
 local files = {
   body = "assets/fonts/AtkinsonHyperlegible-Regular.ttf",
   bold = "assets/fonts/AtkinsonHyperlegible-Bold.ttf",
@@ -79,29 +85,126 @@ local files = {
   serif = "assets/fonts/AncizarSerif-Regular.ttf",
   serifItalic = "assets/fonts/AncizarSerif-Italic.ttf",
 }
+
+-- Pixel faces: em size, cap height and descender depth in font pixels (all on a whole-pixel grid).
+local FACES = {
+  pix10 = { file = "assets/fonts/DraftPixel10.ttf", em = 10, cap = 7, desc = 2 }, -- body text
+  pix12 = { file = "assets/fonts/DraftPixel12.ttf", em = 12, cap = 9, desc = 2 }, -- larger body
+  coral = { file = "assets/fonts/CoralPixels-Regular.ttf", em = 13, cap = 9, desc = 3 }, -- bold
+  jacquard = { file = "assets/fonts/Jacquard12-Regular.ttf", em = 21, cap = 12, desc = 3 }, -- titles
+  jersey = { file = "assets/fonts/Jersey15-Regular.ttf", em = 27, cap = 15, desc = 4 }, -- big numbers
+  micro = { file = "assets/fonts/Micro5-Regular.ttf", em = 11, cap = 5, desc = 1 }, -- tiny labels
+}
+M.FACES = FACES
+
+-- Which pixel face (and whole-number scale) stands in for a style at a size. `faux` adds a
+-- second pass one pixel to the right: the classic pixel-font bold.
+local function pixelFace(style, size)
+  if style == "body" or style == "italic" then
+    if size < 8 then return "micro", 1 end
+    if size < 11 then return "pix10", 1 end
+    if size < 20 then return "pix12", 1 end
+    return "pix10", 2
+  elseif style == "bold" then
+    if size < 9.5 then return "micro", 1 end
+    if size < 12 then return "pix10", 1, true end
+    if size < 16 then return "coral", 1 end
+    if size < 26 then return "jersey", 1 end
+    return "jersey", 2
+  end
+  -- serif, serifItalic: titles and headings
+  if size < 16 then return "coral", 1 end
+  if size < 30 then return "jacquard", 1 end
+  return "jacquard", 2
+end
+
 local real = {}
+
+local function load(file, px, hinting)
+  local ok, f = pcall(love.graphics.newFont, file, px, hinting, 1)
+  if not ok then ok, f = pcall(love.graphics.newFont, file, px, hinting) end
+  if not ok then f = love.graphics.newFont(file, px) end
+  return f
+end
 
 local function rasterise(style, size)
   local px = math.max(6, math.floor(size * M.K + 0.5))
   local key = style .. ":" .. px
   if not real[key] then
-    local ok, f = pcall(love.graphics.newFont, files[style], px, "normal", 1)
-    if not ok then f = love.graphics.newFont(files[style], px) end
+    local f = load(files[style], px, "normal")
     f:setFilter("linear", "linear")
     real[key] = f
   end
   return real[key]
 end
 
--- A font handle measured in virtual pixels. The rasterised font behind it follows M.K.
+local function rasteriseFace(face, n)
+  local spec = FACES[face]
+  local px = spec.em * n * M.K
+  local key = face .. "@" .. px
+  if not real[key] then
+    local f = load(spec.file, px, "mono")
+    f:setFilter("nearest", "nearest")
+    -- anything outside the pixel faces' Latin set falls back to Atkinson
+    if f.setFallbacks then pcall(f.setFallbacks, f, load(files.body, px, "normal")) end
+    real[key] = f
+  end
+  return real[key]
+end
+
+-- A font handle measured in virtual pixels. The rasterised font behind it follows M.K and the
+-- text style.
 local Font = {}
 Font.__index = Font
-function Font:real() return rasterise(self.style, self.size) end
-function Font:getWidth(s) return self:real():getWidth(s) / M.K end
-function Font:getHeight() return self:real():getHeight() / M.K end
+
+-- The pixel layout of this handle, or nil in smooth mode.
+function Font:pixel()
+  if M.textStyle ~= "pixel" then return nil end
+  local p = self._pix
+  if not p then
+    local face, n, faux = pixelFace(self.style, self.size)
+    local spec = FACES[face]
+    local cap, desc = spec.cap * n, spec.desc * n
+    local lineH = cap + desc + math.max(3, math.floor(0.3 * cap + 0.5))
+    -- capitals sit in the middle of the line box (as with the smooth fonts), descenders below
+    p = { face = face, n = n, faux = faux, cap = cap, lineH = lineH,
+      top = math.floor((lineH - cap) / 2 + 0.5) }
+    self._pix = p
+  end
+  return p
+end
+
+function Font:real()
+  local p = self:pixel()
+  if p then return rasteriseFace(p.face, p.n) end
+  return rasterise(self.style, self.size)
+end
+
+function Font:getWidth(s)
+  local p = self:pixel()
+  local w = self:real():getWidth(s) / M.K
+  if p and p.faux and s ~= "" then w = w + 1 end
+  return w
+end
+
+function Font:getHeight()
+  local p = self:pixel()
+  if p then return p.lineH end
+  return self:real():getHeight() / M.K
+end
+
 function Font:getWrap(s, limit)
-  local w, lines = self:real():getWrap(s, limit * M.K)
+  local p = self:pixel()
+  local w, lines = self:real():getWrap(s, (limit - ((p and p.faux) and 1 or 0)) * M.K)
   return w / M.K, lines
+end
+
+-- Where to put the draw origin so the baseline lands on a whole virtual pixel, for a line box
+-- whose top is at y (pixel mode only).
+function Font:drawY(y)
+  local p = self:pixel()
+  local f = self:real()
+  return math.floor(y + 0.5) + p.top + p.cap - f:getAscent() / M.K
 end
 
 local handles = {}
@@ -116,6 +219,14 @@ function M.setScale(k)
   if k ~= M.K then
     M.K = k
     real = {}
+  end
+end
+
+function M.setTextStyle(style)
+  style = style == "smooth" and "smooth" or "pixel"
+  if style ~= M.textStyle then
+    M.textStyle = style
+    for _, h in pairs(handles) do h._pix = nil end
   end
 end
 
