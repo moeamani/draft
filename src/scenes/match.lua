@@ -39,6 +39,8 @@ local PX, PY, PW, PH = 468, 32, 164, 270
 local CUSHION_NAMES = { "Left", "Middle", "Right" }
 
 S.bg = { preset = "match" }
+-- the Hands and the Overseer get the darker theme
+S.music = function(self) return (self.ctx and (self.ctx.nemesis or self.ctx.boss)) and "high" or "table" end
 
 function S:enter(p)
   local save = G.save
@@ -116,7 +118,7 @@ function S:rivalCard(i, c)
   if self.s.sides[2].shown[i] and not self.busyResolve then v.tflip = 1 end
   v:setTarget(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, 0)
   self.rviews[i] = v
-  audio.play("card", 0.9)
+  audio.play("deal", 0.9)
 end
 
 -- A card view leaving the table (to a pile, or carried off).
@@ -170,7 +172,7 @@ function S:beginBout()
       local v = cardview.new(c, DECK_X, DECK_Y, 0.6)
       v.rot = -0.4
       self.views[c.uid] = v
-      self:at(k * 0.05, function() audio.play("flip", 1 + k * 0.03, 0.5) end)
+      self:at(k * 0.05, function() audio.play("deal", 1 + k * 0.04, 0.7) end)
     end
   end
   local lead = s.lead
@@ -192,7 +194,7 @@ function S:placeAt(uid, i, from)
   if from ~= "hand" then self.slots[from] = false end
   if occupant and occupant ~= uid and from ~= "hand" then self.slots[from] = occupant end
   self.slots[i] = uid
-  audio.play("card", 1.1)
+  audio.play("place", 1.05)
 end
 
 function S:firstFree()
@@ -266,14 +268,28 @@ end
 
 local function signed(n) return (n >= 0 and "+" or "") .. n end
 
+-- What just happened to a card, as a tag popping above it. col is the text colour the old
+-- floats used; it picks the tag's plate.
+local TAG_PLATE
 function S:popText(v, text, col, dy)
-  fx.float(v.x, v.y - 30 + (dy or 0), text, col)
+  TAG_PLATE = TAG_PLATE or {
+    [C.green] = theme.hex("#1f6b45"), [C.red] = C.redDark, [C.redText] = C.redDark, [C.cyan] = C.blueDark,
+    [C.goldText] = C.goldDark, [C.gold] = C.goldDark, [C.pale] = C.slate,
+  }
+  fx.tag(v.x, v.y - 34 + (dy or 0), text, TAG_PLATE[col] or C.ink3)
   v.bounce = 0.5
+end
+
+-- The scoring ladder: every step of a bout's reveal rings one note higher up the scale.
+function S:ring(vol)
+  audio.note(self.ladder or 0, vol)
+  self.ladder = math.min(10, (self.ladder or 0) + 1)
 end
 
 function S:animate(rec, lead)
   local s = self.s
   local d = 0.15
+  self.ladder = 0
   -- a seated rival cat that was pulled back leaves before the reveal
   for i = 1, 3 do
     local r = self.rviews[i]
@@ -306,21 +322,36 @@ function S:animate(rec, lead)
     for i = 1, 3 do
       local inf = rec.info[side][i]
       if inf.kind ~= "empty" and (#inf.mods > 0 or inf.notes or inf.status == "nap" or inf.status == "fog" or inf.kind == "box") then
+        local function view() return side == 1 and self.board[i] or self.rviews[i] end
+        local fights = inf.kind == "cat" or inf.kind == "box"
+        -- each modifier pops on its own beat, and the Paws badge counts along with it
+        local running = inf.paws
+        for _, m in ipairs(inf.mods) do running = running - m.amount end
+        local dy = 0
+        for _, m in ipairs(inf.mods) do
+          running = running + m.amount
+          local now, at = running, dy
+          self:at(d, function()
+            local v = view()
+            if not v then return end
+            if fights then v.paws = math.max(0, now) end
+            self:popText(v, signed(m.amount) .. " " .. m.text, m.amount >= 0 and C.green or C.red, at)
+            self:ring(0.55)
+          end)
+          d = d + 0.16
+          dy = dy - 14
+        end
+        local last = dy
         self:at(d, function()
-          local v = side == 1 and self.board[i] or self.rviews[i]
+          local v = view()
           if not v then return end
-          if inf.kind == "cat" or inf.kind == "box" then v.paws = math.max(0, inf.paws) end
-          local dy = 0
-          for _, m in ipairs(inf.mods) do
-            self:popText(v, signed(m.amount) .. " " .. m.text, m.amount >= 0 and C.green or C.red, dy)
-            dy = dy - 13
-          end
-          for _, nt in ipairs(inf.notes or {}) do self:popText(v, nt.text, C.cyan, dy); dy = dy - 13 end
-          if inf.status == "nap" then v.dim = 0.7; self:popText(v, inf.napBy == "hairball" and "Disgusted!" or "Zzz...", C.pale, dy)
-          elseif inf.status == "fog" then v.dim = 0.8; self:popText(v, "Lost in the fog", C.pale, dy) end
-          audio.play("tick", 0.9 + i * 0.1)
+          if fights then v.paws = math.max(0, inf.paws) end
+          local y = last
+          for _, nt in ipairs(inf.notes or {}) do self:popText(v, nt.text, C.cyan, y); y = y - 14 end
+          if inf.status == "nap" then v.dim = 0.7; self:popText(v, inf.napBy == "hairball" and "Disgusted!" or "Zzz...", C.pale, y); audio.play("pass", 1.2, 0.5)
+          elseif inf.status == "fog" then v.dim = 0.8; self:popText(v, "Lost in the fog", C.pale, y); audio.play("pass", 0.8, 0.5) end
         end)
-        d = d + 0.32
+        d = d + 0.2
       end
     end
   end
@@ -368,17 +399,19 @@ function S:gobletPos(side, k)
 end
 
 function S:knock(side, n)
-  for _ = 1, n do
-    if self.gob[side] > 0 then
+  for j = 1, n do
+    self:at((j - 1) * 0.11, function()
+      if self.gob[side] <= 0 then return end
       local k = self.gob[side]
       self.gob[side] = k - 1
       local x, y = self:gobletPos(side, k)
       self.falling[#self.falling + 1] = { x = x, y = y, vx = -30 - love.math.random() * 50, vy = -70, rot = 0, vr = -4 - love.math.random() * 4, t = 0, side = side }
-      fx.burst(x, y - 3, C.paper, 10, 60)
-    end
+      fx.burst(x, y - 3, side == 2 and C.steel or C.gold, 10, 70)
+      fx.addShake(3 + j)
+      fx.addPulse(x, y, 0.35 + 0.1 * j)
+      audio.play("goblet", 0.92 + j * 0.1, 0.9)
+    end)
   end
-  fx.addShake(n >= 2 and 6 or 4)
-  audio.play("hit")
 end
 
 function S:duel(i, du, rec)
@@ -388,7 +421,7 @@ function S:duel(i, du, rec)
   -- both fighters lunge
   if a and ia.status == "fight" then a:setTarget(MY_X[i], MY_Y - 16, 1, 0) end
   if b and ib.status == "fight" then b:setTarget(RIVAL_X[i], RIVAL_Y + 14, RIVAL_SCALE, 0) end
-  audio.play("card", 0.8)
+  audio.play("swat", 0.9)
   self:at(0.16, function()
     if a then a:setTarget(MY_X[i], MY_Y, 1, 0) end
     if b then b:setTarget(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, 0) end
@@ -401,6 +434,8 @@ function S:duel(i, du, rec)
       if lv and du.reason == "duel" then lv.dim = 0.55 end
       local swat = du.swats > 1 and ("Swat x" .. du.swats .. "!") or "Swat!"
       fx.float((MY_X[i] + RIVAL_X[i]) / 2, (MY_Y + RIVAL_Y) / 2 - 6, swat, du.winner == 1 and C.gold or C.red, true)
+      if du.reason == "duel" then audio.play("hit", 1, 0.8) end
+      if du.winner == 1 then self:ring(0.8) end
       if du.reason == "duel" then
         line = ("%s: %s %d beats %s %d%s"):format(where, nameOf(winf), math.max(0, winf.paws), nameOf(linf), math.max(0, linf.paws), du.tie and (du.silk and " (tie, silk cushion)" or " (tie)") or "")
       else
@@ -408,7 +443,7 @@ function S:duel(i, du, rec)
       end
       line = line .. (du.swats > 1 and (". " .. du.swats .. " goblets fall.") or ". A goblet falls.")
       self:knock(3 - du.winner, du.swats)
-      if du.winner == 1 then audio.play("cheer", 1, 0.5) end
+      if du.winner == 1 and du.swats > 1 then audio.play("cheer", 1, 0.5) end
       local w = du.wound
       if w and lv then
         lv.livesShown = w.left
@@ -424,15 +459,16 @@ function S:duel(i, du, rec)
             fx.burst(mx, my, w.side == 1 and C.red or C.gold, 20, 120)
           end
           fx.addShake(6)
+          fx.addPunch(w.side == 1 and 1 or 0.7)
           G.hitstop = 0.14
-          audio.play(w.side == 1 and "lose" or "chip", 1.2, 0.7)
+          audio.play(w.rescued and "rescue" or "capture", w.side == 1 and 0.9 or 1.1, 0.9)
           local who = cards.shortName(linf.def)
           if w.rescued then line = line .. " " .. who .. " is yours again!"
           elseif w.side == 1 then line = line .. " " .. who .. " is captured!"
           else line = line .. " You capture " .. who .. "!" end
         else
           self:popText(lv, w.crushed and "Crushed! -2 lives" or "-1 life", C.redText, 14)
-          if w.crushed then G.hitstop = 0.08; fx.addShake(4) end
+          if w.crushed then G.hitstop = 0.08; fx.addShake(4); fx.addPunch(0.45) end
         end
       end
       if du.groom then fx.float(du.winner == 1 and MY_X[i] or RIVAL_X[i], (du.winner == 1 and MY_Y or RIVAL_Y) + 30, "Groom: +1 goblet", C.green) end
@@ -460,7 +496,7 @@ function S:clearBoard(rec)
       v:setTarget(MY_X[i], MY_Y, 1, 0)
       local w = rec.stays[1][i]
       self:popText(v, w >= match.HOT and ("HOT SEAT! Warmth " .. w) or ("+1 Warmth (" .. w .. ")"), w >= match.HOT and C.goldText or C.green)
-      if w >= match.HOT then fx.burst(v.x, v.y, theme.hex("#ff8a3a"), 18, 120); audio.play("burn", 1.2, 0.5) end
+      if w >= match.HOT then fx.burst(v.x, v.y, theme.hex("#ff8a3a"), 18, 120); audio.play("hot", 1, 0.8); fx.addPulse(v.x, v.y, 0.5) end
       v = nil
     end
     local r = self.rviews[i]

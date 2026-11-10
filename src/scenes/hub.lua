@@ -17,6 +17,7 @@ local widgets = require("src.ui.widgets")
 local lg = love.graphics
 
 local S = {}
+S.music = "table"
 local C = theme.c
 local T = theme.T
 S.bg = { preset = "table" }

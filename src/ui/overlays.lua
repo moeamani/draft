@@ -24,11 +24,11 @@ local function fit(font, str, w)
 end
 M.fit = fit
 
--- Overlay frame: an ink panel with a title card across the top (blue, with the mascot smear).
+-- The one overlay frame: an ink panel with a blue title strip and a close button.
 function M.frame(x, y, w, h, title, color)
   gfx.panel(x, y, w, h, C.ink)
-  plates.header(x, y, w, 30, color or theme.hex("#2471fc"), title or "", { size = 22, streak = 0.43, pad = 12 })
-  if widgets.button("ov_close", x + w - 26, y + 5, 20, 20, "x", { color = C.redDark }) then G.closeOverlay() end
+  plates.header(x, y, w, 30, color or C.blue, title or "", { size = 20, pad = 12 })
+  if widgets.button("ov_close", x + w - 26, y + 4, 20, 20, "x", { kind = "danger" }) then G.closeOverlay() end
 end
 
 -- ---------------------------------------------------------------- shared nemesis pieces
@@ -137,7 +137,7 @@ function M.hands()
   if not save then return end
   local ov = {}
   function ov:draw()
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Four Hands", C.night)
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Four Hands")
     gfx.text("They enter every festival and remember every match.", T.body(), 600, 15, C.white, { align = "right" })
     for i, h in ipairs(save.hands) do M.nemesisCard(h, i, 14 + (i - 1) * 154, 44, 150, 194) end
     gfx.label("Chronicle", 16, 244, C.gold)
@@ -344,42 +344,58 @@ end
 
 -- Renown: your level and title, lifetime stats, every feat and every crest.
 function M.renown(tab)
-  local hud = require("src.ui.hud")
   local renown = require("src.core.renown")
   local ov = { tab = tab or 1, t = 0 }
   function ov:update(dt) self.t = self.t + dt end
   function ov:draw()
     local p = G.profile
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Overseer's Ledger", C.night)
-    -- the Overseer, who keeps it, looks over the page
-    require("src.ui.overseer").face(470, 40, 150, 62, self.t)
+    local X, Y, W, H = 8, 8, theme.W - 16, theme.H - 16
+    -- the page: cream stock, ruled like a ledger, under the usual title strip
+    gfx.panel(X, Y, W, H, C.cream, { outline = C.cream3 })
+    theme.set(C.cream2)
+    for ry = Y + 104, Y + H - 6, 13 do lg.rectangle("fill", X + 8, ry, W - 16, 1) end
+    plates.header(X, Y, W, 30, C.night, "The Overseer's Ledger", { size = 20, pad = 12 })
+    if widgets.button("ov_close", X + W - 26, Y + 4, 20, 20, "x", { kind = "danger" }) then G.closeOverlay() end
     for i, name in ipairs({ "Feats", "Crests" }) do
-      if widgets.button("rn_t" .. i, 296 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
+      if widgets.tab("rn_t" .. i, 296 + (i - 1) * 74, Y + 4, 70, name, self.tab == i) then self.tab = i end
     end
-    local L = renown.level(p.renown)
+    -- the Overseer, who keeps it, looks over the page
+    require("src.ui.overseer").face(X + W - 158, Y + 34, 150, 58, self.t)
+    local L, into, need = renown.level(p.renown)
     local got, total = renown.featCount(p)
-    plates.print(renown.title(L), 18, 20, 42, C.goldText)
-    hud.renownBar(20, 64, 240, p.renown, p.renown)
-    local _, into, need = renown.level(p.renown)
-    gfx.text(("%d / %d to level %d"):format(into, need, L + 1), T.small(), 264, 70, C.muted)
+    plates.print(renown.title(L), 20, 20, 42, C.inkText, { bg = C.cream })
+    gfx.text("Renown level " .. L, T.bold(), 20, 68, C.inkText, { bg = C.cream })
+    gfx.meter(110, 70, 150, 8, into / math.max(1, need), C.gold, C.cream3)
+    gfx.text(("%d / %d"):format(into, need), T.small(), 266, 68, C.inkMuted, { bg = C.cream })
     local st = p.stats
-    local line = ("Matches %d   Wins %d   Captures %d   Rescues %d   Hot Seats %d   Crowns %d")
+    local line = ("Matches %d    Wins %d    Captures %d    Rescues %d    Hot Seats %d    Crowns %d")
       :format(st.matches, st.wins, st.captures, st.rescues, st.hotSeats, st.champions)
-    gfx.text(line, T.small(), 20, 90, C.paper2)
-    gfx.text(("Feats %d of %d"):format(got, total), T.bold(), 264, 48, C.paper)
+    gfx.text(line, T.small(), 20, 86, C.inkMuted, { bg = C.cream })
+    gfx.text(("Feats %d of %d"):format(got, total), T.bold(), 330, 44, C.inkText, { bg = C.cream })
     if self.tab == 1 then
+      -- every feat has a line; the ones you've earned are stamped in red ink
       for i, f in ipairs(renown.FEATS) do
         local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
-        local x, y = 16 + col * 204, 106 + row * 26
+        local x, y = 18 + col * 204, 104 + row * 26
         local has = p.feats[f.id]
-        gfx.box(x, y, 198, 24, has and C.ink2 or C.deep)
-        icons.draw("medal", x + 11, y + 12, has and C.gold or C.ink3)
-        gfx.text(fit(T.bold(), f.name, 130), T.bold(), x + 22, y + 1, has and C.white or C.muted)
-        if f.renown > 0 then gfx.text("+" .. f.renown, T.label(), x + 194, y + 3, has and C.goldText or C.muted, { align = "right" }) end
-        gfx.text(fit(T.small(), f.desc, 172), T.small(), x + 22, y + 13, has and C.paper2 or C.muted)
+        local name = fit(T.bold(), f.name, 150)
+        if has then
+          local tw = math.ceil(T.bold():getWidth(name:upper())) + 8
+          lg.push()
+          lg.translate(x + tw / 2, y + 7)
+          lg.rotate(((i * 37) % 7 - 3) * 0.012)
+          theme.set(C.stamp, 0.92)
+          lg.rectangle("line", -tw / 2 + 0.5, -6.5, tw - 1, 13)
+          gfx.text(name:upper(), T.bold(), 0, -6 + (13 - T.bold():getHeight()) / 2, C.stamp, { align = "center", raw = true })
+          lg.pop()
+        else
+          gfx.text(name, T.bold(), x + 4, y + 1, C.inkMuted, { bg = C.cream })
+        end
+        if f.renown > 0 then gfx.text("+" .. f.renown, T.label(), x + 194, y + 3, has and C.stamp or C.inkMuted, { align = "right", bg = C.cream }) end
+        gfx.text(fit(T.small(), f.desc, 190), T.small(), x + 4, y + 13, has and C.inkText or C.inkMuted, { bg = C.cream })
       end
     else
-      gfx.textf("Crests are starting loadouts for a Free Festival. Earn Renown to unlock more.", T.body(), 20, 106, 600, "left", C.paper2)
+      gfx.textf("Crests are starting loadouts for a Free Festival. Earn Renown to unlock more.", T.body(), 20, 104, 600, "left", C.inkText, { bg = C.cream })
       crestGrid(16, 124, false, p.crest)
     end
   end
@@ -390,7 +406,7 @@ end
 function M.crests(onPick)
   local ov = {}
   function ov:draw()
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "Choose your Crest", C.goldDark)
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "Choose your Crest")
     gfx.textf("Your Crest shapes the pride you start the festival with. Earn Renown to unlock more.", T.body(), 20, 46, 600, "left", C.paper2)
     local id = crestGrid(16, 70, true, G.profile.crest)
     if id then
@@ -452,6 +468,8 @@ function M.help()
     elseif self.tab == 2 then
       head("Cat abilities")
       list(CAT_ABILITIES, 2)
+      head("Printings")
+      para("About one cat in eight comes off the press differently. A Proof (blue corners) has 1 more life. Gold Leaf (a gilt edge) earns " .. cards.GOLD_FISH .. " fish in every match where it wins a duel. A Misprint (printed out of register) has +" .. cards.MISPRINT_PAWS .. " Paws, and its back shows the wrong coat: the rival reads it wrong, and so will you when a Hand sends one at you.", C.paper2)
     elseif self.tab == 3 then
       head("Tricks")
       para("Tricks sit on a cushion but never duel (except the Box), so the cat facing one walks in unopposed unless the trick stops it.", C.paper2)
@@ -492,20 +510,19 @@ end
 function M.pause()
   local ov = {}
   function ov:draw()
-    M.frame(210, 60, 220, 240, "Paused")
-    local y = 100
+    local inRun = G.save and G.save.run and G.sceneName ~= "menu"
+    M.frame(210, 70, 220, 224, "Paused")
+    local y = 110
     local bx, bw = 226, 188
-    if widgets.button("p_resume", bx, y, bw, 28, "Resume", { color = C.red }) then G.closeOverlay() end
-    if widgets.button("p_help", bx, y + 34, bw / 2 - 2, 28, "Rules") then M.help() end
-    if widgets.button("p_cattery", bx + bw / 2 + 2, y + 34, bw / 2 - 2, 28, "Cattery") then M.cattery() end
-    if widgets.button("p_crt", bx, y + 68, bw, 28, "Screen: " .. G.screenLabel()) then G.cycleScreen() end
-    local audio = require("src.audio")
-    if widgets.button("p_snd", bx, y + 102, bw, 28, "Sound: " .. (audio.muted and "off" or "on")) then
-      G.settings.muted = audio.toggleMute(); G.saveSettings()
-    end
-    if widgets.button("p_quit", bx, y + 136, bw, 28, "Save and quit") then
+    if widgets.button("p_resume", bx, y, bw, 30, "Resume", { kind = "primary" }) then G.closeOverlay() end
+    if widgets.button("p_help", bx, y + 38, bw / 2 - 2, 26, "Rules") then M.help() end
+    if widgets.button("p_cattery", bx + bw / 2 + 2, y + 38, bw / 2 - 2, 26, "Cattery") then M.cattery() end
+    if widgets.button("p_ledger", bx, y + 70, bw / 2 - 2, 26, "Ledger") then M.renown() end
+    if widgets.button("p_opts", bx + bw / 2 + 2, y + 70, bw / 2 - 2, 26, "Options") then G.scenes.menu.settings() end
+    if widgets.button("p_quit", bx, y + 110, bw, 26, inRun and "Save and go to the title" or "Back to the title") then
       G.persist(); G.closeOverlay(); G.go("menu")
     end
+    gfx.textf("Your progress is saved after every match.", T.small(), bx, y + 144, bw, "center", C.muted, { bg = C.ink })
   end
   G.openOverlay(ov)
 end

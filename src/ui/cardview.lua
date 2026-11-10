@@ -387,7 +387,7 @@ warmthBadge = function(self, alpha)
   local w = self.inst.warmth or 0
   if w <= 0 then return false end
   local hot = w >= HOT
-  local x, y = M.W - 21, 2
+  local x, y = 2, 17 -- under the Paws badge, clear of the coat badge
   gfx.box(x, y, 19, 13, C.black, alpha)
   gfx.box(x + 1, y + 1, 17, 11, hot and theme.hex("#7e2018") or theme.hex("#5a3410"), alpha)
   for j, row in ipairs(FLAME) do

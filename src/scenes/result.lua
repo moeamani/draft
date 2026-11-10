@@ -19,6 +19,7 @@ local widgets = require("src.ui.widgets")
 local lg = love.graphics
 
 local S = {}
+S.music = "table"
 local C = theme.c
 local T = theme.T
 
@@ -83,7 +84,9 @@ function S:header()
   plates.header(170, 8, 300, 40, out.won and C.goldDark or C.night, title, { size = 30, streak = out.won and 0.43 or 1.0, align = "center" })
   local cons = consequence(out, f)
   gfx.text(cons, T.big(), 320, 52, out.champion and C.gold or C.paper, { align = "center" })
-  gfx.text(out.won and ("+" .. out.fish .. " fish" .. (out.flawless and ", never lost a bout!" or "")) or "+5 fish for showing up", T.body(), 320, 74, C.gold, { align = "center" })
+  local fishLine = out.won and ("+" .. out.fish .. " fish" .. (out.flawless and ", never lost a bout!" or "")) or "+5 fish for showing up"
+  if (out.goldFish or 0) > 0 then fishLine = fishLine .. "  +" .. out.goldFish .. " from Gold Leaf" end
+  gfx.text(fishLine, T.body(), 320, 74, C.gold, { align = "center" })
   local y = 94
   if out.line ~= "" then
     gfx.box(125, y, 34, 34, C.black)
@@ -123,6 +126,8 @@ function S:draw()
   if out.renownBefore then
     hud.renownBar(10, 334, 200, out.renownBefore, out.renownAfter or out.renownBefore, (self.t - 0.5) / 1.4)
   end
+  -- the verdict sheet: everything the match changed, on one panel
+  gfx.panel(84, 44, 472, 118, C.ink, { alpha = 0.94 })
   local y = self:header()
   if self.step == "loss" then
     if self.n then gfx.text(self.n.name .. " will remember this, and grow stronger.", T.body(), 320, y + 8, C.paper2, { align = "center" }) end

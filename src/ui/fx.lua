@@ -223,7 +223,7 @@ function M.draw()
     end
   end
   drawStamp()
-  local y = 34
+  local y = 4 -- over the top bar, so headings underneath stay readable
   for _, t in ipairs(M.toasts) do
     local a = math.min(1, t.age / 0.1) * (t.age > t.life - 0.3 and (t.life - t.age) / 0.3 or 1)
     local font = theme.T.body()

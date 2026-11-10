@@ -15,6 +15,7 @@ local widgets = require("src.ui.widgets")
 local lg = love.graphics
 
 local S = {}
+S.music = "table"
 local C = theme.c
 local T = theme.T
 S.bg = { preset = "vs" }
@@ -35,7 +36,6 @@ function S:enter()
   end
   self.me = art.player(save.playerName, 48)
   self.them = art.entrant(save, self.opp, 160, true)
-  self.smear = nil
   self.slammed = false
   self.shown = 0
   audio.play("whoosh")
@@ -65,12 +65,11 @@ function S:draw()
   -- the rival, Figma-mascot style
   local e = ease(t / 0.5)
   local px = math.floor(60 - (1 - e) * 220)
-  if self.smear then
-    plates.draw(self.smear, px + 14, 66)
-  else -- no lens shader (consoles): colour ghosts trail the portrait like the smear does
-    plates.drawTint(self.them, px + 30, 66, C.gold, 0.3, "add")
-    plates.drawTint(self.them, px + 20, 66, C.red, 0.45, "add")
-    plates.drawTint(self.them, px + 10, 66, C.cyan, 0.6, "add")
+  -- a red and a cyan ghost trail it in, like plates sliding into register
+  local off = math.floor((1 - e) * 26)
+  if off > 0 then
+    plates.drawTint(self.them, px + off, 66, C.red, 0.5)
+    plates.drawTint(self.them, px - off, 66, C.cyan, 0.5)
   end
   plates.draw(self.them, px, 66)
   if t > 0.35 then
