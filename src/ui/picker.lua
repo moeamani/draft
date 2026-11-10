@@ -59,7 +59,7 @@ function M:draw()
   local clicked
   if self.hover and widgets.released and widgets.layer == widgets.top then
     clicked = self.hover
-    require("src.ui.sfx").play("card")
+    require("src.audio").play("card")
   end
   if self.hover and not self.opts.noTooltip then
     local v = self.views[self.hover]

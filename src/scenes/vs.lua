@@ -9,7 +9,7 @@ local gfx = require("src.ui.gfx")
 local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -38,7 +38,7 @@ function S:enter()
   self.smear = plates.smearImage(self.them, 160, self.n and 1.0 or 0.43)
   self.slammed = false
   self.shown = 0
-  sfx.play("whoosh")
+  audio.play("whoosh")
 end
 
 function S:update(dt)
@@ -47,7 +47,7 @@ function S:update(dt)
     self.slammed = true
     fx.addShake(5)
     fx.flash = 0.5
-    sfx.play("slam")
+    audio.play("slam")
   end
   if self.t > 0.8 then self.shown = math.min(#self.line, self.shown + dt * 50) end
 end

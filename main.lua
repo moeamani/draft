@@ -12,7 +12,7 @@ local platform = require("src.platform") -- first: fills in what LÖVE Potion la
 local bakes = require("src.ui.bakes")
 local input = require("src.input")
 local fx = require("src.ui.fx")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local printer = require("src.ui.print")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
@@ -24,7 +24,7 @@ local lg = love.graphics
 G = {
   save = nil, saves = {}, mode = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
   scenes = {}, trans = nil,
-  settings = { muted = false, fullscreen = false, shake = true, crt = true, text = "smooth", look = 8 },
+  settings = { muted = false, fullscreen = false, shake = true, crt = true, text = "smooth", look = 8, music = 0.7, sfx = 0.8, speed = 1 },
   -- the visible virtual area and where the 640x360 safe area sits in it
   VW = 640, VH = 360, OX = 0, OY = 0, K = 2,
 }
@@ -104,7 +104,7 @@ function G.award(ids)
     if f then
       got[#got + 1] = f
       fx.medal(f.name, f.desc .. (f.renown > 0 and (" +" .. f.renown .. " Renown.") or ""), "feat")
-      sfx.play("win", 1.3, 0.6)
+      audio.play("win", 1.3, 0.6)
       announceLevels(ups)
       if ups.legend then
         local lf = renown.FEAT.legend
@@ -211,7 +211,7 @@ function G.go(name, params, instant)
     return
   end
   if G.trans then return end
-  sfx.play("whoosh", 1, 0.6)
+  audio.play("whoosh", 1, 0.6)
   G.trans = { t = 0, phase = "in", name = name, params = params }
 end
 
@@ -225,7 +225,7 @@ function love.load(args)
   lg.setLineStyle("rough")
   love.keyboard.setKeyRepeat(true)
   if platform.shaders() then shaders.load() end
-  sfx.load(platform.console)
+  audio.load()
   for _, n in ipairs({ "logo", "mascot", "mascot-silhouette" }) do
     G.images[n] = platform.image("assets/img/" .. n .. ".png", true)
     G.images[n]:setFilter("linear", "linear")
@@ -252,12 +252,13 @@ function love.load(args)
   theme.setTextStyle(G.settings.text)
   if G.settings.fullscreen and not platform.console then pcall(love.window.setFullscreen, true, "desktop") end
   layout()
-  if G.settings.muted then sfx.toggleMute() end
+  audio.setVolumes(G.settings.music, G.settings.sfx)
+  if G.settings.muted then audio.toggleMute() end
   for _, n in ipairs(G.SCENE_LIST) do G.scenes[n] = require("src.scenes." .. n) end
   G.saves.story, G.saves.free = loadSave("story"), loadSave("free")
   G.profile = loadProfile()
   G.go("menu", {}, true)
-  sfx.startMusic()
+  audio.music("menu")
   for i, a in ipairs(args or {}) do
     if a == "--autotest" then
       G.autotest = require("src.autotest")
@@ -334,6 +335,7 @@ function update(dt)
     G.hitstop = G.hitstop - dt
     sdt = dt * 0.06
   end
+  audio.update(dt)
   fx.update(sdt)
   widgets.updateStates(dt)
   widgets.layer = "scene"
@@ -503,7 +505,7 @@ function love.keypressed(k)
     return
   end
   if k == "f3" then
-    G.settings.muted = sfx.toggleMute()
+    G.settings.muted = audio.toggleMute()
     G.saveSettings()
     fx.toast(G.settings.muted and "Sound off" or "Sound on")
     return

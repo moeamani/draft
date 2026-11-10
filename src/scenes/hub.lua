@@ -11,7 +11,7 @@ local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local plates = require("src.ui.plates")
 local rng = require("src.core.rng")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -28,7 +28,7 @@ function S:enter(p)
   if not run.stallEvent then run.stallEvent = rng.pick(run.rng, game.EVENT_IDS) end
   if p and p.fresh then
     fx.toast("Welcome to " .. run.festival.name .. "! You've been dealt " .. #run.deck .. " cats.", "good")
-    sfx.play("cheer")
+    audio.play("cheer")
   end
   self.notes = (p and p.notes) or {}
 end
@@ -153,7 +153,7 @@ function S:draw()
     overlays.chooseCard("Who trains today?", run.deck, function(c) return cards.getDef(c).kind == "unit" and c.level < 3 end, function(c)
       game.upgradeCard(run, c.uid)
       run.stallUsed = true
-      sfx.play("reveal")
+      audio.play("reveal")
       fx.toast(cards.getDef(c).name .. " trains hard and reaches level " .. c.level .. "!", "good")
       G.persist()
     end)

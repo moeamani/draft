@@ -499,9 +499,9 @@ function M.pause()
     if widgets.button("p_help", bx, y + 34, bw / 2 - 2, 28, "Rules") then M.help() end
     if widgets.button("p_cattery", bx + bw / 2 + 2, y + 34, bw / 2 - 2, 28, "Cattery") then M.cattery() end
     if widgets.button("p_crt", bx, y + 68, bw, 28, "Screen: " .. G.screenLabel()) then G.cycleScreen() end
-    local sfx = require("src.ui.sfx")
-    if widgets.button("p_snd", bx, y + 102, bw, 28, "Sound: " .. (sfx.muted and "off" or "on")) then
-      G.settings.muted = sfx.toggleMute(); G.saveSettings()
+    local audio = require("src.audio")
+    if widgets.button("p_snd", bx, y + 102, bw, 28, "Sound: " .. (audio.muted and "off" or "on")) then
+      G.settings.muted = audio.toggleMute(); G.saveSettings()
     end
     if widgets.button("p_quit", bx, y + 136, bw, 28, "Save and quit") then
       G.persist(); G.closeOverlay(); G.go("menu")

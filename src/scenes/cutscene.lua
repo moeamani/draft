@@ -5,7 +5,7 @@ local art = require("src.ui.art")
 local gfx = require("src.ui.gfx")
 local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local story = require("src.core.story")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -40,7 +40,7 @@ function S:update(dt)
   if l then
     local before = math.floor(self.shown)
     self.shown = math.min(#story.fill(G.save, l.text), self.shown + dt * 60)
-    if math.floor(self.shown) > before and math.floor(self.shown) % 3 == 0 then sfx.play("tick", 1.4, 0.25) end
+    if math.floor(self.shown) > before and math.floor(self.shown) % 3 == 0 then audio.play("tick", 1.4, 0.25) end
   end
 end
 
@@ -74,7 +74,7 @@ end
 function S:next()
   self.i = self.i + 1
   self.shown, self.lt = 0, 0
-  sfx.play("click", 1, 0.5)
+  audio.play("click", 1, 0.5)
   if not self:line() then self:finish() end
 end
 

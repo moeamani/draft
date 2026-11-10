@@ -9,7 +9,7 @@ local overlays = require("src.ui.overlays")
 local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
 local printer = require("src.ui.print")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -121,7 +121,7 @@ function S.settings()
   function ov:draw()
     overlays.frame(180, 24, 280, 318, "Settings")
     local x, w, y = 196, 248, 62
-    local sfxm = require("src.ui.sfx")
+    local sfxm = require("src.audio")
     if not G.platform.console then
       if widgets.button("set_fs", x, y, w, 28, "Fullscreen: " .. (love.window.getFullscreen() and "on" or "off")) then G.toggleFullscreen() end
       y = y + 34
@@ -191,7 +191,7 @@ local function link(self, id, x, y)
     theme.set(C.red)
     lg.rectangle("fill", math.floor(x), math.floor(y + 13), math.ceil(w), 1)
   end
-  if clicked then sfx.play("click"); ITEMS[i].act() end
+  if clicked then audio.play("click"); ITEMS[i].act() end
   return x + w + 16
 end
 
@@ -249,14 +249,14 @@ end
 
 function S:nav(d)
   self.sel = (self.sel - 1 + d) % #ITEMS + 1
-  sfx.play("hover", 1, 0.4)
+  audio.play("hover", 1, 0.4)
 end
 
 function S:keypressed(k)
   if k == "up" or k == "w" or k == "left" or k == "a" then self:nav(-1)
   elseif k == "down" or k == "s" or k == "right" or k == "d" then self:nav(1)
   elseif k == "return" or k == "space" or k == "kpenter" then
-    sfx.play("click")
+    audio.play("click")
     ITEMS[self.sel].act()
   elseif k == "escape" then S.settings() end
 end

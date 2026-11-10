@@ -8,7 +8,7 @@ local icons = require("src.ui.icons")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -49,7 +49,7 @@ function S:draw()
       else
         game.addCard(run, c.id)
       end
-      sfx.play("coin")
+      audio.play("coin")
       local v = self.picker.views[i]
       fx.burst(v.x, v.y, C.gold, 20, 120)
       G.persist()
@@ -76,7 +76,7 @@ function S:draw()
         else
           run.fish = run.fish - ch.price
           ch.sold = true
-          sfx.play("coin")
+          audio.play("coin")
           fx.burst(512, y + 30, C.gold, 20, 120)
           G.persist()
         end
@@ -102,7 +102,7 @@ function S:draw()
       game.upgradeCard(run, c.uid)
       self.stock.upgraded = true
       fx.toast(cards.getDef(c).name .. " reaches level " .. c.level .. "!", "good")
-      sfx.play("reveal")
+      audio.play("reveal")
       G.persist()
     end)
   end
@@ -147,7 +147,7 @@ function S:drawUpholsterer(run)
       run.fish = run.fish - offer.price
       game.upholster(run, offer.slot, offer.kind)
       offer.sold = true
-      sfx.play("coin")
+      audio.play("coin")
       fx.burst(248, 290, look.col, 20, 120)
       fx.toast("Your " .. match.CUSHION_NAMES[offer.slot]:lower() .. " cushion is now " .. ck.name .. ".", "good")
       G.persist()

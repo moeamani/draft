@@ -17,7 +17,7 @@ local picker = require("src.ui.picker")
 local renown = require("src.core.renown")
 local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local traits = require("src.core.traits")
 local util = require("src.core.util")
@@ -116,7 +116,7 @@ function S:rivalCard(i, c)
   if self.s.sides[2].shown[i] and not self.busyResolve then v.tflip = 1 end
   v:setTarget(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, 0)
   self.rviews[i] = v
-  sfx.play("card", 0.9)
+  audio.play("card", 0.9)
 end
 
 -- A card view leaving the table (to a pile, or carried off).
@@ -135,7 +135,7 @@ function S:retreat(i)
   self.views[v.inst.uid] = v
   v.selected, v.paws, v.previewInfo, v.risk = false, nil, nil, nil
   self:popText(v, "Pulled back", C.pale)
-  sfx.play("select", 0.8)
+  audio.play("select", 0.8)
   return true
 end
 
@@ -170,7 +170,7 @@ function S:beginBout()
       local v = cardview.new(c, DECK_X, DECK_Y, 0.6)
       v.rot = -0.4
       self.views[c.uid] = v
-      self:at(k * 0.05, function() sfx.play("flip", 1 + k * 0.03, 0.5) end)
+      self:at(k * 0.05, function() audio.play("flip", 1 + k * 0.03, 0.5) end)
     end
   end
   local lead = s.lead
@@ -192,7 +192,7 @@ function S:placeAt(uid, i, from)
   if from ~= "hand" then self.slots[from] = false end
   if occupant and occupant ~= uid and from ~= "hand" then self.slots[from] = occupant end
   self.slots[i] = uid
-  sfx.play("card", 1.1)
+  audio.play("card", 1.1)
 end
 
 function S:firstFree()
@@ -205,14 +205,14 @@ function S:drop()
   if d.moved then
     local target = self:cushionAt(widgets.mx, widgets.my)
     if target then self:placeAt(d.uid, target, d.from)
-    elseif d.from ~= "hand" then self.slots[d.from] = false; sfx.play("select", 0.8) end
+    elseif d.from ~= "hand" then self.slots[d.from] = false; audio.play("select", 0.8) end
   elseif d.from == "hand" then
     local free = self:firstFree()
     if free then self:placeAt(d.uid, free, "hand")
     else fx.toast("All three cushions are taken. Click a card on a cushion to take it back.", "bad") end
   else
     self.slots[d.from] = false
-    sfx.play("select", 0.8)
+    audio.play("select", 0.8)
   end
 end
 
@@ -260,7 +260,7 @@ function S:charge()
     end
   end
   self.slots = { false, false, false }
-  sfx.play("whoosh")
+  audio.play("whoosh")
   self:animate(rec, lead)
 end
 
@@ -295,7 +295,7 @@ function S:animate(rec, lead)
     if rec.cards[2][i] then
       self:at(d, function()
         local v = self.rviews[i]
-        if v and v.tflip < 0 then v.tflip = 1; sfx.play("flip", 1 + i * 0.05) end
+        if v and v.tflip < 0 then v.tflip = 1; audio.play("flip", 1 + i * 0.05) end
       end)
       d = d + 0.14
     end
@@ -318,7 +318,7 @@ function S:animate(rec, lead)
           for _, nt in ipairs(inf.notes or {}) do self:popText(v, nt.text, C.cyan, dy); dy = dy - 13 end
           if inf.status == "nap" then v.dim = 0.7; self:popText(v, inf.napBy == "hairball" and "Disgusted!" or "Zzz...", C.pale, dy)
           elseif inf.status == "fog" then v.dim = 0.8; self:popText(v, "Lost in the fog", C.pale, dy) end
-          sfx.play("tick", 0.9 + i * 0.1)
+          audio.play("tick", 0.9 + i * 0.1)
         end)
         d = d + 0.32
       end
@@ -338,7 +338,7 @@ function S:animate(rec, lead)
     for side = 1, 2 do
       if rec.healed[side] > 0 then
         fx.toast((side == 1 and "Your" or s.sides[2].name .. "'s") .. " groomer sets a goblet back up.", "info")
-        sfx.play("reveal")
+        audio.play("reveal")
       end
     end
     if rec.secondWind then
@@ -346,7 +346,7 @@ function S:animate(rec, lead)
     end
     for _, t in ipairs(rec.revealed or {}) do
       local info = traits.TRAITS[t]
-      if info then sfx.play("reveal"); fx.toast(s.sides[2].name .. " is " .. info.name .. "! " .. info.desc, "info") end
+      if info then audio.play("reveal"); fx.toast(s.sides[2].name .. " is " .. info.name .. "! " .. info.desc, "info") end
     end
     self.gob = { s.sides[1].goblets, s.sides[2].goblets }
   end)
@@ -378,7 +378,7 @@ function S:knock(side, n)
     end
   end
   fx.addShake(n >= 2 and 6 or 4)
-  sfx.play("hit")
+  audio.play("hit")
 end
 
 function S:duel(i, du, rec)
@@ -388,7 +388,7 @@ function S:duel(i, du, rec)
   -- both fighters lunge
   if a and ia.status == "fight" then a:setTarget(MY_X[i], MY_Y - 16, 1, 0) end
   if b and ib.status == "fight" then b:setTarget(RIVAL_X[i], RIVAL_Y + 14, RIVAL_SCALE, 0) end
-  sfx.play("card", 0.8)
+  audio.play("card", 0.8)
   self:at(0.16, function()
     if a then a:setTarget(MY_X[i], MY_Y, 1, 0) end
     if b then b:setTarget(RIVAL_X[i], RIVAL_Y, RIVAL_SCALE, 0) end
@@ -408,7 +408,7 @@ function S:duel(i, du, rec)
       end
       line = line .. (du.swats > 1 and (". " .. du.swats .. " goblets fall.") or ". A goblet falls.")
       self:knock(3 - du.winner, du.swats)
-      if du.winner == 1 then sfx.play("cheer", 1, 0.5) end
+      if du.winner == 1 then audio.play("cheer", 1, 0.5) end
       local w = du.wound
       if w and lv then
         lv.livesShown = w.left
@@ -425,7 +425,7 @@ function S:duel(i, du, rec)
           end
           fx.addShake(6)
           G.hitstop = 0.14
-          sfx.play(w.side == 1 and "lose" or "chip", 1.2, 0.7)
+          audio.play(w.side == 1 and "lose" or "chip", 1.2, 0.7)
           local who = cards.shortName(linf.def)
           if w.rescued then line = line .. " " .. who .. " is yours again!"
           elseif w.side == 1 then line = line .. " " .. who .. " is captured!"
@@ -439,7 +439,7 @@ function S:duel(i, du, rec)
     else
       line = ("%s: nobody swats."):format(where)
       fx.float((MY_X[i] + RIVAL_X[i]) / 2, (MY_Y + RIVAL_Y) / 2 - 6, "No swat", C.muted)
-      sfx.play("pass", 1, 0.6)
+      audio.play("pass", 1, 0.6)
     end
     self.log[#self.log + 1] = { text = line, col = du.winner == 1 and C.gold or du.winner == 2 and C.red or C.muted }
   end)
@@ -460,7 +460,7 @@ function S:clearBoard(rec)
       v:setTarget(MY_X[i], MY_Y, 1, 0)
       local w = rec.stays[1][i]
       self:popText(v, w >= match.HOT and ("HOT SEAT! Warmth " .. w) or ("+1 Warmth (" .. w .. ")"), w >= match.HOT and C.goldText or C.green)
-      if w >= match.HOT then fx.burst(v.x, v.y, theme.hex("#ff8a3a"), 18, 120); sfx.play("burn", 1.2, 0.5) end
+      if w >= match.HOT then fx.burst(v.x, v.y, theme.hex("#ff8a3a"), 18, 120); audio.play("burn", 1.2, 0.5) end
       v = nil
     end
     local r = self.rviews[i]
@@ -501,7 +501,7 @@ function S:clearBoard(rec)
     end
   end
   self.board, self.rviews = keepMine, keepTheirs
-  sfx.play("whoosh", 1, 0.5)
+  audio.play("whoosh", 1, 0.5)
 end
 
 function S:finish()
@@ -509,7 +509,7 @@ function S:finish()
   self.finished = true
   local won = self.s.result == "win"
   fx.banner(won and "Victory!" or "Defeat", won and "The crowd roars" or "The crowd groans", won and C.gold or C.red, 0, 160)
-  sfx.play(won and "win" or "lose")
+  audio.play(won and "win" or "lose")
   if won then for i = 1, 4 do fx.burst(160 + i * 64, 150, C.gold, 16, 140) end end
   if self.tut then
     -- the prologue goes on, win or lose
@@ -898,7 +898,7 @@ function S:drawTutorial()
   y = y + gfx.textf(st.text, theme.font("body", 10.5), PX + 8, y, PW - 16, "left", C.paper, { bg = C.deep }) + 8
   if st.next then
     if widgets.button("tut_next", PX + 8, PY + PH - 34, PW - 16, 26, st.last and "Let's fight" or "Next", { color = C.red }) then
-      sfx.play("click")
+      audio.play("click")
       tut:advance()
     end
   end

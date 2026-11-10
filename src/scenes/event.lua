@@ -6,7 +6,7 @@ local hud = require("src.ui.hud")
 local icons = require("src.ui.icons")
 local rng = require("src.core.rng")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 
@@ -49,7 +49,7 @@ function S:draw()
     local ok = ch.enabled(G.save)
     if widgets.choice("ev" .. i, x, 232, 200, 84, ch.label, ch.hint, { color = i == 1 and C.redDark or C.ink2, disabled = not ok }) then
       self.result = ch.apply(G.save)
-      sfx.play("reveal")
+      audio.play("reveal")
       fx.burst(320, 175, C.cyan, 24, 120)
       G.persist()
     end

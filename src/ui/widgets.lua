@@ -1,6 +1,6 @@
 -- Immediate-mode pixel widgets with springy hover/press.
 local gfx = require("src.ui.gfx")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
@@ -72,9 +72,9 @@ function M.button(id, x, y, w, h, label, opts)
   if opts.disabled then clicked = false end
   s.over = (over or opts.focused) and not opts.disabled
   s.down = s.over and over and M.down
-  if s.over and not s.wasOver and over then sfx.play("hover", 1, 0.4) end
+  if s.over and not s.wasOver and over then audio.play("hover", 1, 0.4) end
   s.wasOver = s.over
-  if clicked then sfx.play("click") end
+  if clicked then audio.play("click") end
   local col = opts.color or C.ink3
   if opts.disabled then col = C.ink2 elseif s.hover > 0.5 then col = theme.shade(col, 0.12) end
   x, y, w, h = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
@@ -128,9 +128,9 @@ function M.choice(id, x, y, w, h, title, desc, opts)
   local clicked, over = M.click(id, x, y, w, h)
   if opts.disabled then clicked = false end
   s.over = (over or opts.focused) and not opts.disabled
-  if s.over and not s.wasOver and over then sfx.play("hover", 1, 0.4) end
+  if s.over and not s.wasOver and over then audio.play("hover", 1, 0.4) end
   s.wasOver = s.over
-  if clicked then sfx.play("click") end
+  if clicked then audio.play("click") end
   local lift = s.hover > 0.5 and 2 or 0
   local col = opts.color or C.ink2
   if opts.disabled then col = C.deep elseif s.hover > 0.5 then col = theme.shade(col, 0.08) end

@@ -13,7 +13,7 @@ local picker = require("src.ui.picker")
 local hud = require("src.ui.hud")
 local plates = require("src.ui.plates")
 local renown = require("src.core.renown")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -41,7 +41,7 @@ function S:enter(p)
   self.step = won and (self.n and "fate" or "cards") or "loss"
   if self.step == "cards" then self:makeCards() end
   self.portrait = art.entrant(G.save, self.ctx.opp, 48)
-  if won then sfx.play("cheer") end
+  if won then audio.play("cheer") end
 end
 
 function S:makeCards()
@@ -144,7 +144,7 @@ function S:draw()
         local line = nemesis.speak({ s = math.floor(love.math.random() * 2 ^ 30) + 1 }, n, sit, G.save.playerName)
         G.persist()
         fx.addShake(o[1] == "slay" and 8 or 4)
-        if o[1] == "slay" then sfx.play("burn"); fx.burst(320, 180, C.red, 40, 160) else sfx.play("reveal") end
+        if o[1] == "slay" then audio.play("burn"); fx.burst(320, 180, C.red, 40, 160) else audio.play("reveal") end
         overlays.message(n.name, '"' .. line .. '"\n\n' .. txt, function() self.step = "cards"; self:makeCards() end, art.nemesis(n, 0, 96))
       end
     end
@@ -168,7 +168,7 @@ function S:draw()
     end
     if widgets.button("r_skip", 250, 322, 140, 26, "Skip (+10 fish)", { font = T.body() }) then
       run.fish = run.fish + 10
-      sfx.play("coin")
+      audio.play("coin")
       self:nextAfterCards()
     end
   elseif self.step == "charms" then
@@ -178,7 +178,7 @@ function S:draw()
       local x = 320 - (#self.out.charmChoices * 220) / 2 + (i - 1) * 220 + 10
       if widgets.choice("rc" .. i, x, 184, 200, 90, info.name, info.desc, { icon = info.icon, iconColor = info.color and cards.COATS[info.color].color or C.gold }) then
         game.addCharm(run, id)
-        sfx.play("coin")
+        audio.play("coin")
         fx.burst(x + 100, 220, C.gold, 24, 140)
         G.persist()
         self:continue()

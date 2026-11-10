@@ -6,7 +6,7 @@ local game = require("src.core.game")
 local gfx = require("src.ui.gfx")
 local overlays = require("src.ui.overlays")
 local plates = require("src.ui.plates")
-local sfx = require("src.ui.sfx")
+local audio = require("src.audio")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
 local lg = love.graphics
@@ -22,7 +22,7 @@ function S:enter()
   self.victory = run and run.outcome == "victory"
   S.bg = { preset = "menu", ramp = self.victory and "felt" or "blood" }
   self.logo = plates.image(G.images.logo, 220)
-  sfx.play(self.victory and "win" or "lose")
+  audio.play(self.victory and "win" or "lose")
 end
 
 function S:update(dt)
@@ -67,7 +67,7 @@ function S:draw()
     self.news = game.arenaMovesOn(save)
     if #self.news == 0 then self.news = { "The Hands lick their wounds and wait." } end
     G.persist()
-    sfx.play("burn", 0.8)
+    audio.play("burn", 0.8)
   end
 end
 
