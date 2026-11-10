@@ -3,15 +3,14 @@
 -- love.* calls, so the Python baker can read it. Re-run the baker after changing anything here.
 local M = {}
 
--- Backdrop presets. Every scene uses one of these. `room` presets are painted as pixel art by
--- src/ui/room.lua (a table in perspective, a table from above, a panelled wall); the others use
--- the `stage` shader, where `swirl` animates a slow paint swirl. The baked PNGs (no shaders, no
--- ImageData) cover every preset as a fallback.
+-- Backdrop presets: where the light falls, and (horizon > 0) where a table starts. src/ui/print.lua
+-- bakes them as halftone prints. tools/switch/bake_assets.py bakes PNG fallbacks for platforms
+-- without ImageData (re-run it after changing anything here).
 M.STAGES = {
-  menu = { horizon = 0, light = { 0.5, 0.4 }, radius = 0.95, power = 0.95, swirl = 1.0 },
-  vs = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0, swirl = 0, room = "wall" },
-  match = { horizon = 100 / 360, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0, swirl = 0, room = "table3d" },
-  table = { horizon = 0, light = { 0.5, 0.45 }, radius = 0.85, power = 1.0, swirl = 0, room = "felt" },
+  menu = { horizon = 0, light = { 0.5, 0.4 }, radius = 0.95, power = 0.95 },
+  vs = { horizon = 0, light = { 0.3, 0.45 }, radius = 0.8, power = 1.0 },
+  match = { horizon = 100 / 360, light = { 0.5, 0.62 }, radius = 0.72, power = 1.0 },
+  table = { horizon = 0, light = { 0.5, 0.45 }, radius = 0.85, power = 1.0 },
 }
 
 -- Colour ramps: ink green for the room and table, blood red for Hand matches and defeats.

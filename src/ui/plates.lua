@@ -2,8 +2,8 @@
 --
 -- A plate is clean pixel art: a flat palette fill, a 1px dark outline with notched corners and a
 -- 1px bevel (light along the top, dark along the bottom). No dither, no gradients.
--- Title cards (the "Card Name / Ability / Power" plates) are engraved signs: a ruled frame inset
--- two pixels and a stud at each end. Their labels are live text (pixel or smooth, per Settings).
+-- Title cards (the "Card Name / Ability / Power" plates) are flat plates with a darker edge, like
+-- the poster's flat red buttons. Their labels are live text (smooth or pixel, per Settings).
 local gfx = require("src.ui.gfx")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -81,41 +81,18 @@ function Card:getDimensions() return self.w, self.h end
 function Card:getWidth() return self.w end
 function Card:getHeight() return self.h end
 
--- A title card: plate, engraved frame (opts.streak: any value turns it on; 1.0 rules the black
--- "Power" plate in gold) and an optional live label.
--- opts: label, size, align ("center" | "left"), pad, labelColor, italic, streak, outline
+-- A title card: a flat plate with an edge a shade darker than itself (like the poster's flat
+-- red buttons) and an optional live label.
+-- opts: label, size, align ("center" | "left"), pad, labelColor, italic, outline (false: none)
 function M.titleCard(w, h, color, opts)
   w, h = math.floor(w), math.floor(h)
   opts = opts or {}
-  local outline = opts.outline == nil and C.black or opts.outline
-  local key = ("title:%d:%d:%s:%s:%s"):format(w, h, colKey(color), tostring(opts.streak), outline and colKey(outline) or "-")
+  local edge = opts.outline ~= false and theme.shade(color, -0.5) or false
+  local key = ("title:%d:%d:%s:%s"):format(w, h, colKey(color), edge and "e" or "-")
   local canvas
   if cache[key] then canvas = cache[key].canvas
   else
-    canvas = newCanvas(w, h)
-    local base = M.plate(w, h, color, { outline = outline })
-    begin(canvas)
-    lg.setColor(1, 1, 1)
-    lg.draw(base, 0, 0)
-    if opts.streak and w >= 24 and h >= 12 then
-      -- an engraved sign: a ruled frame inset two pixels and a stud at each end
-      local i = outline and 1 or 0
-      local rule = opts.streak >= 0.9 and C.goldDark or theme.shade(color, 0.32)
-      local deep = theme.shade(color, -0.38)
-      theme.set(deep)
-      lg.rectangle("line", i + 2.5, i + 2.5, w - 2 * i - 5, h - 2 * i - 5)
-      theme.set(rule)
-      lg.rectangle("line", i + 1.5, i + 1.5, w - 2 * i - 3, h - 2 * i - 3)
-      local cy = math.floor(h / 2)
-      for _, sx in ipairs({ i + 5, w - i - 6 }) do
-        theme.set(deep)
-        lg.rectangle("fill", sx - 1, cy - 1, 3, 3)
-        theme.set(rule)
-        lg.rectangle("fill", sx, cy - 1, 1, 3)
-        lg.rectangle("fill", sx - 1, cy, 3, 1)
-      end
-    end
-    lg.pop()
+    canvas = M.plate(w, h, color, { outline = edge, bevel = false })
     remember(key, { canvas = canvas })
   end
   local card = setmetatable({ canvas = canvas, w = w, h = h, color = color }, Card)

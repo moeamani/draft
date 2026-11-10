@@ -17,7 +17,7 @@ function M.box(x, y, w, h, col, a)
   lg.rectangle("fill", x + w - 1, y + 1, 1, h - 2)
 end
 
--- The one panel style: a flat pixel plate with a 1px outline, a bevel and a drop shadow.
+-- The one panel style: a flat plate with an edge a shade darker than itself and a drop shadow.
 -- opts.accent (or opts.border) adds a 2px coloured strip along the top.
 function M.panel(x, y, w, h, col, opts)
   opts = opts or {}
@@ -28,7 +28,9 @@ function M.panel(x, y, w, h, col, opts)
     lg.rectangle("fill", x + 1, y + 2, w, h)
   end
   local plates = require("src.ui.plates")
-  plates.draw(plates.plate(w, h, col, { outline = opts.outline }), x, y, a)
+  local edge = opts.outline
+  if edge == nil then edge = theme.shade(col, -0.5) end
+  plates.draw(plates.plate(w, h, col, { outline = edge, bevel = false }), x, y, a)
   local accent = opts.accent or opts.border
   if accent then
     theme.set(accent, a)

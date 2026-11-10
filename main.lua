@@ -13,7 +13,7 @@ local bakes = require("src.ui.bakes")
 local input = require("src.input")
 local fx = require("src.ui.fx")
 local sfx = require("src.ui.sfx")
-local room = require("src.ui.room")
+local printer = require("src.ui.print")
 local shaders = require("src.ui.shaders")
 local theme = require("src.ui.theme")
 local util = require("src.core.util")
@@ -24,7 +24,7 @@ local lg = love.graphics
 G = {
   save = nil, saves = {}, mode = nil, scene = nil, sceneName = nil, overlay = nil, images = {}, time = 0,
   scenes = {}, trans = nil,
-  settings = { muted = false, fullscreen = false, shake = true, crt = true, text = "pixel" },
+  settings = { muted = false, fullscreen = false, shake = true, crt = true, text = "smooth", look = 8 },
   -- the visible virtual area and where the 640x360 safe area sits in it
   VW = 640, VH = 360, OX = 0, OY = 0, K = 2,
 }
@@ -134,7 +134,7 @@ function G.cycleScreen()
   G.settings.crt = not G.crtOn()
   G.saveSettings()
 end
--- Pixel fonts on the art grid (default) or smooth, screen-resolution type.
+-- Smooth, screen-resolution type (default) or pixel fonts on the art grid.
 function G.cycleText()
   G.settings.text = G.settings.text == "smooth" and "pixel" or "smooth"
   theme.setTextStyle(G.settings.text)
@@ -230,6 +230,13 @@ function love.load(args)
     G.images[n] = platform.image("assets/img/" .. n .. ".png", true)
     G.images[n]:setFilter("linear", "linear")
   end
+  -- the Overseer's flickering frames (tools/art/bake_overseer.py)
+  G.images.overseer = {}
+  for i = 0, 3 do
+    local img = platform.image("assets/img/overseer-" .. i .. ".png", true)
+    img:setFilter("linear", "linear")
+    G.images.overseer[#G.images.overseer + 1] = img
+  end
   if platform.console then input.mode = "pad" end
   cardview.images = G.images
   pcall(function()
@@ -239,6 +246,8 @@ function love.load(args)
   if love.filesystem.getInfo(SETTINGS_FILE) then
     local s = util.deserialize(love.filesystem.read(SETTINGS_FILE))
     if s then for k, v in pairs(s) do G.settings[k] = v end end
+    -- round 8 made smooth type the default again; older settings files still say "pixel"
+    if (G.settings.look or 0) < 8 then G.settings.text, G.settings.look = "smooth", 8 end
   end
   theme.setTextStyle(G.settings.text)
   if G.settings.fullscreen and not platform.console then pcall(love.window.setFullscreen, true, "desktop") end
@@ -337,53 +346,32 @@ end
 -- ---------------------------------------------------------------- the backdrop
 
 local hex = theme.hex
-local function rgb(h) local c = hex(h); return { c[1], c[2], c[3] } end
 local stageImages = {}
 
 -- Every scene sits on one of the backdrop presets in src/ui/bakes.lua ("menu", "vs", "match"),
 -- in ink green or blood red: the only dithered surface in the game. It fills the whole window.
 local function drawBackground(cw, ch)
   local bg = (G.scene and G.scene.bg) or {}
-  local preset = bakes.STAGES[bg.preset or "menu"] or bakes.STAGES.menu
   local rampName = bakes.RAMPS[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
   local ramp = bakes.RAMPS[rampName]
-  -- the pixel-art rooms (table, wall), painted once per window shape
-  local roomImg = room.image(bg, G.VW, G.VH, G.OX, G.OY)
-  if roomImg then
-    lg.setColor(1, 1, 1)
-    lg.draw(roomImg, 0, 0, 0, view.k, view.k)
-    return
-  end
-  local sh = shaders.stage
-  if sh then
-    sh:send("pix", view.k)
-    sh:send("origin", { G.OX, G.OY })
-    sh:send("horizon", preset.horizon)
-    sh:send("light", preset.light)
-    sh:send("radius", preset.radius)
-    sh:send("power", preset.power)
-    sh:send("voidc", rgb(ramp.voidc))
-    sh:send("baseA", rgb(ramp.baseA))
-    sh:send("baseB", rgb(ramp.baseB))
-    sh:send("edge", rgb(ramp.edge))
-    sh:send("swirl", (bg.swirl or preset.swirl or 0) * (G.settings.shake == false and 0 or 1))
-    sh:send("time", G.time % 3600)
-    lg.setShader(sh)
-    lg.setColor(1, 1, 1)
-    lg.rectangle("fill", 0, 0, cw, ch)
-    lg.setShader()
-    return
-  end
-  local file = bakes.stageFile(bg.preset or "menu", rampName)
-  if stageImages[file] == nil then
-    local ok, img = pcall(lg.newImage, file)
-    stageImages[file] = ok and img or false
-    if ok then img:setFilter("nearest", "nearest") end
-  end
-  local img = stageImages[file]
+  -- the print backdrop: grain, a halftone light, a table for matches; baked per window shape
+  local img = printer.image(bg, G.VW, G.VH, G.OX, G.OY)
   if img then
     lg.setColor(1, 1, 1)
-    lg.draw(img, 0, 0, 0, cw / img:getWidth(), ch / img:getHeight())
+    lg.draw(img, 0, 0, 0, view.k / printer.SCALE, view.k / printer.SCALE)
+    return
+  end
+  -- no ImageData on this platform: the pre-baked PNGs
+  local file = bakes.stageFile(bg.preset or "menu", rampName)
+  if stageImages[file] == nil then
+    local ok, im = pcall(lg.newImage, file)
+    stageImages[file] = ok and im or false
+    if ok then im:setFilter("nearest", "nearest") end
+  end
+  local im = stageImages[file]
+  if im then
+    lg.setColor(1, 1, 1)
+    lg.draw(im, 0, 0, 0, cw / im:getWidth(), ch / im:getHeight())
   else
     theme.set(hex(ramp.baseA))
     lg.rectangle("fill", 0, 0, cw, ch)

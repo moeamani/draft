@@ -753,6 +753,11 @@ end
 function S:drawGoblets(side)
   local sd = self.s.sides[side]
   local col = side == 1 and C.gold or C.steel
+  -- a dark tray on the table, so the goblets and their count read on the mustard
+  local x0, gy = self:gobletPos(side, 1)
+  local x1 = self:gobletPos(side, sd.maxGoblets)
+  gfx.box(x0 - 30, gy - 11, x1 - x0 + 40, 21, C.black, 0.85)
+  gfx.box(x0 - 29, gy - 10, x1 - x0 + 38, 19, C.deep, 0.9)
   for k = 1, sd.maxGoblets do
     local x, y = self:gobletPos(side, k)
     if k <= self.gob[side] then
@@ -762,8 +767,7 @@ function S:drawGoblets(side)
       lg.rectangle("fill", x - 3, y + 4, 7, 2)
     end
   end
-  local x0 = self:gobletPos(side, 1)
-  gfx.text(tostring(self.gob[side]), T.big(), x0 - 10, (side == 1 and 250 or 150) - 12, col, { align = "right" })
+  gfx.text(tostring(self.gob[side]), T.big(), x0 - 10, gy - 8, col, { align = "right", bg = C.deep })
 end
 
 function S:drawPlaques()

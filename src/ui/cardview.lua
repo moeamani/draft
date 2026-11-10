@@ -138,52 +138,71 @@ local function renderFace(def, level)
 end
 M.face = renderFace
 
--- Card backs: the same paper, and an ornate field in the coat's colour (a lattice, a ruled frame,
--- corner knots and a medallion), like a deck of old playing cards. Shadow cats and tricks share
--- the dark back.
+-- Card backs: the same paper, and a field in the coat's colour printed in halftone (darker dots
+-- towards the edges, a ruled frame) with the Overseer's mark in the middle: a black cat's head
+-- with two red eyes. Every deck in the Arena is the Overseer's. Shadow cats and tricks share the
+-- dark back.
 M.BACKS = {
-  ember = { field = C.red, icon = "paw" },
-  tide = { field = theme.hex("#2471fc"), icon = "paw" },
-  gilt = { field = C.gold, icon = "paw" },
-  dark = { field = theme.hex("#171a26"), light = C.slate, icon = "moon" },
-  plain = { field = C.ink3, icon = "paw" },
+  ember = { field = C.red },
+  tide = { field = theme.hex("#2471fc") },
+  gilt = { field = C.gold },
+  dark = { field = theme.hex("#171a26"), light = C.slate },
+  plain = { field = C.ink3 },
+}
+
+local EYE_RED, EYE_HOT = theme.hex("#ff3a26"), theme.hex("#ffb08a")
+-- the mark: ears, head and eyes (k = black, r = eye, h = hot pixel of the eye)
+local MARK = {
+  "k.........k",
+  "kk.......kk",
+  "kkk.....kkk",
+  "kkkkkkkkkkk",
+  "kkkkkkkkkkk",
+  "khrrkkkrrhk",
+  "kkrrkkkrrkk",
+  "kkkkkkkkkkk",
+  ".kkkkkkkkk.",
 }
 
 local function ornament(x0, y0, w, h, spec, small)
   local field = spec.field
   local light = spec.light or theme.shade(field, 0.38)
-  local dark = theme.shade(field, -0.4)
+  local dark = theme.shade(field, -0.42)
   theme.set(field)
   lg.rectangle("fill", x0, y0, w, h)
-  local step = small and 6 or 8
-  local cx, cy = x0 + math.floor(w / 2), y0 + math.floor(h / 2)
-  local med = small and 5 or 10
+  local cx, cy = x0 + w / 2, y0 + h / 2
   for y = 0, h - 1 do
     for x = 0, w - 1 do
       local px, py = x0 + x, y0 + y
-      local d = math.abs(px - cx) + math.abs(py - cy)
       local col
-      if x == 2 or y == 2 or x == w - 3 or y == h - 3 then
-        if x >= 2 and y >= 2 and x <= w - 3 and y <= h - 3 then col = light end -- the ruled frame
-      elseif x > 3 and y > 3 and x < w - 4 and y < h - 4 then
-        if d <= med then
-          col = d == med and light or dark -- the medallion
-        elseif (x + y) % step == 0 or (x - y) % step == 0 then
-          col = theme.mix(field, light, 0.55) -- the lattice
-        elseif (x + y) % step == step / 2 and (x - y) % step == step / 2 then
-          col = light -- a dot in every diamond
-        end
+      if x == 1 or y == 1 or x == w - 2 or y == h - 2 then
+        if x >= 1 and y >= 1 and x <= w - 2 and y <= h - 2 then col = light end -- the ruled frame
+      else
+        -- halftone: dots grow towards the edges on a 3px diagonal screen
+        local d = math.max(math.abs(px - cx) / (w / 2), math.abs(py - cy) / (h / 2))
+        local onDot = (x + y) % 3 == 0 and (x - y) % 3 == 0
+        local nearDot = ((x + y) % 3 == 0 or (x - y) % 3 == 0) and d > 0.75
+        if (onDot and d > 0.35) or nearDot then col = dark
+        elseif onDot and d < 0.3 then col = light end
       end
       if col then theme.set(col); lg.rectangle("fill", px, py, 1, 1) end
     end
   end
-  -- corner knots
-  theme.set(light)
-  for _, c in ipairs({ { x0 + 3, y0 + 3 }, { x0 + w - 6, y0 + 3 }, { x0 + 3, y0 + h - 6 }, { x0 + w - 6, y0 + h - 6 } }) do
-    lg.rectangle("fill", c[1] + 1, c[2], 1, 3)
-    lg.rectangle("fill", c[1], c[2] + 1, 3, 1)
+  if small then return end
+  -- the Overseer's mark
+  local mw, mh = #MARK[1], #MARK
+  local mx, my = math.floor(cx - mw / 2), math.floor(cy - mh / 2)
+  theme.set(spec.light and C.slate or C.black)
+  lg.rectangle("fill", mx - 2, my - 2, mw + 4, mh + 4)
+  theme.set(theme.shade(field, -0.6))
+  lg.rectangle("fill", mx - 1, my - 1, mw + 2, mh + 2)
+  for j, row in ipairs(MARK) do
+    for i = 1, mw do
+      local ch = row:sub(i, i)
+      local c = (ch == "k" and C.black) or (ch == "r" and EYE_RED) or (ch == "h" and EYE_HOT) or nil
+      if c then theme.set(c); lg.rectangle("fill", mx + i - 1, my + j - 1, 1, 1) end
+    end
   end
-  if not small then icons.draw(spec.icon, cx, cy, light) end
 end
 
 local backs = {}

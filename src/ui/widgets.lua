@@ -61,9 +61,9 @@ local function fitBold(str, size, width)
 end
 M.fitBold = fitBold
 
--- The one button style: a flat plate on a darker lip with a bold, high-contrast label.
+-- The one button style: a flat plate with a soft shadow and a bold, high-contrast label.
 -- opts: color, sub, disabled, size ("huge" for the big call-to-action), icon, iconColor,
---       textColor, focused (keyboard / controller selection)
+--       textColor, focused (keyboard / controller selection), arrow (a drawn arrow after the label)
 function M.button(id, x, y, w, h, label, opts)
   opts = opts or {}
   local plates = require("src.ui.plates")
@@ -78,12 +78,12 @@ function M.button(id, x, y, w, h, label, opts)
   local col = opts.color or C.ink3
   if opts.disabled then col = C.ink2 elseif s.hover > 0.5 then col = theme.shade(col, 0.12) end
   x, y, w, h = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-  local press = s.down and 2 or 0
-  theme.set(C.black, 0.5)
-  lg.rectangle("fill", x + 1, y + 3, w, h)
-  plates.draw(plates.plate(w, h, theme.shade(col, -0.45)), x, y + 2)
+  -- flat, like the poster's red buttons: a soft shadow, no bevel, no lip
+  local press = s.down and 1 or 0
+  theme.set(C.black, 0.35)
+  lg.rectangle("fill", x + 1, y + 2, w, h)
   local by = y + press
-  plates.draw(plates.plate(w, h, col), x, by)
+  plates.draw(plates.plate(w, h, col, { outline = false, bevel = false }), x, by)
   if opts.focused and not opts.disabled then
     theme.set(C.goldText)
     lg.rectangle("line", x - 1.5, by - 1.5, w + 3, h + 3)
@@ -100,6 +100,16 @@ function M.button(id, x, y, w, h, label, opts)
   else
     local ty = by + (h - fh) / 2
     local tx = x + w / 2
+    if opts.arrow then
+      -- a drawn arrow after the label, like the poster's call to action
+      local lw = font:getWidth(label)
+      tx = tx - 6
+      local ax, ay = math.floor(tx + lw / 2 + 6), math.floor(by + h / 2)
+      theme.set(tc)
+      lg.rectangle("fill", ax, ay, 7, 1)
+      lg.rectangle("fill", ax + 4, ay - 2, 1, 5)
+      lg.rectangle("fill", ax + 5, ay - 1, 1, 3)
+    end
     if opts.icon then
       local tw = font:getWidth(label) + 14
       tx = tx + 7

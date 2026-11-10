@@ -73,10 +73,10 @@ end
 -- K: canvas pixels per virtual pixel (set by main.lua whenever the window changes).
 M.K = 2
 
--- Two text styles. "pixel" (the default) draws pixel fonts on the art's own grid, one font pixel
--- per virtual pixel, so type and art share the same chunky pixels. "smooth" rasterises
--- Atkinson Hyperlegible and Ancizar Serif at the screen's real resolution.
-M.textStyle = "pixel"
+-- Two text styles. "smooth" (the default) rasterises Ancizar Serif (headings) and Atkinson
+-- Hyperlegible (everything else) at the screen's real resolution, like the poster. "pixel" draws
+-- pixel fonts on the art's own grid, one font pixel per virtual pixel.
+M.textStyle = "smooth"
 
 local files = {
   body = "assets/fonts/AtkinsonHyperlegible-Regular.ttf",

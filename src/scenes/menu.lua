@@ -1,12 +1,14 @@
--- The main menu: a festival night. Your champion faces the Four Hands under the Arena's bunting,
--- and the menu sits on the left. Mouse, keyboard (arrows / W S, Enter) and controller (d-pad, A)
--- all drive the same list.
-local art = require("src.ui.art")
-local fx = require("src.ui.fx")
+-- The main menu, staged like the Overseer's poster: links along the top, the logo in the middle,
+-- a serif headline and the calls to action, and the flaming Overseer looming over a table with a
+-- hand dealt face down. Mouse, keyboard (arrows / W S, Enter) and controller (d-pad, A) all drive
+-- the same list.
+local cardview = require("src.ui.cardview")
 local game = require("src.core.game")
 local gfx = require("src.ui.gfx")
 local overlays = require("src.ui.overlays")
+local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
+local printer = require("src.ui.print")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
 local widgets = require("src.ui.widgets")
@@ -20,7 +22,7 @@ S.bg = { preset = "menu" }
 function S:enter()
   self.t = 0
   self.sel = 1
-  self.logo = plates.image(G.images.logo, 184)
+  self.logo = plates.image(G.images.logo, 92)
 end
 
 function S:update(dt) self.t = self.t + dt end
@@ -134,7 +136,7 @@ function S.settings()
       G.settings.muted = sfxm.toggleMute(); G.saveSettings()
     end
     y = y + 34
-    if widgets.button("set_shake", x, y, w, 28, "Shake and swirl: " .. (G.settings.shake == false and "off" or "on")) then
+    if widgets.button("set_shake", x, y, w, 28, "Screen shake: " .. (G.settings.shake == false and "off" or "on")) then
       G.settings.shake = G.settings.shake == false; G.saveSettings()
     end
     y = y + 34
@@ -167,74 +169,82 @@ local ITEMS = {
 
 -- ---------------------------------------------------------------- drawing
 
--- Strings of festival pennants across the top of the night.
-local function bunting(t)
-  local cols = { C.red, C.gold, C.blue, C.paper }
-  for row = 0, 1 do
-    local y0 = 6 + row * 26
-    local sag = 10
-    local n = 18
-    local x0 = -G.OX - 10
-    local span = G.VW + 20
-    for i = 0, n do
-      local u = i / n
-      local x = x0 + u * span
-      local y = y0 + math.sin(u * math.pi) * sag + row * 3
-      local nx = x0 + (i + 1) / n * span
-      local ny = y0 + math.sin((i + 1) / n * math.pi) * sag + row * 3
-      theme.set(C.black, 0.6)
-      lg.setLineWidth(1)
-      lg.line(x, y, nx, ny)
-      if i < n then
-        local mx, my = (x + nx) / 2, (y + ny) / 2
-        local flap = math.sin(t * 2 + i + row) * 1
-        theme.set(C.black)
-        lg.polygon("fill", mx - 5, my, mx + 5, my, mx + flap, my + 11)
-        theme.set(cols[(i + row) % #cols + 1])
-        lg.polygon("fill", mx - 4, my + 1, mx + 4, my + 1, mx + flap, my + 9)
-      end
-    end
+local TABLE_Y = 312 -- where the table starts, below the Overseer
+local LINKS = { "cattery", "rules", "settings", "quit" }
+local LINK_LABEL = { cattery = "Cattery", rules = "How to Play", settings = "Settings", quit = "Quit" }
+
+local function indexOf(id)
+  for i, it in ipairs(ITEMS) do if it.id == id then return i end end
+end
+
+-- A text link in the top bar, underlined when pointed at or chosen.
+local function link(self, id, x, y)
+  local i = indexOf(id)
+  local label = LINK_LABEL[id]
+  local f = T.body()
+  local w = f:getWidth(label)
+  local clicked, over = widgets.click("menu_" .. id, x - 3, y - 3, w + 6, 18)
+  if over then self.sel = i end
+  local lit = over or self.sel == i
+  gfx.text(label, f, x, y, lit and C.white or C.paper2, { bg = C.ink })
+  if lit then
+    theme.set(C.red)
+    lg.rectangle("fill", math.floor(x), math.floor(y + 13), math.ceil(w), 1)
   end
+  if clicked then sfx.play("click"); ITEMS[i].act() end
+  return x + w + 16
 end
 
 function S:draw()
   local t = self.t
-  bunting(t)
-  -- the scene: your champion faces the Four Hands
-  local save = G.saves.story or G.saves.free
-  local hands = save and save.hands
-  for i = 4, 1, -1 do
-    local x = 372 + (4 - i) * 64
-    local y = 56 + (4 - i) * 4 + math.floor(math.sin(t * 1.3 + i) * 1.5 + 0.5)
-    if hands and hands[i] then
-      lg.setColor(0.55, 0.55, 0.6)
-      lg.draw((art.nemesis(hands[i], i, 64, true)), x, y)
-    else
-      -- silhouettes until you've met them
-      lg.setColor(0.07, 0.09, 0.08)
-      lg.draw((art.stray({ seed = i * 131, coat = "shadow", elite = true }, 64, true)), x, y)
+  local renown = require("src.core.renown")
+  -- the top bar: links on the left, the logo in the middle, Renown on the right
+  local x = 22
+  for _, id in ipairs(LINKS) do x = link(self, id, x, 24) end
+  plates.draw(self.logo, 320 - self.logo:getWidth() / 2, 8)
+  local L = renown.level(G.profile.renown)
+  local rl = "Renown  Lv " .. L
+  local rw = T.bold():getWidth(rl) + 22
+  local ri = indexOf("renown")
+  local rover = widgets.inside(618 - rw, 19, rw, 22)
+  if rover then self.sel = ri end
+  if widgets.button("menu_renown", 618 - rw, 19, rw, 22, rl, { color = C.red, focused = self.sel == ri }) then ITEMS[ri].act() end
+  -- the headline
+  local head = "A cat-knight card game where the Four Hands remember every match, and the Overseer keeps the ledger."
+  gfx.textf(head, theme.serif(21), 140, 62, 360, "center", C.white, { bg = C.ink })
+  -- the calls to action
+  local si, fi = indexOf("story"), indexOf("free")
+  local by = 146
+  for _, b in ipairs({ { si, 150, C.red, G.saves.story and "Continue the story" or "Begin the story", storyLine() },
+    { fi, 326, C.ink3, "Free festival", freeLine() } }) do
+    local i, bx = b[1], b[2]
+    if widgets.inside(bx, by, 164, 32) then self.sel = i end
+    if widgets.button("menu_" .. ITEMS[i].id, bx, by, 164, 32, b[4], { color = b[3], sub = b[5], focused = self.sel == i }) then
+      ITEMS[i].act()
     end
   end
-  gfx.text("The Four Hands", T.small(), 500, 46, C.muted, { align = "center", bg = C.ink })
-  local me = art.player(save and save.playerName or "Whiskers", 150, true)
-  lg.setColor(1, 1, 1)
-  lg.draw(me, 410, 186 + math.floor(math.sin(t * 1.6) * 1.5 + 0.5))
-  -- the logo and the menu
-  plates.draw(self.logo, 30, 28)
-  local x, y, w = 28, 28 + self.logo:getHeight() + 10, 240
-  for i, it in ipairs(ITEMS) do
-    local h = it.sub and 26 or 20
-    local focused = self.sel == i
-    local over = widgets.inside(x, y, w, h)
-    if over then self.sel = i end
-    if widgets.button("menu_" .. it.id, x, y, w, h, it.label, { color = i == 1 and C.red or C.ink3, sub = it.sub and it.sub() or nil, focused = focused }) then
-      it.act()
-    end
-    y = y + h + 4
+  -- the Overseer looms over the table
+  overseer.draw(320, TABLE_Y + 2, 330, t)
+  local tbl = printer.tableLayer(TABLE_Y, G.VW, G.VH, G.OX, G.OY)
+  if tbl then
+    lg.setColor(1, 1, 1)
+    lg.draw(tbl, -G.OX, -G.OY, 0, 1 / printer.SCALE, 1 / printer.SCALE)
+  end
+  -- a hand dealt face down on the table
+  local backs = { "ember", "tide", "dark", "gilt", "plain" }
+  for k, kind in ipairs(backs) do
+    local off = k - 3
+    local img = cardview.back(kind)
+    local cx, cy = 320 + off * 34, TABLE_Y + 34 + math.abs(off) * 3
+    theme.set(C.black, 0.4)
+    lg.draw(img, cx + 2, cy + 3, off * 0.12, 1, 1, 28, 39)
+    lg.setColor(1, 1, 1)
+    lg.draw(img, cx, cy, off * 0.12, 1, 1, 28, 39)
   end
   local hint = G.platform.console and "D-pad choose   A select   B back" or "Arrow keys choose   Enter select   F11 fullscreen"
-  gfx.text(hint, T.small(), 628, 346, C.muted, { align = "right", bg = C.ink })
-  gfx.text("v6", T.small(), 12, 346, C.muted, { bg = C.ink })
+  local hw = T.small():getWidth(hint) + 12
+  gfx.box(8, 340, hw, 14, C.black, 0.7)
+  gfx.text(hint, T.small(), 14, 341, C.paper2, { bg = C.black })
 end
 
 function S:nav(d)
@@ -243,8 +253,8 @@ function S:nav(d)
 end
 
 function S:keypressed(k)
-  if k == "up" or k == "w" then self:nav(-1)
-  elseif k == "down" or k == "s" then self:nav(1)
+  if k == "up" or k == "w" or k == "left" or k == "a" then self:nav(-1)
+  elseif k == "down" or k == "s" or k == "right" or k == "d" then self:nav(1)
   elseif k == "return" or k == "space" or k == "kpenter" then
     sfx.play("click")
     ITEMS[self.sel].act()
