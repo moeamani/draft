@@ -11,17 +11,18 @@ the Home menu.
 
 ## What's different on the console
 
-LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The game only
-needs one shader anyway: the dithered backdrop. `src/platform.lua` detects LÖVE Potion and draws
-the backdrop from PNGs instead:
+LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The rooms (the
+card table, the felt grounds, the panelled wall) are painted from pixels the first time they're shown, so they don't
+need a shader. Only the menus' dithered backdrop does, and `src/platform.lua` detects LÖVE Potion
+and draws it from PNGs instead:
 
 | Effect | Desktop | Switch |
 | --- | --- | --- |
-| Backdrop (`stage`) | live shader, with an animated swirl on the menus | PNG baked from the same maths (`assets/switch/stage-*.png`), without the swirl |
+| Rooms: match table, festival grounds, VS wall | painted from pixels (`src/ui/room.lua`) | the same (falls back to the baked PNGs if ImageData is missing) |
+| Menu backdrop (`stage`) | live shader, with an animated swirl | PNG baked from the same maths (`assets/switch/stage-*.png`), without the swirl |
 | CRT screen | on by default (Settings or F2) | not available (needs a shader) |
-| Smear accent on title cards and card backs | baked PNGs (`assets/switch/smear-*.png`) | the same PNGs |
 | Cat art cleanup pass (stray pixels) | canvas read-back | skipped if read-back isn't available |
-| Everything else (plates, cards, cats, text) | no shader | no shader |
+| Everything else (plates, cards, cats, pixel text) | no shader | no shader |
 
 The baked PNGs come from `tools/switch/bake_assets.py`, which ports the shaders to numpy and
 reads its presets, colour ramps and tints from `src/ui/bakes.lua`, the same table the game

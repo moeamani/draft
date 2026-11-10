@@ -2,21 +2,28 @@
 
 ## Art direction
 
-The references are clean pixel art: crisp clusters, bold dark outlines, limited hue-shifted
-palettes, no noise. Every screen follows that, with the Figma file's palette, logo and title cards:
+Clean pixel art on a card table: crisp clusters, bold dark outlines, limited hue-shifted
+palettes, and physical materials (felt, wood, worn paper) like an old card game played at night.
+Type is pixel type on the same grid as the art. The Figma file still gives the palette and logo.
 
 - **Pixel art at its real size.** Cats, cards, plates and icons are drawn at their true pixel size
   on a 640x360 grid, with no anti-aliasing, dither or blur. Bigger views (the inspect panel, the
   Cattery, portraits) are exact 2x or 3x enlargements, so pixels stay square and crisp.
-- **One dithered surface.** Only the backdrop (`stage` in `src/ui/shaders.lua`) keeps the Figma
-  Dither effect (Bayer 16x16, 8 levels per channel). Everything on top of it is flat. On the menus
-  and the VS screen the backdrop carries a slow paint **swirl** (a spiral folded twice, drifting
-  with time) in the room's own greens; the dither turns it into moving pixel bands. The match
-  table stays still.
+- **The room** (`src/ui/room.lua`) is painted pixel by pixel once per window shape and drawn K
+  times larger, so its pixels match the cats':
+  - **the match**: a felt card table in perspective, with a paw-print weave and a worn wooden
+    rail, panelled walls above it and a plank floor beside it;
+  - **the festival grounds** (hub, market, Fortune Teller, results): the same felt seen from
+    above, inside an oval wooden rail;
+  - **the VS screen**: a panelled wall.
+  One pool of lamplight lights each room, stepped through a short colour ramp with a 4x4 ordered
+  dither, and the corners fall into shadow. Hand matches and defeats get the blood-red felt.
+- **The menus** keep the dithered `stage` backdrop (`src/ui/shaders.lua`, Bayer 16x16, 8 levels)
+  with a slow paint **swirl** drifting through it.
 - **Plates** (`src/ui/plates.lua`) are flat palette fills with a 1px dark outline, notched corners
   and a 1px bevel. Panels, buttons, cushions and card plates all use them.
-- **Title cards** (the Figma "Card Name / Ability / Power" plates) are plates with the mascot's
-  chromatic smear on one end as an accent, and a live serif label.
+- **Title cards** (the "Card Name / Ability / Power" plates) are engraved signs: a ruled frame
+  inset two pixels and a stud at each end, with a live label (blackletter in pixel mode).
 - **Cat illustrations** (`src/ui/art.lua`) are bust portraits in three layers:
   - **Backdrop** by coat, in three flat bands: an Ember hall with pennants and embers, a rainy
     Tide shore, a Gilt sunburst over a castle, a Shadow night with the moon. The Hands get blood red
@@ -32,8 +39,13 @@ palettes, no noise. Every screen follows that, with the Figma file's palette, lo
     ability, rarity and seed.
   - Tricks are small scenes: the storm, the fog with eyes, the cat asleep in the sunbeam, the box
     with ears.
-- **Card faces**: the rarity frame, the 50x48 illustration, the name on its coat's colour, the
-  ability, a type badge and the cat's hearts. Names, abilities and Paws are live text.
+- **Card faces** are printed on worn cream paper (grime specks, a darker edge, rounded corners):
+  the illustration in a window framed in the rarity's colour (brown, blue, red, gold; legendaries
+  get gilt corners), the name on its coat's colour, the ability, a type badge and the cat's hearts.
+  Names, abilities and Paws are live text.
+- **Card backs** are ornate, like old playing cards: the same paper, then a field in the coat's
+  colour with a diamond lattice, a ruled frame, corner knots and a medallion. Shadow cats and
+  tricks share the dark navy back.
 - **The menu** is a festival night: bunting, your champion facing the Four Hands, and the logo.
 
 ### The CRT screen
@@ -59,19 +71,31 @@ Without shaders (LÖVE Potion) there's no CRT and no swirl.
 - **Card shine**: a slanted band of light sweeps across a card the moment you point at it.
 - The Hot Seat burns: a flickering ring of fire around the card and a flame Warmth badge.
 
-### Readable type
+### Type
 
-Text is never pixel art. Fonts are rasterised at the screen's real resolution (K canvas pixels per
-virtual pixel, set from the window), so type is sharp at any size and on Retina screens:
+Two text styles, chosen in Settings (`theme.setTextStyle`):
 
-| Role | Font | Size (virtual px) |
-| --- | --- | --- |
-| Titles, plates, names on title cards | Ancizar Serif (the Figma font) | 13–34 |
-| Anything you read: rules, card text, dialogue | Atkinson Hyperlegible | 10–11.5 |
-| Buttons, numbers, labels | Atkinson Hyperlegible Bold | 7.5–18 |
+- **Pixel** (the default): pixel fonts drawn on the art's own grid, one font pixel per virtual
+  pixel, with no anti-aliasing. Every face sits on a whole-pixel grid and is rasterised at exactly
+  its design size times K, so glyphs are as crisp as the cats. Baselines land on whole pixels and
+  capitals sit centred in their line box. Small bold is the classic pixel bold: a second pass one
+  pixel to the right.
+- **Smooth**: Atkinson Hyperlegible and Ancizar Serif, rasterised at the screen's real resolution.
 
-Atkinson Hyperlegible was designed by the Braille Institute for low-vision readers. A body line is
-20px tall at 720p and 30px at 1080p.
+Every text call asks for a style and a size (`theme.font(style, size)`); pixel mode maps it to a
+face:
+
+| Role | Pixel face | Cap height | Smooth face |
+| --- | --- | --- | --- |
+| Body text: rules, card text, dialogue | Draft Pixel 10 / 12 (Fusion Pixel, subset) | 7 / 9 px | Atkinson Hyperlegible |
+| Small bold: buttons, names | Draft Pixel 10 + one-pixel bold | 7 px | Atkinson Hyperlegible Bold |
+| Bold: big buttons, numbers, plaques | Coral Pixels | 9 px | Atkinson Hyperlegible Bold |
+| Titles, signs, names on plates | Jacquard 12 (blackletter) | 12 px (24 at 2x) | Ancizar Serif |
+| Headline numbers | Jersey 15 | 15 px | Atkinson Hyperlegible Bold |
+| Tiny labels: card names, abilities | Micro 5 | 5 px | Atkinson Hyperlegible |
+
+A body line is 12 virtual pixels: 24px tall at 720p and 36px at 1080p. The fonts and their
+licences are in `assets/fonts` (see `CREDITS.txt`).
 
 ### Contrast (WCAG 2.x AA)
 
@@ -92,10 +116,10 @@ Atkinson Hyperlegible was designed by the Braille Institute for low-vision reade
 
 ### Without shaders (Switch)
 
-LÖVE Potion can't compile GLSL, so `src/platform.lua` switches the one shader-dependent surface, the
-backdrop, to PNGs baked by `tools/switch/bake_assets.py`. Everything else is shader-free already.
-The pixel cleanup pass reads canvases back; where that isn't possible it is skipped. The baked
-backdrops have no swirl, and there's no CRT pass.
+LÖVE Potion can't compile GLSL. The rooms (table, felt, wall) are painted from pixels, so they need
+no shader; the menus' `stage` backdrop falls back to PNGs baked by `tools/switch/bake_assets.py`
+(also used for a room where ImageData isn't available). The pixel cleanup pass reads canvases
+back; where that isn't possible it is skipped. There's no swirl and no CRT pass.
 
 ## The match: three cushions
 
@@ -367,10 +391,10 @@ Tuning knobs:
 | Figma | In game |
 | --- | --- |
 | Title frame: two-tone "Draft" lockup and tagline | main menu, victory summary (`assets/img/logo.png`) |
-| Title cards: Card Name, Type, Ability, Power, Rarity | `plates.titleCard`, used for every heading, banner, plaque, stall and card back |
-| Dither effect (Bayer 16x16, 8 levels, 2px) | the `stage` backdrop only |
-| Lens distortion effect (anamorphic, chromatic) | baked once (`tools/switch/bake_assets.py`), drawn as the title-card and card-back accent |
-| Red/blue cat mascot | window icon; its silhouette drives the smear (`assets/img/mascot-silhouette.png`) |
+| Title cards: Card Name, Type, Ability, Power, Rarity | `plates.titleCard`, used for every heading, banner, plaque and stall (now engraved signs) |
+| Dither effect (Bayer 16x16, 8 levels, 2px) | the menus' `stage` backdrop |
+| Lens distortion effect (anamorphic, chromatic) | no longer drawn (the Switch baker still writes the smear PNGs) |
+| Red/blue cat mascot | window icon |
 | Shadow creature with flames | defeat summary |
 | Card sheet (Artheline, Merline, the Black Cats) | the first entries in `src/core/cards.lua`, with signature looks in `art.lua` |
 

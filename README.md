@@ -10,9 +10,9 @@ A pixel-art roguelike card game about cat knights, with a nemesis system and the
 - **The Four Hands** are persistent nemesis Warlords. They remember you, hide strengths and weaknesses, scheme between festivals, and build their prides from what they take from you.
 - **Renown and Feats.** Every match in either mode earns Renown, and 25 Feats (a Hot Seat, a Clean Sweep, a Legend Napper, a Kingslayer...) pop up as medals the moment you earn them. Renown levels give you a title and unlock **Crests**, starting loadouts for a Free Festival.
 - **Bonds** between legendary pairs, upholstered **cushions**, a rule-bending **omen** for every festival, and **the Cattery**, a collection of every cat you've met.
-- **Clean pixel art.** Every cat is a hand-composed pixel bust (crisp clusters, 1px outlines, hue-shifted shading); bigger views are exact enlargements. Only the backdrops keep the Figma dither.
+- **A card table at night, in pixel art.** Matches are played on a felt table with a paw-print weave and a worn wooden rail, under panelled walls. Cards are printed on worn cream paper, with ornate lattice backs in each coat's colour. Every cat is a hand-composed pixel bust (crisp clusters, 1px outlines, hue-shifted shading).
 - **A CRT screen** (on by default; Settings or F2 turns it off): gentle curvature, scanlines, bloom and a colour fringe, over a slow animated paint swirl on the menus.
-- **Readable.** Text is drawn at your screen's real resolution in Atkinson Hyperlegible (titles in Ancizar Serif), and every text colour is checked for WCAG AA contrast (4.5:1). Fullscreen fills any screen shape, Macs included, with no black bars.
+- **Pixel type.** Text uses pixel fonts on the same grid as the art (a blackletter for titles and signs). Settings > Text switches to smooth, screen-resolution type (Atkinson Hyperlegible). Every text colour is checked for WCAG AA contrast (4.5:1). Fullscreen fills any screen shape, Macs included, with no black bars.
 
 ![The rival leads; you answer (with the CRT screen on)](docs/screenshots/04_match_place.png)
 
@@ -109,15 +109,17 @@ src/input.lua          mouse, touchscreen and controller folded into one pointer
 src/core/              pure game logic, no LÖVE: match engine + AI (lives and captures), festival, nemesis,
                        cards, traits, charms, run/meta (captives, pawnshop, spoils, crests), renown (feats, levels,
                        crests), story, tutorial
-src/ui/                theme (palette, WCAG contrast, fonts), plates (clean plates and title cards), gfx (panels,
-                       text), icons, cardview (faces with live text and hearts, coat backs), art (pixel-art cats),
+src/ui/                theme (palette, WCAG contrast, pixel and smooth fonts), plates (plates and engraved signs),
+                       gfx (panels, text), icons, cardview (paper faces with live text and hearts, ornate backs),
+                       room (the painted table, felt and walls), art (pixel-art cats),
                        shaders (the dithered backdrop and the CRT), widgets, fx (with feat medals), sfx, hud, picker,
                        overlays (rules, Cattery, Renown, Crest picker...)
 src/scenes/            menu, story (chapter map), cutscene, hub, vs, match (with the tutorial), result, market,
                        event, summary
 src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots
 tests/run.lua          rules, Stolen Lives, Renown, WCAG contrast and a 90-festival AI simulation: luajit tests/run.lua
-assets/                fonts (OFL: Atkinson Hyperlegible, Ancizar Serif) and images from the Figma file;
+assets/                fonts (all OFL: Fusion Pixel, Coral Pixels, Jacquard 12, Jersey 15, Micro 5, Atkinson
+                       Hyperlegible, Ancizar Serif; see assets/fonts/CREDITS.txt) and images from the Figma file;
                        assets/switch holds the baked backdrop and smear art
 tools/switch/          Switch build: bake_assets.py, nro.py (NRO packer), build.py, icon.jpg
 ```
