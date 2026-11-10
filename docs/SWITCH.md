@@ -11,25 +11,29 @@ the Home menu.
 
 ## What's different on the console
 
-LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The rooms (the
-card table, the felt grounds, the panelled wall) are painted from pixels the first time they're shown, so they don't
-need a shader. Only the menus' dithered backdrop does, and `src/platform.lua` detects LÖVE Potion
-and draws it from PNGs instead:
+LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The game only
+needs a shader for the CRT screen now. The halftone backdrops and the match table are baked from
+pixels the first time they're shown (`src/ui/print.lua`), and the Overseer is a set of PNGs:
 
 | Effect | Desktop | Switch |
 | --- | --- | --- |
-| Rooms: match table, festival grounds, VS wall | painted from pixels (`src/ui/room.lua`) | the same (falls back to the baked PNGs if ImageData is missing) |
-| Menu backdrop (`stage`) | live shader, with an animated swirl | PNG baked from the same maths (`assets/switch/stage-*.png`), without the swirl |
+| Backdrops and the match table | baked from pixels (`src/ui/print.lua`) | the same (falls back to the PNGs in `assets/switch/stage-*.png` if ImageData is missing) |
+| The Overseer | four halftone PNG frames | the same |
 | CRT screen | on by default (Settings or F2) | not available (needs a shader) |
 | Cat art cleanup pass (stray pixels) | canvas read-back | skipped if read-back isn't available |
-| Everything else (plates, cards, cats, pixel text) | no shader | no shader |
+| Everything else (plates, cards, cats, text) | no shader | no shader |
 
-The baked PNGs come from `tools/switch/bake_assets.py`, which ports the shaders to numpy and
-reads its presets, colour ramps and tints from `src/ui/bakes.lua`, the same table the game
-uses. If you change that file, re-run the baker:
+The fallback PNGs come from `tools/switch/bake_assets.py`, which bakes a plainer dithered
+backdrop with numpy from the presets and colour ramps in `src/ui/bakes.lua`, the same table the
+game uses. If you change that file, re-run the baker. The Overseer's frames come from
+`tools/art/bake_overseer.py`:
 
 ```bash
 python3 tools/switch/bake_assets.py
+```
+
+```bash
+python3 tools/art/bake_overseer.py
 ```
 
 The sound effects are synthesised at load as on desktop, at 11 kHz to keep start-up short.
