@@ -447,5 +447,46 @@ test("renown: levels, feats once, crests unlock and apply", function()
   end
 end)
 
+test("story: the High Table against the Overseer", function()
+  local story = require("src.core.story")
+  eq(story.LAST, 6)
+  eq(story.CHAPTERS[6].boss, "overseer")
+  local wins, games = 0, 60
+  for r = 1, games do
+    local save = story.newStory(900 + r)
+    save.story.chapter = 6
+    -- a late-story pride: the starter deal plus a few festivals of rewards
+    local run = game.startRun(save)
+    for _, id in ipairs(game.rollCards(run.rng, 6, 2)) do game.addCard(run, id, 2) end
+    for _, c in ipairs(run.deck) do if c.level < 2 then c.level = 2 end end
+    local ctx = story.bossMatch(save)
+    eq(ctx.boss, true)
+    eq(ctx.state.sides[2].maxGoblets, match.GOBLETS + story.BOSS_TUNING.goblets, "the Overseer's goblets")
+    local guard = 0
+    while not ctx.state.over do
+      guard = guard + 1
+      if guard > 20 then error("boss match stuck") end
+      match.autoplay(ctx.state, 0.3)
+    end
+    if ctx.state.result == "win" then wins = wins + 1 end
+    local res = story.finishBoss(save, ctx.state.result == "win")
+    if res == "won" then eq(save.story.chapter, 7) else eq(save.story.failed, true) end
+  end
+  print(("boss: the player beats the Overseer in %d of %d tries"):format(wins, games))
+end)
+
+test("the Overseer sees through card backs when it answers", function()
+  local s = setupState({ "pikecat", "barnbrawler", "gareth" }, { "squire", "squire", "squire" })
+  s.sides[2].mods.allSeeing = true
+  s.lead = 1
+  s.sides[1].placed = { s.sides[1].hand[1], s.sides[1].hand[2], false }
+  local view = match.visibleFoeForTest(s, 2, s.sides[1].placed)
+  eq(view[1].uid, s.sides[1].hand[1].uid, "sees the real card")
+  eq(view[3], false, "an empty cushion stays empty")
+  s.sides[2].mods.allSeeing = false
+  view = match.visibleFoeForTest(s, 2, s.sides[1].placed)
+  eq(view[1].phantom, true, "without the eye, a back is a guess")
+end)
+
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

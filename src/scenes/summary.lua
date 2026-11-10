@@ -22,7 +22,6 @@ function S:enter()
   self.victory = run and run.outcome == "victory"
   S.bg = { preset = "menu", ramp = self.victory and "felt" or "blood" }
   self.logo = plates.image(G.images.logo, 220)
-  self.flames = plates.image(G.images.shadow, 480)
   sfx.play(self.victory and "win" or "lose")
 end
 
@@ -40,7 +39,8 @@ function S:draw()
   if self.victory then
     plates.draw(self.logo, 320 - self.logo:getWidth() / 2, 8)
   else
-    plates.draw(self.flames, 80, 360 - self.flames:getHeight() + 40, 0.6)
+    -- the Overseer watches you leave
+    require("src.ui.overseer").draw(320, 372, 520, self.t, 0.75)
   end
   local ty = self.victory and 136 or 40
   local placing = festival.PLACING_NAMES[f.placing or "group"]

@@ -38,7 +38,7 @@ function M.toast(text, kind)
   if #M.toasts > 3 then table.remove(M.toasts, 1) end
 end
 
--- Feats and Renown levels: a medal slides in at the top right, one at a time. The queue
+-- Feats and Renown levels: the Overseer's note slides in at the top right, one at a time. The queue
 -- survives scene changes (M.reset leaves it alone).
 function M.medal(title, desc, kind)
   M.medals[#M.medals + 1] = { title = title, desc = desc, kind = kind or "feat", age = 0, life = 3.4 }
@@ -132,12 +132,11 @@ end
 function M.drawMedal()
   local m = M.medals[1]
   if not m then return end
-  local icons = require("src.ui.icons")
   local level = m.kind == "level"
   local w = 214
   local font, small = theme.T.bold(), theme.T.small()
   local dh = gfx.wrapHeight(m.desc or "", small, w - 44)
-  local h = math.max(34, 18 + dh + 4)
+  local h = math.max(40, 28 + dh + 4)
   local enter = math.min(1, m.age / 0.25)
   local leave = m.age > m.life - 0.3 and (m.life - m.age) / 0.3 or 1
   local slide = math.floor((1 - enter) ^ 3 * (w + 20) + (1 - leave) * (w + 20))
@@ -151,14 +150,12 @@ function M.drawMedal()
   lg.rectangle("fill", x, y, w, h)
   theme.set(level and C.blueDark or C.night)
   lg.rectangle("fill", x + 1, y + 1, w - 2, h - 2)
-  -- the medal, swinging in
-  local swing = math.sin(m.age * 9) * math.max(0, 1 - m.age * 1.4) * 0.5
-  icons.draw(level and "star" or "medal", x + 18, y + h / 2, edge, 2, swing)
-  local label = level and "RENOWN" or "FEAT"
+  -- the Overseer, who keeps the ledger, looks up
+  require("src.ui.overseer").face(x + 2, y + 2, 30, h - 4, M.time)
+  local label = level and "THE OVERSEER IS AMUSED" or "THE OVERSEER NOTES"
   gfx.text(label, theme.T.label(), x + 36, y + 3, level and C.cyan or C.goldText)
-  local lw = theme.T.label():getWidth(label)
-  gfx.text(m.title, font, x + 40 + lw, y + 1, C.white)
-  gfx.textf(m.desc or "", small, x + 36, y + 16, w - 44, "left", C.paper2, { shadow = false })
+  gfx.text(m.title, font, x + 36, y + 12, C.white)
+  gfx.textf(m.desc or "", small, x + 36, y + 27, w - 44, "left", C.paper2, { shadow = false })
   -- a shine sweeps across as it lands
   local sh = (m.age - 0.2) / 0.5
   if sh > 0 and sh < 1 then

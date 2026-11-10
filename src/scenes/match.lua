@@ -15,6 +15,7 @@ local nemesis = require("src.core.nemesis")
 local overlays = require("src.ui.overlays")
 local picker = require("src.ui.picker")
 local renown = require("src.core.renown")
+local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local theme = require("src.ui.theme")
@@ -48,6 +49,9 @@ function S:enter(p)
     local tutorial = require("src.core.tutorial")
     self.ctx = tutorial.setup()
     self.tut = tutorial.new(self)
+  elseif p.boss then
+    -- the story's last chapter: the Overseer's table
+    self.ctx = require("src.core.story").bossMatch(save)
   else
     self.ctx = game.setupMatch(save)
     G.persist()
@@ -66,11 +70,15 @@ function S:enter(p)
   local n = self.ctx.nemesis
   if self.tut then
     self.portrait, self.eyes = art.character("bedimew", 128, true)
+  elseif self.ctx.boss then
+    self.portrait, self.eyes = nil, nil
   else
     self.portrait, self.eyes = art.entrant(save, self.ctx.opp, 128, true)
   end
-  S.bg = { preset = "match", ramp = n and "blood" or "felt" }
-  fx.banner(self.tut and "Practice match" or festival.stageLabel(save.run.festival), "Knock all of their goblets off the table", n and C.red or C.gold, 0, 160)
+  local boss = self.ctx.boss
+  S.bg = { preset = "match", ramp = (n or boss) and "blood" or "felt" }
+  local title = self.tut and "Practice match" or boss and "The High Table" or festival.stageLabel(save.run.festival)
+  fx.banner(title, boss and "It sees every card you hold" or "Knock all of their goblets off the table", (n or boss) and C.red or C.gold, 0, 160)
   self:at(1.0, function() self:beginBout() end)
 end
 
@@ -520,6 +528,25 @@ function S:finish()
     end)
     return
   end
+  if self.ctx.boss then
+    -- the High Table settles the story, not a festival
+    local story = require("src.core.story")
+    local chapter = G.save.story.chapter
+    local result = story.finishBoss(G.save, won)
+    if won then
+      G.addRenown(100)
+      G.award({ "storyteller", "overseen" })
+    end
+    G.persist()
+    self:at(1.8, function()
+      G.go("cutscene", {
+        lines = story.lines(G.save, result, chapter), bg = { preset = "vs", ramp = won and "felt" or "blood" },
+        title = won and "The ledger is yours" or "The Overseer laughs", sub = story.CHAPTERS[chapter].goalText,
+        onDone = function() G.go("story") end,
+      })
+    end)
+    return
+  end
   local out = game.resolveMatch(G.save, self.ctx)
   G.persist()
   -- Renown for the match, then any feats it earned
@@ -670,6 +697,15 @@ end
 
 function S:drawRival()
   local sd = self.s.sides[2]
+  if self.ctx.boss then
+    -- the Overseer looms over its own table
+    lg.setScissor(G.scissor(0, 0, theme.W, HORIZON + 2))
+    overseer.draw(320, HORIZON + 4, 250, self.t)
+    lg.setScissor()
+    lg.setColor(1, 1, 1)
+    lg.draw(cardview.pile(), RDECK_X - 14, RDECK_Y - 18)
+    return
+  end
   local px, py = 320 - 64, HORIZON - 106 + math.floor(math.sin(self.t * 1.3) * 1.5 + 0.5)
   lg.setScissor(G.scissor(0, 0, theme.W, HORIZON + 2))
   lg.setColor(0.4, 0.4, 0.44)

@@ -6,6 +6,10 @@
 -- when the chapter is played (the nemesis system keeps running between chapters). Your pride,
 -- your charms and the cats the Hands captured carry from chapter to chapter. Fail a chapter and
 -- you can retry it from where you started it.
+--
+-- Above them all sits the Overseer, the flaming shadow cat who keeps the Arena's ledger. It
+-- watches from the start, shows itself when you take the Gilded Saucer, and the last chapter is
+-- one match at its own table, where it sees through every card back.
 local cards = require("src.core.cards")
 local festival = require("src.core.festival")
 local game = require("src.core.game")
@@ -20,6 +24,7 @@ M.CHAPTERS = {
   { numeral = "III", title = "The Winter Yowl", fest = 4, goal = "semi", goalText = "Reach the semi-finals" },
   { numeral = "IV", title = "Moonlit Mews", fest = 6, goal = "final", goalText = "Reach the final" },
   { numeral = "V", title = "The Gilded Saucer", fest = 5, goal = "win", goalText = "Win the festival and dethrone the First Hand" },
+  { numeral = "VI", title = "The High Table", boss = "overseer", goalText = "Beat the Overseer at its own table" },
 }
 M.LAST = #M.CHAPTERS
 
@@ -39,6 +44,7 @@ function M.progressLine(save)
   if st.chapter == 0 then return "Prologue: The Bin Yard" end
   if st.chapter > M.LAST then return ("Champion %s. The story is told."):format(save.playerName) end
   local ch = M.CHAPTERS[st.chapter]
+  if ch.boss then return ("Chapter %s: %s"):format(ch.numeral, ch.title) end
   local live = save.run and save.run.phase ~= "over"
   return ("Chapter %s: %s%s"):format(ch.numeral, ch.title, live and " (in progress)" or "")
 end
@@ -120,8 +126,67 @@ function M.finishChapter(save)
   return won and "won" or "lost"
 end
 
+-- ---------------------------------------------------------------- the High Table
+
+M.BOSS = { name = "The Overseer", id = "overseer", kind = "overseer", coat = "shadow", title = "Keeper of the Ledger" }
+-- How strong the Overseer's table is. tests/run.lua reports how often the AI beats it.
+-- Its eye is worth a lot: with these, the AI wins about a third of the time with a late pride.
+M.BOSS_TUNING = { sigLevel = 1, rarity = "rare", count = 10, level = 1, goblets = 1, style = "default" }
+
+-- The final match: your pride as the Gilded Saucer left it, against the Overseer's deck (the
+-- Four Hands' signature cats and the Arena's best rares), an extra goblet, and the Overseer's
+-- eye: when it answers, it sees your cards face up.
+function M.bossMatch(save)
+  local match = require("src.core.match")
+  local nemesis = require("src.core.nemesis")
+  local traits = require("src.core.traits")
+  local charms = require("src.core.charms")
+  local run = save.run or {}
+  local mine = copyDeck(run.deck or {})
+  if #mine == 0 then
+    local tmp = { deck = {}, uidc = 0, rng = rng.new(save.nextId + 7) }
+    game.dealStarterDeck(tmp)
+    mine = tmp.deck
+  end
+  local deck, uid = {}, 0
+  local function add(id, def, level)
+    uid = uid + 1
+    deck[#deck + 1] = { uid = "ov" .. uid, id = id, def = def, level = level or 2, xp = 0 }
+  end
+  local tune = M.BOSS_TUNING
+  for _, n in ipairs(save.hands) do
+    local d = nemesis.signatureCard(n)
+    add(d.id, d, tune.sigLevel)
+  end
+  local best = util.filter(cards.DRAFTABLE, function(d) return d.kind == "unit" and d.rarity == tune.rarity end)
+  table.sort(best, function(a, b) if a.power ~= b.power then return a.power > b.power end return a.id < b.id end)
+  for i = 1, math.min(tune.count, #best) do add(best[i].id, nil, tune.level) end
+  add("moonfog", nil, 1)
+  add("hairball", nil, 1)
+  local pm, em = traits.baseMods(), traits.baseMods()
+  charms.apply(pm, run.charms or {})
+  em.goblets = em.goblets + tune.goblets
+  em.allSeeing = true
+  local state = match.create({ name = save.playerName, deck = mine, mods = pm, cushions = run.cushions },
+    { name = M.BOSS.name, deck = deck, mods = em }, rng.int(save.rng, 1e9) + 1, match.STYLES[tune.style])
+  return { opp = M.BOSS, state = state, stage = "final", tier = 7, personality = "schemer", boss = true }
+end
+
+-- The High Table is settled: win, and the story is told; lose, and you climb the stairs again.
+function M.finishBoss(save, won)
+  local st = save.story
+  if won then
+    st.done[st.chapter] = true
+    st.chapter = st.chapter + 1
+    st.failed = false
+  else
+    st.failed = true
+  end
+  return won and "won" or "lost"
+end
+
 -- ---------------------------------------------------------------- the script
--- Lines are { who, text }. who: "bedimew", "crier", "you", "narrator", "hand1".."hand4".
+-- Lines are { who, text }. who: "bedimew", "crier", "you", "narrator", "overseer", "hand1".."hand4".
 -- {name} is the player's name, {hand1}..{hand4} the Hands' names, {omen} the festival's omen.
 
 local SCRIPT = {
@@ -132,6 +197,8 @@ local SCRIPT = {
     { "bedimew", "I'm Bedimew. Knight of the Round Cushion, once. Now I keep the straw yard and remember things." },
     { "bedimew", "The Midsummer Festival opens at dawn. Sixteen cats, one Arena, and the Four Hands sitting on top of it all." },
     { "bedimew", "You want in? Then show me you can sit on a cushion without falling off it. Practice match. Now." },
+    { "narrator", "High above the straw yard, in a box nobody sits in, two red eyes open." },
+    { "overseer", "Another stray at my gates. Let's see how long this one lasts." },
   },
   prologue_outro = {
     { "bedimew", "Not bad for a bin cat. Not bad at all." },
@@ -140,6 +207,7 @@ local SCRIPT = {
     { "bedimew", "But a captive fights at one life. Beat it, and it comes home. Beat the Hand who holds it, and they all come home." },
     { "bedimew", "Now. A knight needs a name. What do they call you?", ask = "name" },
     { "bedimew", "{name}. Good. I'll get you through the gate. The rest is claws." },
+    { "overseer", "{name}. I'll write that down." },
   },
   [1] = {
     intro = {
@@ -152,6 +220,7 @@ local SCRIPT = {
       { "crier", "{name} the stray goes through to the knockouts! The crowd doesn't know that name yet. They will!" },
       { "hand4", "Lucky paws. Next festival, I'll be ready for you." },
       { "bedimew", "They will be. So will we." },
+      { "overseer", "Through the gate. The ledger has a new line in it." },
     },
     lost = {
       { "bedimew", "Out in the groups. It happens to every knight once." },
@@ -168,6 +237,7 @@ local SCRIPT = {
       { "hand4", "Impossible. A STRAY." },
       { "hand3", "Interesting. The Fourth Hand falls to a bin cat. I'll be watching you, {name}." },
       { "bedimew", "That was {hand3}, the Third Hand. Clever, cold and patient. Now they know your name." },
+      { "overseer", "The Fourth Hand falls to a stray. I do enjoy a reshuffle." },
     },
     lost = {
       { "hand4", "Back to the bins with you!" },
@@ -179,6 +249,7 @@ local SCRIPT = {
       { "crier", "Hear ye! The Winter Yowl! Under the {omen}: {omendesc}" },
       { "hand3", "Every festival you climb a little higher, {name}. Let's see how you like the cold up here." },
       { "bedimew", "Reach the semi-finals. Pick your coats with care: in the cold, the edge cuts deeper." },
+      { "bedimew", "And {name}... the Hands didn't build this Arena. Something put them on those cushions. Don't look up at the high box." },
     },
     won = {
       { "crier", "{name} reaches the semi-finals! Somebody fetch this stray a proper cushion!" },
@@ -199,6 +270,7 @@ local SCRIPT = {
       { "crier", "{name} in the final! A stray in the final! The fish sellers are weeping with joy!" },
       { "hand1", "So you're the stray. I've heard the purring. Come to the Gilded Saucer, and I'll end it there." },
       { "bedimew", "{hand1}. The First Hand. They've held the Arena since before your whiskers grew." },
+      { "overseer", "One Hand left above you, little stray. And then there's me." },
     },
     lost = {
       { "bedimew", "So close. The moon will rise again. So will you." },
@@ -214,13 +286,35 @@ local SCRIPT = {
       { "crier", "Hear ye, hear ye! The champion of the Gilded Saucer is... {name}! The stray from the bins!" },
       { "hand1", "...Well fought. Enjoy the crown. It's heavier than it looks." },
       { "bedimew", "From a bin lid to the Gilded Saucer. Sir {name}. I always knew. Mostly." },
-      { "narrator", "And so a stray became a champion. But the Four Hands remember everything, and the Arena never sleeps." },
-      { "narrator", "Free Festivals are open from the main menu. The Hands are waiting." },
+      { "narrator", "The lamps gutter. The crowd goes quiet. In the high box, fire." },
+      { "overseer", "Bravo. Truly. A stray on the Gilded Saucer." },
+      { "overseer", "Did you think the Four Hands ruled my Arena? They keep my cushions warm. Nothing more." },
+      { "overseer", "Come up to the High Table, champion. One match. Win, and the Arena is yours." },
+      { "bedimew", "The Overseer. So it's real. {name}, whatever happens up there, you've already done what no stray has." },
     },
     lost = {
       { "hand1", "Bow, stray." },
       { "bedimew", "Not today. But you're the only cat who's ever made the First Hand sweat. We go again." },
     },
+  },
+}
+
+SCRIPT[6] = {
+  intro = {
+    { "narrator", "Up the stairs nobody climbs, to the high box over the Arena. The table is already laid." },
+    { "overseer", "Sit. Mind the flames." },
+    { "overseer", "I see every card you hold, {name}. Backs, fronts, the lot. I always have." },
+    { "bedimew", "Then hide nothing. Play it straight, hold your cushions, and keep them warm." },
+  },
+  won = {
+    { "overseer", "...Well. The ledger says you won." },
+    { "overseer", "Keep the Arena, champion. I'll be watching. I'm always watching." },
+    { "narrator", "And so a stray beat the Overseer at its own table. The Four Hands bow, the crowd roars, and high above, two red eyes close, amused." },
+    { "narrator", "Free Festivals are open from the main menu. The Hands are waiting, and so is the ledger." },
+  },
+  lost = {
+    { "overseer", "Back down the stairs, little stray. The table will be here when you're braver." },
+    { "bedimew", "It sees your cards. It doesn't see what you'll do with them. Again." },
   },
 }
 
@@ -266,6 +360,7 @@ function M.speaker(save, who)
   if who == "crier" then return "The Crier", "blue" end
   if who == "you" then return save.story and save.story.named and save.playerName or "The Stray", "ink" end
   if who == "narrator" then return nil, "night" end
+  if who == "overseer" then return "The Overseer", "night" end
   local r = tonumber(who:match("hand(%d)"))
   if r and save.hands[r] then return save.hands[r].name, "red", save.hands[r], r end
   return who, "ink"

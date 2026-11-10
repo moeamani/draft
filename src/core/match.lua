@@ -582,12 +582,14 @@ local function visibleFoe(s, si, foePlaced)
   local fs = s.sides[o]
   local est = estimates(fs)
   local view = {}
+  -- the Overseer's eye: it sees through card backs
+  local sees = s.sides[si].mods.allSeeing
   for i = 1, N do
     local c = foePlaced and foePlaced[i]
     if fs.seated[i] then view[i] = fs.seated[i]
     elseif not foePlaced then view[i] = phantom(nil, est.all)
     elseif not c then view[i] = false
-    elseif fs.shown[i] then view[i] = c
+    elseif fs.shown[i] or sees then view[i] = c
     else
       local back = M.backOf(c)
       view[i] = phantom(back == "dark" and "shadow" or back, est[back])
@@ -595,6 +597,8 @@ local function visibleFoe(s, si, foePlaced)
   end
   return view
 end
+
+M.visibleFoeForTest = visibleFoe
 
 -- A cold copy of a seated cat (as it would be back in hand: no Warmth).
 local function cold(c)

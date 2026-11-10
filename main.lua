@@ -90,7 +90,7 @@ function G.saveProfile() if G.profile then love.filesystem.write(PROFILE_FILE, u
 
 local function announceLevels(ups)
   for _, up in ipairs(ups or {}) do
-    local unlock = up.crests[1] and ("You are now " .. up.title .. ". Unlocked: " .. up.crests[1].name .. ".") or ("You are now " .. up.title .. ".")
+    local unlock = up.crests[1] and ("You are " .. up.title .. " now. Unlocked: " .. up.crests[1].name .. ".") or ("You are " .. up.title .. " now.")
     fx.medal("Level " .. up.level, unlock, "level")
   end
 end
@@ -103,7 +103,7 @@ function G.award(ids)
     local f, ups = renown.earn(G.profile, id)
     if f then
       got[#got + 1] = f
-      fx.medal(f.name, f.desc .. (f.renown > 0 and ("  +" .. f.renown .. " Renown") or ""), "feat")
+      fx.medal(f.name, f.desc .. (f.renown > 0 and (" +" .. f.renown .. " Renown.") or ""), "feat")
       sfx.play("win", 1.3, 0.6)
       announceLevels(ups)
       if ups.legend then
@@ -226,7 +226,7 @@ function love.load(args)
   love.keyboard.setKeyRepeat(true)
   if platform.shaders() then shaders.load() end
   sfx.load(platform.console)
-  for _, n in ipairs({ "logo", "mascot", "mascot-silhouette", "shadow" }) do
+  for _, n in ipairs({ "logo", "mascot", "mascot-silhouette" }) do
     G.images[n] = platform.image("assets/img/" .. n .. ".png", true)
     G.images[n]:setFilter("linear", "linear")
   end

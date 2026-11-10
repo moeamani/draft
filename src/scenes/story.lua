@@ -6,6 +6,7 @@ local game = require("src.core.game")
 local gfx = require("src.ui.gfx")
 local icons = require("src.ui.icons")
 local overlays = require("src.ui.overlays")
+local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local story = require("src.core.story")
@@ -53,6 +54,17 @@ local function beginChapter()
   })
 end
 
+-- The last chapter is one match against the Overseer, after its own scene.
+local function beginBoss()
+  local save = G.save
+  local ch = story.chapter(save)
+  G.go("cutscene", {
+    lines = story.lines(save, "intro"), bg = { preset = "vs", ramp = "blood" },
+    title = "Chapter " .. ch.numeral, sub = ch.title,
+    onDone = function() G.go("match", { boss = true }) end,
+  })
+end
+
 -- Called when a story festival ends (from the summary screen).
 function S.endChapter()
   local save = G.save
@@ -73,7 +85,7 @@ end
 
 -- ---------------------------------------------------------------- drawing
 
-local NODES = { { 54, 116 }, { 150, 92 }, { 246, 118 }, { 342, 90 }, { 438, 116 }, { 534, 88 } }
+local NODES = { { 30, 118 }, { 116, 94 }, { 202, 120 }, { 288, 92 }, { 374, 118 }, { 460, 90 }, { 560, 112 } }
 
 local function pennant(x, y, col, label, lit, t)
   local flap = lit and math.floor(math.sin(t * 3) * 1.5 + 0.5) or 0
@@ -111,6 +123,10 @@ function S:draw()
     local label = ch == 0 and "The Bin Yard" or story.CHAPTERS[ch].title
     gfx.text(label, T.small(), n[1] + 16, n[2] + 30, current and C.white or (done and C.goldText or C.muted), { align = "center", bg = C.ink })
     if done then icons.draw("star", n[1] + 16, n[2] - 40, C.goldText) end
+    if ch > 0 and story.CHAPTERS[ch].boss then
+      -- the High Table: the Overseer's eyes over its pennant
+      overseer.face(n[1] - 14, n[2] - 74, 60, 34, t, done and 0.5 or 1)
+    end
   end
   -- the current chapter
   local px, py, pw = 8, 170, 400
@@ -124,7 +140,14 @@ function S:draw()
     if widgets.button("st_go", px + 10, py + 140, 200, 32, "Begin the prologue", { color = C.red }) then playPrologue() end
   elseif st.chapter > story.LAST then
     plates.print("Champion " .. save.playerName, 22, px + 10, py + 6, C.goldText, { bg = C.deep })
-    gfx.textf("From a bin lid to the Gilded Saucer. The story is told, but the Four Hands remember everything. Try a Free Festival from the main menu.", T.body(), px + 10, py + 38, pw - 20, "left", C.paper2, { bg = C.deep })
+    gfx.textf("From a bin lid to the High Table. The story is told, but the Four Hands remember everything, and the Overseer is still watching. Try a Free Festival from the main menu.", T.body(), px + 10, py + 38, pw - 20, "left", C.paper2, { bg = C.deep })
+  elseif story.CHAPTERS[st.chapter].boss then
+    local ch = story.CHAPTERS[st.chapter]
+    plates.print("Chapter " .. ch.numeral .. ": " .. ch.title, 20, px + 10, py + 6, C.white, { bg = C.deep })
+    gfx.textf("The Overseer waits in the high box with your name in its ledger. One match at its table, an extra goblet on its side, and it sees every card you hold.", T.body(), px + 10, py + 34, pw - 20, "left", C.paper2, { bg = C.deep })
+    gfx.text("Goal: " .. ch.goalText, T.bold(), px + 10, py + 92, C.goldText, { bg = C.deep })
+    if st.failed then gfx.text("It won last time. Your pride is as the Gilded Saucer left it.", T.body(), px + 10, py + 110, C.redText, { bg = C.deep }) end
+    if widgets.button("st_go", px + 10, py + 140, 200, 32, st.failed and "Climb the stairs again" or "Climb to the High Table", { color = C.red }) then beginBoss() end
   else
     local ch = story.CHAPTERS[st.chapter]
     plates.print("Chapter " .. ch.numeral .. ": " .. ch.title, 20, px + 10, py + 6, C.white, { bg = C.deep })

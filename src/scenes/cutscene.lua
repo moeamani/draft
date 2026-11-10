@@ -3,6 +3,7 @@
 -- params: lines (from story.lines), bg, title (an optional chapter card shown first), onDone
 local art = require("src.ui.art")
 local gfx = require("src.ui.gfx")
+local overseer = require("src.ui.overseer")
 local plates = require("src.ui.plates")
 local sfx = require("src.ui.sfx")
 local story = require("src.core.story")
@@ -96,9 +97,12 @@ function S:draw()
   local name, plateKey, info, rank = story.speaker(G.save, l.who)
   local text = story.fill(G.save, l.text)
   local right = l.who == "you"
-  -- the speaker, rising in as the line starts
+  -- the speaker, rising in as the line starts (the Overseer looms over the whole box)
   local p = portraitFor(l.who, info, rank)
-  if p then
+  if l.who == "overseer" then
+    local rise = math.max(0, 1 - self.lt * 3)
+    overseer.draw(320, 262 + math.floor(rise * 40), 460, t)
+  elseif p then
     local rise = math.max(0, 1 - self.lt * 5)
     local bob = math.floor(math.sin(t * 1.6) * 1.5 + 0.5)
     local x = right and 452 or 60

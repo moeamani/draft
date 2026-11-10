@@ -350,9 +350,11 @@ function M.renown(tab)
   function ov:update(dt) self.t = self.t + dt end
   function ov:draw()
     local p = G.profile
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "Renown", C.goldDark)
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "The Overseer's Ledger", C.night)
+    -- the Overseer, who keeps it, looks over the page
+    require("src.ui.overseer").draw(548, 104, 150, self.t)
     for i, name in ipairs({ "Feats", "Crests" }) do
-      if widgets.button("rn_t" .. i, 380 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
+      if widgets.button("rn_t" .. i, 296 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
     end
     local L = renown.level(p.renown)
     local got, total = renown.featCount(p)
@@ -364,7 +366,7 @@ function M.renown(tab)
     local line = ("Matches %d   Wins %d   Captures %d   Rescues %d   Hot Seats %d   Crowns %d")
       :format(st.matches, st.wins, st.captures, st.rescues, st.hotSeats, st.champions)
     gfx.text(line, T.small(), 20, 90, C.paper2)
-    gfx.text(("Feats %d of %d"):format(got, total), T.bold(), 620, 44, C.paper, { align = "right" })
+    gfx.text(("Feats %d of %d"):format(got, total), T.bold(), 264, 48, C.paper)
     if self.tab == 1 then
       for i, f in ipairs(renown.FEATS) do
         local col, row = (i - 1) % 3, math.floor((i - 1) / 3)

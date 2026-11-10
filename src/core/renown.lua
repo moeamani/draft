@@ -41,6 +41,7 @@ M.FEATS = {
   feat("dynasty", "Dynasty", "Win 3 festivals.", 120, "legend"),
   feat("crested", "Colours", "Win a festival under a new Crest.", 60, "legend"),
   feat("storyteller", "Stray No More", "Finish the story.", 100, "legend"),
+  feat("overseen", "Over the Overseer", "Beat the Overseer at the High Table.", 150, "legend"),
   feat("legend", "Living Legend", "Reach Renown level 10.", 0, "legend"),
 }
 M.FEAT = {}
