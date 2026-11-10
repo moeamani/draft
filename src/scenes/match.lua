@@ -587,6 +587,7 @@ function S:finish()
   G.persist()
   -- Renown for the match, then any feats it earned
   local gain, lines = renown.matchRenown(self.ctx, out)
+  gain = math.floor(gain * (renown.STAKES[G.save.run.stake or 1] or renown.STAKES[1]).renown + 0.5)
   out.renownBefore, out.renownGain, out.renownLines = G.profile.renown, gain, lines
   renown.noteMatch(G.profile, self.ctx, out)
   G.addRenown(gain)

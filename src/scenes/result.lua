@@ -59,9 +59,19 @@ end
 function S:continue()
   game.afterMatch(G.save)
   if G.save.run.phase == "over" then
+    local run = G.save.run
+    local stake = renown.STAKES[run.stake or 1] or renown.STAKES[1]
     renown.noteRun(G.profile, G.save)
-    G.addRenown(renown.runRenown(G.save))
+    G.addRenown(math.floor(renown.runRenown(G.save) * stake.renown + 0.5))
     G.award(renown.runFeats(G.profile, G.save))
+    -- a Free Festival won at your highest stake opens the next one
+    if not run.story and run.festival and run.festival.placing == "champion" then
+      local opened = renown.noteStake(G.profile, run.crest, run.stake)
+      if opened then
+        require("src.ui.fx").stamp(renown.STAKES[opened].name, "The Overseer raises the stake. " .. renown.STAKES[opened].desc, "level")
+      end
+      G.saveProfile()
+    end
   end
   G.persist()
   if G.save.run.phase == "over" then G.go("summary")

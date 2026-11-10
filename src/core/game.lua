@@ -112,13 +112,14 @@ function M.rollCards(r, n, quality)
   return out
 end
 
-function M.startRun(save, crest)
+function M.startRun(save, crest, stake)
   save.runs = save.runs + 1
   local run = {
     rng = rng.new(rng.int(save.rng, 1e9) + 1), number = save.runs, fish = 25, deck = {}, charms = {},
     phase = "hub", stallUsed = false, nextGoblets = 0, uidc = 0, cushions = { false, false, false },
     stats = { won = 0, lost = 0, slain = 0, recruited = 0, branded = 0 },
   }
+  run.stake = math.max(1, math.min(5, stake or 1))
   M.dealStarterDeck(run)
   M.applyCrest(run, crest)
   run.festival = festival.create(save, rng.int(run.rng, 1e9) + 1)
@@ -218,6 +219,7 @@ function M.setupMatch(save)
   local f = run.festival
   local opp = M.nextOpponent(save)
   local tier = festival.tier(f)
+  local stake = run.stake or 1
   local pm, em = traits.baseMods(), traits.baseMods()
   charms.apply(pm, run.charms)
   pm.goblets = pm.goblets + (run.nextGoblets or 0)
@@ -225,7 +227,7 @@ function M.setupMatch(save)
   if opp.kind == "hand" then
     n = M.findNemesis(save, opp.id)
     traits.apply(em, nemesis.traitIds(n), n.wins)
-    deck = nemesis.nemesisDeck(run.rng, n, math.ceil(tier / 2))
+    deck = nemesis.nemesisDeck(run.rng, n, math.ceil(tier / 2) + (stake >= 3 and 1 or 0))
     personality = n.personality
     if pm.peek then spyglass = nemesis.revealRandom(run.rng, n) end
   else
@@ -234,10 +236,13 @@ function M.setupMatch(save)
     deck = nemesis.strayDeck(run.rng, foe)
     personality = foe.personality
     if foe.elite then traits.apply(em, { rng.pick(run.rng, { "warlord", "archmage", "hoarder", "vengeful", "bodyguard" }) }, 0) end
-    if tier <= 2 then em.handSize = em.handSize - 1; em.goblets = em.goblets - 1 end
+    if tier <= 2 and stake < 4 then em.handSize = em.handSize - 1; em.goblets = em.goblets - 1 end
   end
   -- the festival gets meaner as it goes: knockout rivals and the Hands bring extra goblets
   if tier >= 5 then em.goblets = em.goblets + 1 end
+  -- the Overseer's Stakes (see renown.STAKES), each on top of the ones below it
+  if stake >= 2 and f.stage ~= "group" then em.goblets = em.goblets + 1 end
+  if stake >= 5 then em.extraLives = (em.extraLives or 0) + 1 end
   if n then em.goblets = em.goblets + math.floor(n.level / 4) end
   local style = match.STYLES[personality] or match.STYLES.default
   local state = match.create({ name = save.playerName, deck = run.deck, mods = pm, cushions = run.cushions },

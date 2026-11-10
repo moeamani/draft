@@ -42,6 +42,7 @@ M.FEATS = {
   feat("crested", "Colours", "Win a festival under a new Crest.", 60, "legend"),
   feat("storyteller", "Stray No More", "Finish the story.", 100, "legend"),
   feat("overseen", "Over the Overseer", "Beat the Overseer at the High Table.", 150, "legend"),
+  feat("inked", "Signed in Red", "Win a festival at Red Ink or higher.", 80, "legend"),
   feat("legend", "Living Legend", "Reach Renown level 10.", 0, "legend"),
 }
 M.FEAT = {}
@@ -63,6 +64,16 @@ M.CRESTS = {
 M.CREST = {}
 for _, c in ipairs(M.CRESTS) do M.CREST[c.id] = c end
 
+-- Stakes: the Overseer's wager on a Free Festival. Each one adds its rule to those before it and
+-- multiplies the Renown you earn; winning a festival at your highest stake opens the next.
+M.STAKES = {
+  { name = "Paper", desc = "The Arena as it is.", renown = 1.0 },
+  { name = "Ink", desc = "Knockout rivals bring 1 more goblet.", renown = 1.2 },
+  { name = "Red Ink", desc = "And the Four Hands' prides are a level higher.", renown = 1.4 },
+  { name = "Gold Ink", desc = "And strays stop going easy in the groups.", renown = 1.6 },
+  { name = "Overseer's Ink", desc = "And every rival cat has 1 more life.", renown = 2.0 },
+}
+
 M.TITLES = {
   "Nameless Stray", "Alley Cat", "Bin Baron", "Yard Scrapper", "Cushion Squire", "Cushion Knight",
   "Hearth Knight", "Banner Knight", "Arena Darling", "Festival Legend", "Paw of the Realm", "Lord of Cushions",
@@ -72,7 +83,7 @@ M.TITLES = {
 
 function M.new()
   return {
-    version = 1, renown = 0, feats = {}, crest = "stray",
+    version = 1, renown = 0, feats = {}, crest = "stray", stake = 1, stakeWon = 0, seals = {},
     stats = { matches = 0, wins = 0, captures = 0, rescues = 0, hotSeats = 0, champions = 0, festivals = 0 },
   }
 end
@@ -84,7 +95,22 @@ function M.fix(p)
   for k, v in pairs(fresh) do if p[k] == nil then p[k] = v end end
   for k, v in pairs(fresh.stats) do if p.stats[k] == nil then p.stats[k] = v end end
   if not M.CREST[p.crest] then p.crest = "stray" end
+  p.stake = math.max(1, math.min(M.stakeOpen(p), p.stake or 1))
   return p
+end
+
+-- The highest stake you may play at: one above the highest you've won a festival at.
+function M.stakeOpen(p) return math.max(1, math.min(#M.STAKES, (p.stakeWon or 0) + 1)) end
+
+-- A festival was won at this crest and stake. Returns the stake it opened, if any.
+function M.noteStake(p, crest, stake)
+  stake = stake or 1
+  p.seals = p.seals or {}
+  p.seals[crest or "stray"] = math.max(p.seals[crest or "stray"] or 0, stake)
+  local before = M.stakeOpen(p)
+  p.stakeWon = math.max(p.stakeWon or 0, stake)
+  local after = M.stakeOpen(p)
+  return after > before and after or nil
 end
 
 -- Renown needed to reach a level: 0, 60, 150, 270, 420, 600, 810...
@@ -210,6 +236,7 @@ function M.runFeats(p, save)
     ids[#ids + 1] = "champion"
     if (p.stats.champions or 0) >= 3 then ids[#ids + 1] = "dynasty" end
     if save.run.crest and save.run.crest ~= "stray" then ids[#ids + 1] = "crested" end
+    if (save.run.stake or 1) >= 3 then ids[#ids + 1] = "inked" end
   end
   return ids
 end

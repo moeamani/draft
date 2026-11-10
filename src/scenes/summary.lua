@@ -84,8 +84,8 @@ function S:drawNews()
   end
   for i, h in ipairs(save.hands) do overlays.nemesisCard(h, i, 14 + (i - 1) * 154, 126, 150, 182) end
   if widgets.button("n_again", 180, 318, 136, 30, "Next festival", { color = C.red }) then
-    G.scenes.menu.pickCrest(function(crest)
-      game.startRun(save, crest)
+    G.scenes.menu.pickCrest(function(crest, stake)
+      game.startRun(save, crest, stake)
       G.persist()
       G.go("hub", { fresh = true })
     end)

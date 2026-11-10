@@ -77,10 +77,10 @@ function S.askName(title, onDone)
   G.openOverlay(ov)
 end
 
--- Pick a Crest (once more than one is unlocked), then run onPick(crestId).
+-- Pick a Crest and a stake (once there is more than one of either), then run onPick(crest, stake).
 function S.pickCrest(onPick)
   local renown = require("src.core.renown")
-  if #renown.crestsUnlocked(G.profile) <= 1 then return onPick("stray") end
+  if #renown.crestsUnlocked(G.profile) <= 1 and renown.stakeOpen(G.profile) <= 1 then return onPick("stray", 1) end
   overlays.crests(onPick)
 end
 
@@ -89,18 +89,18 @@ local function startFree()
   local s = G.save
   if s and s.run and s.run.phase ~= "over" then G.go("hub") return end
   if s then
-    S.pickCrest(function(crest)
+    S.pickCrest(function(crest, stake)
       if s.run then game.arenaMovesOn(s) end
-      game.startRun(s, crest)
+      game.startRun(s, crest, stake)
       G.persist()
       G.go("hub", { fresh = true })
     end)
     return
   end
   S.askName("A new festival", function(name)
-    S.pickCrest(function(crest)
+    S.pickCrest(function(crest, stake)
       G.setSave(game.newSave(name, os.time()))
-      game.startRun(G.save, crest)
+      game.startRun(G.save, crest, stake)
       G.persist()
       G.go("hub", { fresh = true })
     end)

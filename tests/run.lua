@@ -539,5 +539,46 @@ test("printings: Misprint lies about its back and hits harder; Proof has a life 
   if run2.fish < before + out.goldFish then error("gold fish not paid") end
 end)
 
+test("stakes: each adds its rule, and winning at the top one opens the next", function()
+  local p = renown.new()
+  eq(renown.stakeOpen(p), 1)
+  eq(renown.noteStake(p, "stray", 1), 2, "winning at Paper opens Ink")
+  eq(renown.noteStake(p, "stray", 1), nil, "winning it again opens nothing")
+  eq(p.seals.stray, 1)
+  eq(renown.noteStake(p, "ember", 2), 3)
+  eq(renown.stakeOpen(p), 3)
+  local q = renown.fix({ renown = 0, feats = {}, stats = {}, stake = 4 })
+  eq(q.stake, 1, "a stake you haven't opened falls back")
+  -- the rules: goblets in the knockouts (2), no easy groups (4), an extra life (5)
+  local function firstMatch(stake)
+    local save = game.newSave("Stake", 71)
+    game.startRun(save, "stray", stake)
+    return game.setupMatch(save), save
+  end
+  local base, hard = firstMatch(1), firstMatch(4)
+  eq(hard.state.sides[2].maxGoblets, base.state.sides[2].maxGoblets + 1, "no goblet handicap for early strays at Gold Ink")
+  local top = firstMatch(5)
+  local function lives(ctx)
+    for _, list in ipairs({ ctx.state.sides[2].hand, ctx.state.sides[2].deck }) do
+      for _, c in ipairs(list) do
+        local d = cards.getDef(c)
+        if d.kind == "unit" then return c.lives - cards.maxLives(d) end
+      end
+    end
+  end
+  eq(lives(base), 0)
+  eq(lives(top), 1, "rival cats have a life more at the Overseer's Ink")
+  -- win the three group matches in two identical festivals, one at Paper and one at Ink
+  local function quarterFinal(stake)
+    local save = game.newSave("Stake", 71)
+    game.startRun(save, "stray", stake)
+    local f = save.run.festival
+    for _ = 1, 3 do festival.finishRound(f, { won = true, pd = 60 }) end
+    eq(f.stage, "qf", "through the groups")
+    return game.setupMatch(save)
+  end
+  eq(quarterFinal(2).state.sides[2].maxGoblets, quarterFinal(1).state.sides[2].maxGoblets + 1, "knockout rivals bring a goblet more at Ink")
+end)
+
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

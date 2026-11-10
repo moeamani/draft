@@ -33,6 +33,13 @@ function M.draw(run, opts)
   -- the festival's title card, as in the Figma "Card Name" plate
   local size = plates.textWidth(f.name, 20) <= 270 and 20 or 16
   plates.header(4, 4, theme.W - 8, 30, C.ink, f.name, { size = size, pad = 10 })
+  -- the stake this festival is played at, if it's above Paper
+  local stake = require("src.core.renown").STAKES[run.stake or 1]
+  if (run.stake or 1) > 1 and stake then
+    local nw = plates.textWidth(f.name, size)
+    local cw = T.small():getWidth(stake.name) + 8
+    if 14 + nw + 8 + cw < 292 then gfx.chip(stake.name, 14 + nw + 8, 11, "gold") end
+  end
   icons.draw("fish", 302, 19, C.gold)
   gfx.text(tostring(run.fish), T.big(), 310, 7, C.gold)
   M.charmRow(run, 352, 11)

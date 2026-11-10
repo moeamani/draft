@@ -337,6 +337,10 @@ local function crestGrid(x0, y0, pickable, chosen)
     gfx.textf(c.desc, T.small(), x + 42, y + 20, 148, "left", open and C.paper2 or C.muted)
     local tag = open and (sel and "Chosen" or (pickable and "Choose" or "Unlocked")) or ("Renown level " .. c.level)
     gfx.text(tag, T.label(), x + 42, y + 57, open and (sel and C.goldText or C.green) or C.redText)
+    local seal = p.seals and p.seals[c.id]
+    if seal and renown.STAKES[seal] then
+      gfx.text("Won at " .. renown.STAKES[seal].name, T.label(), x + 190, y + 57, C.goldText, { align = "right" })
+    end
     if clicked and open then picked = c.id end
   end
   return picked
@@ -404,16 +408,36 @@ end
 
 -- Choose a Crest before a Free Festival. onPick(id) runs with the choice.
 function M.crests(onPick)
+  local renown = require("src.core.renown")
   local ov = {}
   function ov:draw()
-    M.frame(8, 8, theme.W - 16, theme.H - 16, "Choose your Crest")
-    gfx.textf("Your Crest shapes the pride you start the festival with. Earn Renown to unlock more.", T.body(), 20, 46, 600, "left", C.paper2)
-    local id = crestGrid(16, 70, true, G.profile.crest)
+    local p = G.profile
+    M.frame(8, 8, theme.W - 16, theme.H - 16, "A new festival")
+    gfx.textf("Set the Overseer's stake, then choose the Crest your pride starts under.", T.body(), 20, 44, 600, "left", C.paper2)
+    local id = crestGrid(16, 62, true, p.crest)
+    -- the stake: each adds its rule to the ones before it, and pays more Renown
+    local open = renown.stakeOpen(p)
+    p.stake = math.max(1, math.min(open, p.stake or 1))
+    local st = renown.STAKES[p.stake]
+    gfx.label("The Overseer's stake", 20, 288, C.goldText)
+    gfx.text(st.desc .. (st.renown > 1 and ("  Renown x" .. st.renown .. ".") or ""), T.small(), 134, 286, C.paper2)
+    for i, s in ipairs(renown.STAKES) do
+      local bw = 118
+      local locked = i > open
+      if widgets.button("stake_" .. i, 18 + (i - 1) * (bw + 3), 302, bw, 24, locked and "Locked" or s.name,
+        { kind = (i == p.stake) and "info" or "secondary", disabled = locked }) then
+        p.stake = i
+        G.saveProfile()
+      end
+    end
+    if open < #renown.STAKES then
+      gfx.text("Win a festival at " .. renown.STAKES[open].name .. " to open the next stake.", T.small(), 620, 330, C.muted, { align = "right" })
+    end
     if id then
-      G.profile.crest = id
+      p.crest = id
       G.saveProfile()
       G.closeOverlay()
-      onPick(id)
+      onPick(id, p.stake)
     end
   end
   G.openOverlay(ov)
@@ -449,6 +473,7 @@ function M.help()
         ys[c] = ys[c] + 16
         ys[c] = ys[c] + gfx.textf(desc, T.body(), cx + 14, ys[c], colW - 22, "left", C.paper) + 6
       end
+      for c = 1, cols do y = math.max(y, ys[c]) end
     end
     if self.tab == 1 then
       head("A bout")
