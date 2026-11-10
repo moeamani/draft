@@ -174,9 +174,33 @@ function M.maxLives(d)
   return M.LIVES[d.rarity] or 2
 end
 
+-- Printings: how one particular copy of a cat came off the Overseer's press. Most copies are
+-- plain. A printing belongs to the copy (inst.print), not to the card, and only cats have them.
+M.PRINTS = {
+  proof = { name = "Proof", desc = "A first pull on heavier stock: 1 more life." },
+  gold = { name = "Gold Leaf", desc = "Earns 4 fish in every match where it wins a duel." },
+  misprint = { name = "Misprint", desc = "+2 Paws, and its back shows the wrong coat." },
+}
+M.PRINT_ORDER = { "proof", "gold", "misprint" }
+M.MISPRINT_PAWS, M.GOLD_FISH = 2, 4
+M.BACKS = { "ember", "tide", "gilt", "dark" }
+
+-- The back a copy would honestly show: its coat, or "dark" for Shadow cats and tricks.
+function M.trueBack(d)
+  if d.kind ~= "unit" or d.coat == "shadow" or d.coat == "none" then return "dark" end
+  return d.coat
+end
+
+-- The lives this copy brings into a match.
+function M.livesOf(inst)
+  local d = M.getDef(inst)
+  if d.kind ~= "unit" then return 0 end
+  return M.maxLives(d) + (inst.print == "proof" and 1 or 0)
+end
+
 function M.paws(inst)
   local d = M.getDef(inst)
-  return d.power + M.levelBonus(inst.level or 1)
+  return d.power + M.levelBonus(inst.level or 1) + (inst.print == "misprint" and M.MISPRINT_PAWS or 0)
 end
 
 return M

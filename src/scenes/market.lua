@@ -47,7 +47,7 @@ function S:draw()
         game.buyBack(run, c)
         fx.toast(cards.getDef(c).name .. " is back in your pride.", "good")
       else
-        game.addCard(run, c.id)
+        game.addCard(run, c.id, nil, c.print)
       end
       audio.play("coin")
       local v = self.picker.views[i]

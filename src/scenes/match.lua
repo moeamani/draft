@@ -656,6 +656,7 @@ function S:update(dt)
     local hov = c.uid == self.hoverUid and not self.drag
     v.hovered = hov
     v.selected = false
+    v.bob = (not hov) and k * 1.7 or nil -- cards in hand float; the one you point at holds still
     v.paws, v.previewInfo, v.risk = nil, nil, nil
     v:setTarget(320 + math.floor(off * spacing), HAND_Y + math.floor(off * off * 1.2) - (hov and 22 or 0), 1, 0)
   end
@@ -665,12 +666,13 @@ function S:update(dt)
     if v and not (self.drag and self.drag.moved and self.drag.uid == uid) then
       v.hovered = uid == self.hoverUid
       v.selected = true
+      v.bob = nil
       v:setTarget(MY_X[i], MY_Y, 1, 0)
     end
   end
   if self.drag and self.drag.moved then
     local v = self.views[self.drag.uid]
-    if v then v.hovered = true; v:setTarget(mx, my, 1, 0) end
+    if v then v.hovered = true; v.bob = nil; v:setTarget(mx, my, 1, 0) end
   end
   for i = 1, 3 do
     local b = self.board[i]

@@ -55,10 +55,15 @@ local function abilColor(def)
 end
 
 -- Cards are printed on cream paper: worn specks, a darker edge, a 2px margin. The illustration
--- sits in a window framed in the rarity's colour (brown, blue, red, gold).
+-- sits in a window framed in the rarity's colour (brown, blue, red, gold). A badge in the top
+-- right corner shows the coat as a shape (flame, drop, crown, moon), so coats read without
+-- colour. A copy's printing is drawn into it: a Proof has blue registration corners, Gold Leaf
+-- has a gilt edge, and a Misprint's art is printed out of register in red and cyan.
 local PAPER = { theme.hex("#ebe2c6"), theme.hex("#d6c8a3"), theme.hex("#bba882") }
+local GILT = { theme.hex("#f2c84b"), theme.hex("#d3a200"), theme.hex("#8a6a00") }
 local INK = theme.hex("#3a2a1c")
 local RARITY_FRAME = { common = INK, rare = theme.hex("#2471fc"), epic = theme.hex("#c8382c"), legendary = theme.hex("#d3a200") }
+local PROOF_BLUE = theme.hex("#2471fc")
 
 local function hash(x, y, s)
   local n = math.sin(x * 12.9898 + y * 78.233 + (s or 0) * 3.7) * 43758.5453
@@ -66,27 +71,25 @@ local function hash(x, y, s)
 end
 
 -- Paper over the whole card: outline with rounded corners, specks, a worn edge.
-local function paper(W, H, seed)
+local function paper(W, H, seed, stock)
+  stock = stock or PAPER
   theme.set(C.black)
-  lg.rectangle("fill", 1, 0, W - 2, H)
-  lg.rectangle("fill", 0, 1, W, H - 2)
-  theme.set(PAPER[1])
-  lg.rectangle("fill", 1, 1, W - 2, H - 2)
+  plates.rounded(0, 0, W, H, 2)
+  theme.set(stock[1])
+  plates.rounded(1, 1, W - 2, H - 2, 1)
   for y = 1, H - 2 do
     for x = 1, W - 2 do
       local edge = x == 1 or y == 1 or x == W - 2 or y == H - 2
+      local corner = (x == 1 or x == W - 2) and (y == 1 or y == H - 2)
       local r = hash(x, y, seed)
       local c
-      if edge then c = r < 0.25 and PAPER[3] or PAPER[2]
-      elseif r < 0.05 then c = PAPER[2]
-      elseif r < 0.065 then c = PAPER[3] end
+      if corner then c = nil
+      elseif edge then c = r < 0.25 and stock[3] or stock[2]
+      elseif r < 0.05 then c = stock[2]
+      elseif r < 0.065 then c = stock[3] end
       if c then theme.set(c); lg.rectangle("fill", x, y, 1, 1) end
     end
   end
-  -- worn corners
-  theme.set(C.black)
-  lg.rectangle("fill", 1, 1, 1, 1); lg.rectangle("fill", W - 2, 1, 1, 1)
-  lg.rectangle("fill", 1, H - 2, 1, 1); lg.rectangle("fill", W - 2, H - 2, 1, 1)
 end
 
 local function seedOf(str)
@@ -95,26 +98,45 @@ local function seedOf(str)
   return n
 end
 
-local function renderFace(def, level)
-  local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power
+local function renderFace(def, level, print)
+  local key = def.id .. ":" .. level .. ":" .. (def.scars or 0) .. ":" .. def.power .. ":" .. (print or "")
   if faceCache[key] then return faceCache[key] end
   local W, H = M.W, M.H
   local unit = def.kind == "unit"
   -- build the plates before switching canvases (they bake into their own canvases)
-  local namePlate = plates.plate(50, 12, nameColor(def), { outline = false })
-  local abilPlate = plates.plate(50, 11, abilColor(def), { outline = false })
+  local namePlate = plates.plate(50, 12, nameColor(def), { outline = false, radius = 1, hi = false })
+  local abilPlate = plates.plate(50, 11, abilColor(def), { outline = false, radius = 1, hi = false })
   local pic = art.card(def)
   local cv = lg.newCanvas(W, H)
   cv:setFilter("nearest", "nearest")
   begin(cv)
-  paper(W, H, seedOf(def.id))
+  paper(W, H, seedOf(def.id), print == "gold" and GILT or PAPER)
   -- the illustration window: rarity frame, then the art (trimmed by a pixel all round)
   theme.set(RARITY_FRAME[def.rarity] or INK)
   lg.rectangle("fill", 3, 3, 50, 48)
-  lg.setColor(1, 1, 1)
   lg.setScissor(4, 4, 48, 46)
-  lg.draw(pic, 3, 3)
+  if print == "misprint" then
+    -- out of register: the red plate two pixels left, the cyan plate two pixels right, and
+    -- the picture printed thin over both
+    lg.setColor(1, 0.32, 0.26, 1)
+    lg.draw(pic, 1, 3)
+    lg.setColor(0.25, 0.9, 1, 0.6)
+    lg.draw(pic, 5, 4)
+    lg.setColor(1, 1, 1, 0.7)
+    lg.draw(pic, 3, 3)
+  else
+    lg.setColor(1, 1, 1)
+    lg.draw(pic, 3, 3)
+  end
   lg.setScissor()
+  if print == "proof" then
+    -- a printer's proof: blue registration corners on the art
+    theme.set(PROOF_BLUE)
+    for _, c in ipairs({ { 4, 4, 1, 1 }, { 51, 4, -1, 1 }, { 4, 49, 1, -1 }, { 51, 49, -1, -1 } }) do
+      lg.rectangle("fill", math.min(c[1], c[1] + c[3] * 5), c[2], 6, 1)
+      lg.rectangle("fill", c[1], math.min(c[2], c[2] + c[4] * 5), 1, 6)
+    end
+  end
   if def.rarity == "legendary" then
     -- gilt corners on the paper
     theme.set(C.gold)
@@ -124,12 +146,14 @@ local function renderFace(def, level)
   lg.draw(namePlate, 3, 52)
   lg.draw(abilPlate, 3, 65)
   if unit then
-    -- type badge: sword for Physical, orb for Magic
+    -- the coat badge: its shape in its colour, on black
     theme.set(C.black)
     lg.rectangle("fill", W - 15, 3, 12, 12)
     theme.set(C.night)
     lg.rectangle("fill", W - 14, 4, 10, 10)
-    icons.draw(def.type == "magic" and "orb" or "sword", W - 9, 9, def.type == "magic" and C.cyan or C.paper)
+    icons.draw(icons.COAT_ICON[def.coat] or "moon", W - 9, 9, cards.COATS[def.coat] and cards.COATS[def.coat].color or C.steel)
+    -- its type, small, at the end of the ability plate: sword for Physical, orb for Magic
+    icons.draw(def.type == "magic" and "orb" or "sword", W - 9, 70, def.type == "magic" and C.cyan or C.paper2)
   end
   icons.draw(icons.ABILITY_ICON[def.ability] or "paw", 9, 70, C.white)
   lg.pop()
@@ -138,10 +162,11 @@ local function renderFace(def, level)
 end
 M.face = renderFace
 
--- Card backs: the same paper, and a field in the coat's colour printed in halftone (darker dots
--- towards the edges, a ruled frame) with the Overseer's mark in the middle: a black cat's head
--- with two red eyes. Every deck in the Arena is the Overseer's. Shadow cats and tricks share the
--- dark back.
+-- Card backs: the same paper, and a field in the coat's colour printed in halftone (dots grow
+-- towards the edges, a ruled frame) with the coat's shape large in the middle and the Overseer's
+-- mark, a black cat's head with two red eyes, below it: every deck in the Arena is the
+-- Overseer's. Shadow cats and tricks share the dark back. "plain" (the draw piles) has only
+-- the mark.
 M.BACKS = {
   ember = { field = C.red },
   tide = { field = theme.hex("#2471fc") },
@@ -164,7 +189,23 @@ local MARK = {
   ".kkkkkkkkk.",
 }
 
-local function ornament(x0, y0, w, h, spec, small)
+local function mark(cx, cy, spec)
+  local mw, mh = #MARK[1], #MARK
+  local mx, my = math.floor(cx - mw / 2), math.floor(cy - mh / 2)
+  theme.set(spec.light and C.slate or C.black)
+  lg.rectangle("fill", mx - 2, my - 2, mw + 4, mh + 4)
+  theme.set(theme.shade(spec.field, -0.6))
+  lg.rectangle("fill", mx - 1, my - 1, mw + 2, mh + 2)
+  for j, row in ipairs(MARK) do
+    for i = 1, mw do
+      local ch = row:sub(i, i)
+      local c = (ch == "k" and C.black) or (ch == "r" and EYE_RED) or (ch == "h" and EYE_HOT) or nil
+      if c then theme.set(c); lg.rectangle("fill", mx + i - 1, my + j - 1, 1, 1) end
+    end
+  end
+end
+
+local function ornament(x0, y0, w, h, spec, kind, small)
   local field = spec.field
   local light = spec.light or theme.shade(field, 0.38)
   local dark = theme.shade(field, -0.42)
@@ -189,19 +230,17 @@ local function ornament(x0, y0, w, h, spec, small)
     end
   end
   if small then return end
-  -- the Overseer's mark
-  local mw, mh = #MARK[1], #MARK
-  local mx, my = math.floor(cx - mw / 2), math.floor(cy - mh / 2)
-  theme.set(spec.light and C.slate or C.black)
-  lg.rectangle("fill", mx - 2, my - 2, mw + 4, mh + 4)
-  theme.set(theme.shade(field, -0.6))
-  lg.rectangle("fill", mx - 1, my - 1, mw + 2, mh + 2)
-  for j, row in ipairs(MARK) do
-    for i = 1, mw do
-      local ch = row:sub(i, i)
-      local c = (ch == "k" and C.black) or (ch == "r" and EYE_RED) or (ch == "h" and EYE_HOT) or nil
-      if c then theme.set(c); lg.rectangle("fill", mx + i - 1, my + j - 1, 1, 1) end
-    end
+  local glyph = icons.COAT_ICON[kind]
+  if glyph then
+    -- the coat's shape on a clear disc, and the mark below it
+    theme.set(theme.shade(field, -0.5))
+    lg.rectangle("fill", math.floor(cx) - 12, math.floor(cy) - 18, 24, 24)
+    theme.set(field)
+    lg.rectangle("fill", math.floor(cx) - 11, math.floor(cy) - 17, 22, 22)
+    icons.draw(glyph, math.floor(cx), math.floor(cy) - 6, spec.light and C.steel or C.paper, 2)
+    mark(cx, cy + 20, spec)
+  else
+    mark(cx, cy, spec)
   end
 end
 
@@ -217,7 +256,7 @@ function M.back(kind)
   paper(W, H, #kind * 17)
   theme.set(theme.shade(spec.field, -0.55))
   lg.rectangle("fill", 3, 3, W - 6, H - 6)
-  ornament(4, 4, W - 8, H - 8, spec)
+  ornament(4, 4, W - 8, H - 8, spec, kind)
   lg.pop()
   backs[kind] = cv
   return cv
@@ -243,7 +282,7 @@ function M.pile()
   lg.pop()
   theme.set(theme.shade(M.BACKS.plain.field, -0.55))
   lg.rectangle("fill", 2, 6, w - 4, h - 4)
-  ornament(3, 7, w - 6, h - 6, M.BACKS.plain, true)
+  ornament(3, 7, w - 6, h - 6, M.BACKS.plain, "plain", true)
   lg.pop()
   return pile
 end
@@ -288,8 +327,11 @@ function View:update(dt)
   self.bounce = math.max(0, self.bounce - dt * 4)
   self.flip = self.flip + (self.tflip - self.flip) * math.min(1, dt * 12)
   if self.dying then self.dying = self.dying + dt * 1.4 end
-  -- a shine sweeps across a card when you first point at it
-  if self.hovered and not self.wasHovered then self.shine = 0 end
+  -- a shine sweeps across a card when you first point at it, and it wobbles as it's picked out
+  if self.hovered and not self.wasHovered then
+    self.shine = 0
+    if self.rot == self.trot then self.rot = self.trot + (love.math.random() < 0.5 and -0.05 or 0.05) end
+  end
   self.wasHovered = self.hovered
   if self.shine then
     self.shine = self.shine + dt * 2.4
@@ -366,7 +408,7 @@ function View:draw(opts)
   if self.dying and self.dying >= 1 then return end
   local def = self.def
   local showBack = self.faceDown or self.flip < 0
-  local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1)
+  local tex = showBack and M.back(self.backKind) or renderFace(def, self.inst.level or 1, self.inst.print)
   local alpha = self.alpha
   if self.dying then alpha = alpha * (1 - self.dying) end
   local k = 1 - self.dim * 0.6
@@ -376,10 +418,14 @@ function View:draw(opts)
   local fx_ = math.abs(self.flip)
   -- the card's own frame of reference: (0, 0) is its top-left corner
   lg.push()
+  -- cards in a hand float: a slow bob, each on its own phase, in whole screen pixels so the
+  -- pixel art stays crisp
+  local bob = self.bob and math.sin(love.timer.getTime() * 1.7 + self.bob) * 0.9 or 0
   if rest then
-    lg.translate(math.floor(self.x - M.W / 2 + 0.5), math.floor(self.y - M.H / 2 + 0.5))
+    local K = theme.K
+    lg.translate(math.floor((self.x - M.W / 2) * K + 0.5) / K, math.floor((self.y - M.H / 2 + bob) * K + 0.5) / K)
   else
-    lg.translate(self.x, self.y)
+    lg.translate(self.x, self.y + bob)
     lg.rotate(self.rot)
     lg.scale(s * fx_, s)
     lg.translate(-M.W / 2, -M.H / 2)
@@ -453,7 +499,7 @@ function View:drawText(opts, alpha, k)
   gfx.text(str, font, 2 + bw / 2, 3 + (12 - font:getHeight()) / 2, C.white, { align = "center", alpha = alpha, bg = bg })
   -- lives
   if unit then
-    local max = cards.maxLives(def)
+    local max = cards.livesOf(self.inst)
     local left = self.livesShown or self.inst.lives or max
     if self.inst.captive then max = 1 end
     if max > 0 then

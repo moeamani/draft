@@ -40,9 +40,10 @@ local function newSide(setup)
   local mods = setup.mods or traits.baseMods()
   for i, c in ipairs(setup.deck) do
     local d = c.def or cards.getDef(c)
-    deck[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, captive = c.captive, owner = c.owner }
+    deck[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, captive = c.captive, owner = c.owner,
+      print = c.print, fakeBack = c.fakeBack }
     -- Stolen Lives: every cat starts the match with its full lives (a captive is down to 1)
-    deck[i].lives = c.captive and 1 or (cards.maxLives(d) + (mods.extraLives or 0))
+    deck[i].lives = c.captive and 1 or (cards.livesOf(deck[i]) + (d.kind == "unit" and (mods.extraLives or 0) or 0))
     counts[c.id] = (counts[c.id] or 0) + 1
   end
   local omen = setup.omen or {}
@@ -88,10 +89,10 @@ end
 local function defOf(c) return c.def or cards.getDef(c) end
 
 -- What the other side sees of a face-down card: its coat, or "dark" for Shadow cats and tricks.
+-- A Misprint's back lies: it shows the coat it was wrongly printed with.
 function M.backOf(inst)
-  local d = defOf(inst)
-  if d.kind ~= "unit" or d.coat == "shadow" or d.coat == "none" then return "dark" end
-  return d.coat
+  if inst.print == "misprint" and inst.fakeBack then return inst.fakeBack end
+  return cards.trueBack(defOf(inst))
 end
 
 local function beats(a, b) return a and b and cards.COATS[a] and cards.COATS[a].beats == b end
@@ -602,7 +603,8 @@ M.visibleFoeForTest = visibleFoe
 
 -- A cold copy of a seated cat (as it would be back in hand: no Warmth).
 local function cold(c)
-  return { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, lives = c.lives, captive = c.captive, owner = c.owner }
+  return { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, lives = c.lives, captive = c.captive, owner = c.owner,
+    print = c.print, fakeBack = c.fakeBack }
 end
 
 -- The best placement for side si, deciding too which seated cats to pull back to hand.

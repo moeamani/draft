@@ -46,7 +46,7 @@ end
 
 function S:makeCards()
   local items = {}
-  for i, id in ipairs(self.out.cardChoices) do items[i] = { id = id } end
+  for i, id in ipairs(self.out.cardChoices) do items[i] = { id = id, print = (self.out.cardPrints or {})[i] } end
   self.picker = picker.new(items, { x = 320, y = 244, scale = 1, gap = 30, dealFrom = { 320, 420 } })
 end
 
@@ -161,7 +161,7 @@ function S:draw()
     end
     if i then
       local v = self.picker.views[i]
-      game.addCard(run, self.out.cardChoices[i])
+      game.addCard(run, self.out.cardChoices[i], nil, (self.out.cardPrints or {})[i])
       fx.burst(v.x, v.y, cards.RARITY_COLOR[v.def.rarity], 24, 140)
       G.persist()
       self:nextAfterCards()

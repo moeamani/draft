@@ -63,12 +63,36 @@ end
 
 function M.rankOf(save, n) return util.indexOf(save.hands, n) or 0 end
 
-local function cardInst(run, id, level)
+-- A new copy for the pride. print: "proof", "gold", "misprint" or nil; a Misprint is given the
+-- wrong back here (fakeBack keeps one it already had, e.g. a cat coming home).
+local function cardInst(run, id, level, print, fakeBack)
   run.uidc = run.uidc + 1
-  return { uid = "c" .. run.uidc, id = id, level = level or 1, xp = 0 }
+  local c = { uid = "c" .. run.uidc, id = id, level = level or 1, xp = 0 }
+  local d = cards.CARDS[id]
+  if print and cards.PRINTS[print] and (not d or d.kind == "unit") then
+    c.print = print
+    if print == "misprint" then
+      local honest = d and cards.trueBack(d) or "dark"
+      local wrong = util.filter(cards.BACKS, function(b) return b ~= honest end)
+      c.fakeBack = fakeBack or rng.pick(run.rng, wrong)
+    end
+  end
+  return c
 end
 
-function M.addCard(run, id, level) table.insert(run.deck, cardInst(run, id, level)) end
+function M.addCard(run, id, level, print, fakeBack)
+  local c = cardInst(run, id, level, print, fakeBack)
+  table.insert(run.deck, c)
+  return c
+end
+
+-- Does a freshly offered cat carry a printing? About one in eight does.
+M.PRINT_CHANCE = 0.13
+function M.rollPrint(r, id)
+  local d = cards.CARDS[id]
+  if not d or d.kind ~= "unit" or not rng.chance(r, M.PRINT_CHANCE) then return nil end
+  return rng.weighted(r, { { "proof", 40 }, { "gold", 35 }, { "misprint", 25 } })
+end
 
 local RARITY_WEIGHTS = {
   [0] = { { "common", 62 }, { "rare", 30 }, { "epic", 7 }, { "legendary", 1 } },
@@ -253,6 +277,12 @@ function M.resolveMatch(save, ctx)
   run.nextGoblets = 0
   local n = ctx.nemesis
   if n then n.met = true end
+  -- Gold Leaf cats earn their keep: fish for each one that won a duel
+  out.goldFish = 0
+  for _, c in ipairs(run.deck) do
+    if c.print == "gold" and me.scored[c.uid] then out.goldFish = out.goldFish + cards.GOLD_FISH end
+  end
+  run.fish = run.fish + out.goldFish
   M.settleLives(save, ctx, out)
   local pd = 10 + 10 * math.abs(math.max(0, me.goblets) - math.max(0, them.goblets))
 
@@ -280,6 +310,11 @@ function M.resolveMatch(save, ctx)
       if #offer < 3 and not util.contains(offer, id) then offer[#offer + 1] = id end
     end
     out.cardChoices = offer
+    -- some of the offered cats are special printings (never the spoils: those are what you took)
+    out.cardPrints = {}
+    for i, id in ipairs(offer) do
+      if not out.spoils[id] then out.cardPrints[i] = M.rollPrint(run.rng, id) end
+    end
     if n or ctx.stage ~= "group" then out.charmChoices = M.charmOffer(run, 2) end
     if n then
       run.beatHands = run.beatHands or {}
@@ -390,6 +425,7 @@ end
 -- ---------------------------------------------------------------- market
 
 M.CARD_PRICE = { common = 14, rare = 28, epic = 48, legendary = 85 }
+M.PRINT_PRICE = 8 -- a printed copy costs this much more
 M.REMOVE_PRICE, M.UPGRADE_PRICE = 20, 25
 
 -- ---------------------------------------------------------------- Stolen Lives
@@ -408,7 +444,7 @@ function M.settleLives(save, ctx, out)
   out.captured, out.rescued, out.spoilIds = {}, {}, {}
   save.capc = save.capc or 0
   local function bringHome(c)
-    M.addCard(run, c.id, c.level)
+    M.addCard(run, c.id, c.level, c.print, c.fakeBack)
     if c.def then run.deck[#run.deck].def = c.def end
     out.rescued[#out.rescued + 1] = c.id
   end
@@ -420,13 +456,15 @@ function M.settleLives(save, ctx, out)
       n.captives = n.captives or {}
       save.capc = save.capc + 1
       table.insert(n.captives, { id = c.id, def = c.def, level = math.min(3, (c.level or 1) + 1), xp = 0, uid = "cap" .. save.capc,
-        captive = true, owner = save.playerName, chapter = save.story and save.story.chapter or nil })
+        captive = true, owner = save.playerName, chapter = save.story and save.story.chapter or nil,
+        print = c.print, fakeBack = c.fakeBack })
       if #n.captives > M.MAX_CAPTIVES then table.remove(n.captives, 1) end
       nemLog(save, n, "Captured " .. cards.getDef(c).name .. " from " .. save.playerName .. ".")
     else
       local f = run.festival
       f.pawnshop = f.pawnshop or {}
-      table.insert(f.pawnshop, { id = c.id, def = c.def, level = c.level or 1, price = M.PAWN_PRICE[cards.getDef(c).rarity] or 20, by = ctx.opp.name })
+      table.insert(f.pawnshop, { id = c.id, def = c.def, level = c.level or 1, price = M.PAWN_PRICE[cards.getDef(c).rarity] or 20, by = ctx.opp.name,
+        print = c.print, fakeBack = c.fakeBack })
     end
   end
   for _, c in ipairs(them.lost) do
@@ -486,10 +524,12 @@ function M.makeMarket(run)
   local pawned = run.festival.pawnshop or {}
   for k = math.max(1, #pawned - 1), #pawned do
     local p = pawned[k]
-    if p then stock.cards[#stock.cards + 1] = { id = p.id, def = p.def, level = p.level, price = p.price, sold = false, pawn = p } end
+    if p then stock.cards[#stock.cards + 1] = { id = p.id, def = p.def, level = p.level, price = p.price, sold = false, pawn = p,
+      print = p.print, fakeBack = p.fakeBack } end
   end
   for _, id in ipairs(M.rollCards(run.rng, 4, festival.tier(run.festival) >= 4 and 2 or 1)) do
-    stock.cards[#stock.cards + 1] = { id = id, price = M.CARD_PRICE[cards.CARDS[id].rarity], sold = false }
+    local print = M.rollPrint(run.rng, id)
+    stock.cards[#stock.cards + 1] = { id = id, price = M.CARD_PRICE[cards.CARDS[id].rarity] + (print and M.PRINT_PRICE or 0), sold = false, print = print }
   end
   for _, id in ipairs(M.charmOffer(run, 2)) do
     stock.charms[#stock.charms + 1] = { id = id, price = charms.CHARMS[id].price, sold = false }
@@ -507,7 +547,7 @@ end
 
 -- Buy back a pawned cat.
 function M.buyBack(run, item)
-  M.addCard(run, item.id, item.level)
+  M.addCard(run, item.id, item.level, item.print, item.fakeBack)
   if item.def then run.deck[#run.deck].def = item.def end
   local list = run.festival.pawnshop or {}
   for i, p in ipairs(list) do if p == item.pawn then table.remove(list, i); break end end

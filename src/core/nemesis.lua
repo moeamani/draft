@@ -145,7 +145,8 @@ function M.nemesisDeck(r, n, tier)
   end
   -- Stolen Lives: the cats this Hand captured from you fight for them now
   for _, c in ipairs(n.captives or {}) do
-    deck[#deck + 1] = { uid = c.uid, id = c.id, def = c.def, level = c.level, xp = 0, captive = true, owner = c.owner }
+    deck[#deck + 1] = { uid = c.uid, id = c.id, def = c.def, level = c.level, xp = 0, captive = true, owner = c.owner,
+      print = c.print, fakeBack = c.fakeBack }
   end
   return rng.shuffle(r, deck)
 end

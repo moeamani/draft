@@ -17,7 +17,8 @@ function M.new(items, opts)
   local gap = opts.gap or 10
   local cols = opts.cols or #items
   for i, it in ipairs(items) do
-    local inst = it.uid and it or { uid = "pick" .. i .. (it.id or ""), id = it.id, level = it.level or 1, xp = 0, def = it.def }
+    local inst = it.uid and it or { uid = "pick" .. i .. (it.id or ""), id = it.id, level = it.level or 1, xp = 0, def = it.def,
+      print = it.print, fakeBack = it.fakeBack }
     local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
     local n = math.min(cols, #items - row * cols)
     local rowW = n * cw + (n - 1) * gap
@@ -111,6 +112,14 @@ function M.cardLines(def, inst, inf)
   end
   lines[#lines + 1] = { text = ab.name, color = C.cyan, gap = 0 }
   lines[#lines + 1] = { text = ab.desc, color = C.paper }
+  if inst and inst.print and cards.PRINTS[inst.print] then
+    local pr = cards.PRINTS[inst.print]
+    local extra = ""
+    if inst.print == "misprint" and inst.fakeBack then
+      extra = " (" .. (inst.fakeBack == "dark" and "a dark back" or (cards.COATS[inst.fakeBack].name .. " back")) .. ")"
+    end
+    lines[#lines + 1] = { text = pr.name .. ": " .. pr.desc .. extra, color = C.pink }
+  end
   for _, b in ipairs(cards.bondsOf(def.id)) do
     local partner = cards.CARDS[b[1]]
     lines[#lines + 1] = { text = "Bond with " .. partner.name .. ": +" .. cards.BOND_PAWS .. " each side by side", color = C.gold }
@@ -126,7 +135,7 @@ function M.cardLines(def, inst, inf)
       inst.warmth >= match.HOT and " Hot Seat: every swat knocks off an extra goblet." or (" Hot Seat at " .. match.HOT .. ".")), color = C.goldText }
   end
   if def.kind == "unit" then
-    local max = cards.maxLives(def)
+    local max = inst and cards.livesOf(inst) or cards.maxLives(def)
     if def.ability == "ninelives" then
       lines[#lines + 1] = { text = "Can't be captured.", color = C.pale }
     elseif inst and inst.captive then

@@ -53,7 +53,7 @@ end
 
 local function copyDeck(deck)
   local out = {}
-  for i, c in ipairs(deck) do out[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def } end
+  for i, c in ipairs(deck) do out[i] = { uid = c.uid, id = c.id, level = c.level, xp = c.xp, def = c.def, print = c.print, fakeBack = c.fakeBack } end
   return out
 end
 

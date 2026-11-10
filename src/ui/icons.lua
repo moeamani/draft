@@ -86,12 +86,19 @@ S.shield = {
   "kkkkkkkkk", "kxwxxxxxk", "kxwxxxxxk", "kxxxxxxxk", "kxxxxxxdk", ".kxxxxdk.", "..kxxdk..", "...kdk...", "....k...." }
 S.goblet = {
   "kkkkkkkkk", "kwwxxxxdk", "kwxxxxxdk", "kxxxxxxdk", ".kxxxxdk.", "..kxxdk..", "...kxk...", "...kxk...", "..kxxxk..", ".kxxxxdk.", ".kkkkkkk." }
+S.flame = {
+  "..k...k..", ".kxk.kxk.", ".kxxkxxk.", "kxxxxxxxk", "kxxwxwxxk", "kxwwwwwxk", "kxwwwwwxk", ".kxwwwxk.", "..kkkkk.." }
+S.drop = {
+  "....k....", "...kxk...", "...kxk...", "..kxxxk..", ".kxwxxxk.", ".kwxxxxk.", ".kxxxxdk.", "..kxxdk..", "...kkk..." }
 S.zzz = {
   "kkkkk....", "kwwwk....", "kkwkk....", ".kwk.kkkk", "kwkkkkwwk", "kwwwkkkwk", "kkkkkkwkk", ".....kwwk", ".....kkkk" }
 S.pointer = {
   "k........", "kwk......", "kwwk.....", "kwwwk....", "kwwwwk...", "kwwwwwk..", "kwwwwwwk.", "kwwwwkkkk", "kwkkwk...", "kk..kwk..", ".....kk.." }
 S.dagger = S.sword
 S.market, S.shrine, S.training = S.fish, S.star, S.shield
+
+-- The coats as shapes, so a coat reads without its colour: flame, drop, crown, moon.
+M.COAT_ICON = { ember = "flame", tide = "drop", gilt = "crown", shadow = "moon", dark = "moon" }
 
 M.ABILITY_ICON = {
   smite = "sword", inspire = "orb", hex = "moon", litter = "flower", pounce = "arrow", ninelives = "nine",

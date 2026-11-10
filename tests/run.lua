@@ -488,5 +488,56 @@ test("the Overseer sees through card backs when it answers", function()
   eq(view[1].phantom, true, "without the eye, a back is a guess")
 end)
 
+test("printings: Misprint lies about its back and hits harder; Proof has a life more; Gold Leaf pays", function()
+  local save = game.newSave("Print", 31)
+  local run = game.startRun(save)
+  local mis = game.addCard(run, "pikecat", 1, "misprint")      -- a Tide cat
+  eq(mis.print, "misprint")
+  if mis.fakeBack == "tide" or not mis.fakeBack then error("a misprint needs a wrong back, got " .. tostring(mis.fakeBack)) end
+  eq(match.backOf(mis), mis.fakeBack, "the back lies")
+  eq(cards.paws(mis), cards.CARDS.pikecat.power + cards.MISPRINT_PAWS, "+2 Paws")
+  local plain = game.addCard(run, "pikecat")
+  eq(match.backOf(plain), "tide")
+  local proof = game.addCard(run, "pikecat", 1, "proof")
+  eq(cards.livesOf(proof), cards.maxLives(cards.CARDS.pikecat) + 1, "a Proof has one more life")
+  local trick = game.addCard(run, "sunbeam", 1, "proof")
+  eq(trick.print, nil, "tricks have no printings")
+  -- printings travel into a match, and the rival's reading of a Misprint is fooled
+  local s = match.create({ name = "A", deck = { mis, proof, plain } }, { name = "B", deck = deckOf(FILLER) }, 3)
+  local seen = {}
+  for _, list in ipairs({ s.sides[1].hand, s.sides[1].deck }) do
+    for _, c in ipairs(list) do seen[c.uid] = c end
+  end
+  eq(seen[mis.uid].fakeBack, mis.fakeBack)
+  eq(seen[proof.uid].lives, cards.maxLives(cards.CARDS.pikecat) + 1)
+  s.lead = 1
+  s.sides[1].hand = { seen[mis.uid] }
+  s.sides[1].placed = { seen[mis.uid], false, false }
+  local view = match.visibleFoeForTest(s, 2, s.sides[1].placed)
+  eq(view[1].phantom, true)
+  s.sides[2].mods.allSeeing = true
+  view = match.visibleFoeForTest(s, 2, s.sides[1].placed)
+  eq(view[1].uid, mis.uid, "the Overseer's eye isn't fooled")
+  -- rolled printings are rare and never land on tricks
+  local r, n = require("src.core.rng").new(5), 0
+  for _ = 1, 2000 do if game.rollPrint(r, "pikecat") then n = n + 1 end end
+  if n < 180 or n > 340 then error("print chance off: " .. n .. " of 2000") end
+  eq(game.rollPrint(r, "sunbeam"), nil)
+  -- Gold Leaf: fish when it won a duel
+  local save2 = game.newSave("Gold", 9)
+  local run2 = game.startRun(save2)
+  run2.deck = {}
+  for _ = 1, 10 do game.addCard(run2, "artheline", 3, "gold") end
+  local ctx = game.setupMatch(save2)
+  while not ctx.state.over do match.autoplay(ctx.state, 0) end
+  local before = run2.fish
+  local out = game.resolveMatch(save2, ctx)
+  local won = 0
+  for _ in pairs(ctx.state.sides[1].scored) do won = won + 1 end
+  eq(out.goldFish, won * cards.GOLD_FISH, "gold fish")
+  if won == 0 then error("ten Arthelines never won a duel?") end
+  if run2.fish < before + out.goldFish then error("gold fish not paid") end
+end)
+
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)
