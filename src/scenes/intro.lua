@@ -15,12 +15,25 @@ S.bg = { preset = "menu", flow = 0 }
 -- the teaser's timing, in seconds (the chime that brings the logo in lands at about 8.5)
 local GROW_FROM, WHITE_AT, LOGO_AT, TAG_AT, END_AT = 0.6, 5.4, 8.3, 9.9, 11.6
 
--- the lens rings from the orb outwards: where (in orb radii) and what colour
-local RINGS = {
-  { 2.6, theme.hex("#ff8a3a"), 0.10 }, { 2.25, theme.hex("#ff5a6e"), 0.14 }, { 1.95, theme.hex("#e040c8"), 0.18 },
-  { 1.7, theme.hex("#7a3ff0"), 0.22 }, { 1.48, theme.hex("#1f3fd0"), 0.3 }, { 1.3, theme.hex("#1f66e8"), 0.38 },
-  { 1.16, theme.hex("#52e3f6"), 0.5 }, { 1.07, theme.hex("#b8f7ff"), 0.7 }, { 1.0, theme.hex("#ffffff"), 1.0 },
+-- The lens rings from the orb outwards: colour stops (radius in orb radii, colour), blended
+-- into many thin translucent discs so the glow falls off smoothly.
+local STOPS = {
+  { 3.0, theme.hex("#ff8a3a") }, { 2.5, theme.hex("#ff5a6e") }, { 2.1, theme.hex("#e040c8") }, { 1.75, theme.hex("#7a3ff0") },
+  { 1.48, theme.hex("#1f3fd0") }, { 1.28, theme.hex("#1f66e8") }, { 1.14, theme.hex("#52e3f6") }, { 1.05, theme.hex("#c8f9ff") },
 }
+local RINGS = {}
+do
+  local N = 30
+  for i = 0, N - 1 do
+    local u = i / (N - 1)                       -- 0 outermost .. 1 at the orb's edge
+    local f = u * (#STOPS - 1)
+    local k = math.min(#STOPS - 1, math.floor(f)) + 1
+    local a, b = STOPS[k], STOPS[math.min(#STOPS, k + 1)]
+    local t = f - (k - 1)
+    RINGS[#RINGS + 1] = { a[1] + (b[1] - a[1]) * t, theme.mix(a[2], b[2], t), 0.07 + 0.3 * u * u }
+  end
+  RINGS[#RINGS + 1] = { 1.0, theme.hex("#ffffff"), 1.0 }
+end
 
 local fonts = {}
 local function bigFont(size)

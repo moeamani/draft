@@ -147,10 +147,11 @@ local function drawStamp()
   if not s then return end
   local level = s.kind == "level"
   local ink = level and C.stampBlue or C.stamp
-  local w = 196
+  local w = 226
   local small = theme.T.small()
-  local dh = gfx.wrapHeight(s.desc or "", small, w - 50)
-  local h = math.max(46, 30 + dh + 5)
+  local tx = 64 -- where the text starts, right of the Overseer's eyes
+  local dh = gfx.wrapHeight(s.desc or "", small, w - tx - 6)
+  local h = math.max(56, 36 + dh + 5)
   local enter = math.min(1, s.age / 0.22)
   local leave = s.age > s.life - 0.3 and (s.life - s.age) / 0.3 or 1
   local slide = math.floor((1 - outBack(enter)) * (w + 20) + (1 - leave) * (w + 20))
@@ -162,19 +163,19 @@ local function drawStamp()
   theme.set(C.cream2)
   for ry = y + 12, y + h - 4, 9 do lg.rectangle("fill", x + 4, ry, w - 8, 1) end
   -- the Overseer, who keeps the ledger, looks up from the corner
-  require("src.ui.overseer").face(x + 3, y + 3, 34, h - 6, M.time)
-  gfx.text(level and "THE OVERSEER IS AMUSED" or "THE OVERSEER NOTES", theme.T.label(), x + 42, y + 3, C.inkMuted, { bg = C.cream })
-  gfx.textf(s.desc or "", small, x + 42, y + 27, w - 48, "left", C.inkText, { bg = C.cream })
+  require("src.ui.overseer").face(x + 3, y + 3, 56, h - 6, M.time)
+  gfx.text(level and "THE OVERSEER IS AMUSED" or "THE OVERSEER NOTES", theme.T.label(), x + tx, y + 3, C.inkMuted, { bg = C.cream })
+  gfx.textf(s.desc or "", small, x + tx, y + 36, w - tx - 6, "left", C.inkText, { bg = C.cream })
   -- the stamp: slams down a moment after the slip arrives
   if s.age >= 0.3 then
     local k = math.min(1, (s.age - 0.3) / 0.09)
     local scale = 1.9 - 0.9 * k
     local font = theme.T.big()
     local name = s.title:upper()
-    if font:getWidth(name) > w - 58 then font = theme.T.bold() end
+    if font:getWidth(name) > w - tx - 22 then font = theme.T.bold() end
     local tw = math.ceil(font:getWidth(name)) + 12
     lg.push()
-    lg.translate(x + 42 + tw / 2, y + 19)
+    lg.translate(x + tx + 2 + tw / 2, y + 23)
     lg.rotate(-0.05)
     lg.scale(scale, scale)
     theme.set(ink, 0.9 * k)

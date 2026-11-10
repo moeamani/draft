@@ -16,10 +16,10 @@ local M = {}
 local hex = theme.hex
 
 M.PAPER = {
-  felt = { dark = hex("#0a2016"), mid = hex("#174a30"), dot = hex("#27663f") },
-  blood = { dark = hex("#1c0908"), mid = hex("#4a1611"), dot = hex("#742419") },
+  felt = { dark = hex("#0b2218"), mid = hex("#123a28"), dot = hex("#1a4d35") },
+  blood = { dark = hex("#1e0a09"), mid = hex("#3a1210"), dot = hex("#571a15") },
 }
-M.TABLE = { base = hex("#c9a43a"), dark = hex("#96741f"), light = hex("#edd277"), edge = hex("#5e4410") }
+M.TABLE = { base = hex("#c9a43a"), dark = hex("#b08a29"), light = hex("#dcbd58"), edge = hex("#5e4410") }
 M.CELL = 6 -- the screen's period along its diagonals; dots are about 4 pixels apart
 
 local function smooth(a, b, x)

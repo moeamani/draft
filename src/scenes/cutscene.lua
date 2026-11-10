@@ -101,7 +101,7 @@ function S:draw()
   local p = portraitFor(l.who, info, rank)
   if l.who == "overseer" then
     local rise = math.max(0, 1 - self.lt * 3)
-    overseer.draw(320, 262 + math.floor(rise * 40), 460, t)
+    overseer.draw(320, 304 + math.floor(rise * 40), 640, t)
   elseif p then
     local rise = math.max(0, 1 - self.lt * 5)
     local bob = math.floor(math.sin(t * 1.6) * 1.5 + 0.5)

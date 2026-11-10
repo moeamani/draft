@@ -700,7 +700,7 @@ function S:drawRival()
   if self.ctx.boss then
     -- the Overseer looms over its own table
     lg.setScissor(G.scissor(0, 0, theme.W, HORIZON + 2))
-    overseer.draw(320, HORIZON + 4, 250, self.t)
+    overseer.draw(320, HORIZON + 4, 320, self.t)
     lg.setScissor()
     lg.setColor(1, 1, 1)
     lg.draw(cardview.pile(), RDECK_X - 14, RDECK_Y - 18)

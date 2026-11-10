@@ -238,8 +238,8 @@ function love.load(args)
   -- the Overseer's flickering frames (tools/art/bake_overseer.py)
   G.images.overseer = {}
   for i = 0, 3 do
-    local img = platform.image("assets/img/overseer-" .. i .. ".png", true)
-    img:setFilter("linear", "linear")
+    local img = platform.image("assets/img/overseer-" .. i .. ".png")
+    img:setFilter("nearest", "nearest")
     G.images.overseer[#G.images.overseer + 1] = img
   end
   if platform.console then input.mode = "pad" end

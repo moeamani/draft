@@ -66,8 +66,8 @@ vec4 effect(vec4 color, Image tex, vec2 uv0, vec2 sc) {
       hit = 1.0;
       float depth = (uv.y - horizon) * V.y;
       if (depth < 2.0 || abs(u) > 1.0 - 2.0 / (halfw * V.x)) col = vec3(0.369, 0.267, 0.063);
-      else if (dotAt(vp, L * 0.42, 3.0) > 0.5) col = vec3(0.929, 0.824, 0.467);
-      else if (dotAt(vp, (1.0 - L) * 0.5 + (1.0 - t) * 0.2, 0.0) > 0.5) col = vec3(0.588, 0.455, 0.122);
+      else if (dotAt(vp, L * 0.42, 3.0) > 0.5) col = vec3(0.863, 0.741, 0.345);
+      else if (dotAt(vp, (1.0 - L) * 0.5 + (1.0 - t) * 0.2, 0.0) > 0.5) col = vec3(0.690, 0.541, 0.161);
       else col = vec3(0.788, 0.643, 0.227);
     }
   }

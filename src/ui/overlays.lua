@@ -352,7 +352,7 @@ function M.renown(tab)
     local p = G.profile
     M.frame(8, 8, theme.W - 16, theme.H - 16, "The Overseer's Ledger", C.night)
     -- the Overseer, who keeps it, looks over the page
-    require("src.ui.overseer").draw(548, 104, 150, self.t)
+    require("src.ui.overseer").face(470, 40, 150, 62, self.t)
     for i, name in ipairs({ "Feats", "Crests" }) do
       if widgets.button("rn_t" .. i, 296 + (i - 1) * 72, 11, 68, 18, name, { color = self.tab == i and C.red or C.ink3 }) then self.tab = i end
     end

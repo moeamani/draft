@@ -40,7 +40,7 @@ function S:draw()
     plates.draw(self.logo, 320 - self.logo:getWidth() / 2, 8)
   else
     -- the Overseer watches you leave
-    require("src.ui.overseer").draw(320, 372, 520, self.t, 0.75)
+    require("src.ui.overseer").draw(320, 372, 640, self.t, 0.8)
   end
   local ty = self.victory and 136 or 40
   local placing = festival.PLACING_NAMES[f.placing or "group"]
