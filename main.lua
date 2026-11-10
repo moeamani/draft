@@ -35,7 +35,7 @@ local SAVE_FILES = { story = "story.lua", free = "festival.lua" }
 local PROFILE_FILE = "renown.lua"
 G.SAVE_VERSION = 3
 
-G.SCENE_LIST = { "menu", "story", "cutscene", "hub", "vs", "match", "result", "market", "event", "summary" }
+G.SCENE_LIST = { "intro", "menu", "credits", "story", "cutscene", "hub", "vs", "match", "result", "market", "event", "summary" }
 
 -- ---------------------------------------------------------------- saves
 
@@ -200,16 +200,21 @@ end
 
 -- ---------------------------------------------------------------- scenes
 
--- Scene switch with a clean stepped wipe.
+-- A scene names its music (S.music: "menu", "table", "high", or a function returning one).
+local function enter(name, params)
+  G.overlay = nil
+  G.sceneName = name
+  G.scene = G.scenes[name]
+  fx.reset()
+  if G.scene.enter then G.scene:enter(params or {}) end
+  local m = G.scene.music
+  if type(m) == "function" then m = m(G.scene) end
+  if m then audio.music(m) end
+end
+
+-- Scene switch through the iris.
 function G.go(name, params, instant)
-  if instant or not G.scene then
-    G.overlay = nil
-    G.sceneName = name
-    G.scene = G.scenes[name]
-    fx.reset()
-    if G.scene.enter then G.scene:enter(params or {}) end
-    return
-  end
+  if instant or not G.scene then return enter(name, params) end
   if G.trans then return end
   audio.play("whoosh", 1, 0.6)
   G.trans = { t = 0, phase = "in", name = name, params = params }
@@ -257,14 +262,17 @@ function love.load(args)
   for _, n in ipairs(G.SCENE_LIST) do G.scenes[n] = require("src.scenes." .. n) end
   G.saves.story, G.saves.free = loadSave("story"), loadSave("free")
   G.profile = loadProfile()
-  G.go("menu", {}, true)
-  audio.music("menu")
+  -- the teaser plays first, unless a walkthrough or --skip-intro asks for the menu
+  local first = "intro"
   for i, a in ipairs(args or {}) do
+    if a == "--skip-intro" then first = "menu" end
     if a == "--autotest" then
+      first = "menu"
       G.autotest = require("src.autotest")
       G.autotest.start(args[i + 1])
     end
   end
+  G.go(first, {}, true)
 end
 
 -- ---------------------------------------------------------------- the safety net
@@ -317,20 +325,16 @@ function update(dt)
   if G.trans then
     widgets.top = "none"
     local tr = G.trans
-    tr.t = tr.t + dt * 3
+    tr.t = tr.t + dt * (tr.phase == "in" and 4.2 or 3.2)
     if tr.phase == "in" and tr.t >= 1 then
-      G.overlay = nil
-      G.sceneName = tr.name
-      G.scene = G.scenes[tr.name]
-      fx.reset()
-      if G.scene.enter then G.scene:enter(tr.params or {}) end
+      enter(tr.name, tr.params)
       tr.phase, tr.t = "out", 0
     elseif tr.phase == "out" and tr.t >= 1 then
       G.trans = nil
     end
   end
   -- hit-stop: a big moment (a capture, a crushing win) freezes the table for a beat
-  local sdt = dt
+  local sdt = dt * (G.settings.speed or 1)
   if (G.hitstop or 0) > 0 then
     G.hitstop = G.hitstop - dt
     sdt = dt * 0.06
@@ -352,43 +356,61 @@ local stageImages = {}
 
 -- Every scene sits on one of the backdrop presets in src/ui/bakes.lua ("menu", "vs", "match"),
 -- in ink green or blood red: the only dithered surface in the game. It fills the whole window.
+function G.paperShader() return shaders.paper end
+
 local function drawBackground(cw, ch)
   local bg = (G.scene and G.scene.bg) or {}
   local rampName = bakes.RAMPS[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
-  local ramp = bakes.RAMPS[rampName]
-  -- the print backdrop: grain, a halftone light, a table for matches; baked per window shape
-  local img = printer.image(bg, G.VW, G.VH, G.OX, G.OY)
-  if img then
-    lg.setColor(1, 1, 1)
-    lg.draw(img, 0, 0, 0, view.k / printer.SCALE, view.k / printer.SCALE)
-    return
-  end
-  -- no ImageData on this platform: the pre-baked PNGs
+  -- the living halftone (or its still bake where there are no shaders)
+  local ok = printer.draw(bg, cw, ch, {
+    shader = shaders.paper, k = view.k, ox = G.OX, oy = G.OY, vw = G.VW, vh = G.VH,
+    time = G.time % 3600, flow = (G.settings.shake == false) and 0 or (bg.flow or 1), pulse = fx.pulseUniform(),
+  })
+  if ok then return end
+  -- no shaders and no ImageData on this platform: the pre-baked PNGs
   local file = bakes.stageFile(bg.preset or "menu", rampName)
   if stageImages[file] == nil then
-    local ok, im = pcall(lg.newImage, file)
-    stageImages[file] = ok and im or false
-    if ok then im:setFilter("nearest", "nearest") end
+    local good, im = pcall(lg.newImage, file)
+    stageImages[file] = good and im or false
+    if good then im:setFilter("nearest", "nearest") end
   end
   local im = stageImages[file]
   if im then
     lg.setColor(1, 1, 1)
     lg.draw(im, 0, 0, 0, cw / im:getWidth(), ch / im:getHeight())
   else
-    theme.set(hex(ramp.baseA))
+    theme.set(hex(bakes.RAMPS[rampName].baseA))
     lg.rectangle("fill", 0, 0, cw, ch)
   end
 end
 
--- A stepped wipe: columns of ink drop in, staggered left to right.
-local function drawWipe(p, cw, ch)
-  local cols = 16
-  local colW = math.ceil(cw / cols)
-  theme.set(theme.c.deep)
-  for c = 0, cols - 1 do
-    local pc = math.max(0, math.min(1, p * 1.6 - c / cols * 0.6))
-    local h = math.floor(pc * ch / view.k + 0.5) * view.k
-    lg.rectangle("fill", c * colW, 0, colW, h)
+-- Scene changes close and open an iris, like the teaser's orb: ink outside, and a thin fringe
+-- of cyan, white and pink on its edge. p: 0 open .. 1 closed. Drawn in canvas pixels.
+local function drawIris(p, cw, ch)
+  if p <= 0 then return end
+  local cx, cy = cw / 2, ch / 2
+  local far = math.sqrt(cx * cx + cy * cy) + 4
+  local r = far * (1 - p) ^ 1.6
+  local band = 2 * view.k
+  local N = 36
+  local function ring(r0, r1, col, a)
+    if r1 <= r0 then return end
+    theme.set(col, a)
+    for i = 0, N - 1 do
+      local a0, a1 = i / N * 2 * math.pi, (i + 1) / N * 2 * math.pi
+      local c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
+      lg.polygon("fill", cx + c0 * r0, cy + s0 * r0, cx + c1 * r0, cy + s1 * r0, cx + c1 * r1, cy + s1 * r1, cx + c0 * r1, cy + s0 * r1)
+    end
+  end
+  if r > band then
+    ring(math.max(0, r - band), r, theme.c.cyan, 0.85)
+    ring(r, r + band, theme.c.white, 0.95)
+    ring(r + band, r + 2 * band, theme.c.pink, 0.85)
+  end
+  ring(r + (r > band and 2 * band or 0), far + 3 * band, theme.c.black, 1)
+  if r <= band then
+    theme.set(theme.c.black)
+    lg.rectangle("fill", 0, 0, cw, ch)
   end
 end
 
@@ -416,7 +438,7 @@ function draw()
   input.draw()
   lg.pop()
   if G.trans then
-    drawWipe(math.min(1, G.trans.phase == "in" and G.trans.t or (1 - G.trans.t)), cw, ch)
+    drawIris(math.min(1, G.trans.phase == "in" and G.trans.t or (1 - G.trans.t)), cw, ch)
   end
   lg.setCanvas()
   lg.clear(0, 0, 0)
@@ -430,6 +452,7 @@ function draw()
     crt:send("time", G.time % 1000)
     crt:send("curve", CRT_CURVE)
     crt:send("amount", 1)
+    crt:send("punch", (G.settings.shake == false) and 0 or fx.punchAmount())
     lg.setShader(crt)
   end
   lg.draw(canvas, 0, 0, 0, view.s / view.k / view.dpi)

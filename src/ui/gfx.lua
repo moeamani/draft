@@ -1,14 +1,16 @@
--- Drawing helpers. Shapes are drawn in virtual pixels on integer coordinates; text is drawn with
--- fonts rasterised at the real screen resolution (theme.K canvas pixels per virtual pixel), so it
--- stays sharp. Every text colour goes through theme.readable() against the ground it sits on.
+-- Drawing helpers. Shapes are drawn in virtual pixels on whole coordinates; text is drawn with
+-- fonts rasterised at the real screen resolution (theme.K canvas pixels per virtual pixel) or, in
+-- pixel-text mode, on the art's own grid. Every text colour goes through theme.readable()
+-- against the ground it sits on.
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
 local M = {}
 local C = theme.c
 local floor = math.floor
+local plates -- required lazily (plates draws labels with gfx)
 
--- Filled box with 1px notched corners.
+-- A small filled box with one-pixel notched corners (badges, swatches, frames).
 function M.box(x, y, w, h, col, a)
   x, y, w, h = floor(x), floor(y), floor(w), floor(h)
   theme.set(col, a)
@@ -17,24 +19,52 @@ function M.box(x, y, w, h, col, a)
   lg.rectangle("fill", x + w - 1, y + 1, 1, h - 2)
 end
 
--- The one panel style: a flat plate with an edge a shade darker than itself and a drop shadow.
--- opts.accent (or opts.border) adds a 2px coloured strip along the top.
+-- A plate drawn in place (see plates.plate for opts).
+function M.plate(x, y, w, h, col, opts, alpha)
+  plates = plates or require("src.ui.plates")
+  plates.draw(plates.plate(w, h, col, opts), x, y, alpha)
+end
+
+-- The one panel: a plate with a hard two-pixel shadow.
+-- opts: alpha, shadow (false for none), accent (a two-pixel strip of colour along the top),
+--       outline (overrides the edge colour)
 function M.panel(x, y, w, h, col, opts)
   opts = opts or {}
+  plates = plates or require("src.ui.plates")
+  col = col or C.ink
   local a = opts.alpha or 1
   x, y, w, h = floor(x), floor(y), floor(w), floor(h)
   if opts.shadow ~= false then
-    theme.set(C.black, 0.45 * a)
-    lg.rectangle("fill", x + 1, y + 2, w, h)
+    theme.set(C.black, 0.4 * a)
+    plates.rounded(x, y + 2, w, h, 2)
   end
-  local plates = require("src.ui.plates")
-  local edge = opts.outline
-  if edge == nil then edge = theme.shade(col, -0.5) end
-  plates.draw(plates.plate(w, h, col, { outline = edge, bevel = false }), x, y, a)
+  plates.draw(plates.plate(w, h, col, { outline = opts.outline }), x, y, a)
   local accent = opts.accent or opts.border
   if accent then
     theme.set(accent, a)
-    lg.rectangle("fill", x + 1, y + 1, w - 2, 2)
+    lg.rectangle("fill", x + 2, y + 1, w - 4, 2)
+  end
+end
+
+-- A one-pixel rule.
+function M.rule(x, y, w, col, a)
+  theme.set(col or C.ink3, a)
+  lg.rectangle("fill", floor(x), floor(y), floor(w), 1)
+end
+
+-- A progress bar: a dark well and a fill with a lighter top row. frac is 0..1.
+function M.meter(x, y, w, h, frac, col, back)
+  x, y, w, h = floor(x), floor(y), floor(w), floor(h)
+  theme.set(C.black)
+  lg.rectangle("fill", x, y, w, h)
+  theme.set(back or C.ink2)
+  lg.rectangle("fill", x + 1, y + 1, w - 2, h - 2)
+  local fw = floor((w - 2) * math.max(0, math.min(1, frac)) + 0.5)
+  if fw > 0 then
+    theme.set(col or C.gold)
+    lg.rectangle("fill", x + 1, y + 1, fw, h - 2)
+    theme.set(C.white, 0.3)
+    lg.rectangle("fill", x + 1, y + 1, fw, 1)
   end
 end
 
@@ -157,6 +187,14 @@ function M.wrapHeight(str, font, w)
   return #lines * font:getHeight()
 end
 
+-- Shorten str with "..." until it fits in w.
+function M.fitText(str, font, w)
+  str = tostring(str)
+  if font:getWidth(str) <= w then return str end
+  while #str > 1 and font:getWidth(str .. "...") > w do str = str:sub(1, -2) end
+  return str .. "..."
+end
+
 -- Title text with per-letter bobbing.
 function M.wavy(str, font, cx, y, col, t, amp, opts)
   opts = opts or {}
@@ -177,20 +215,23 @@ end
 function M.label(str, x, y, col, align, opts)
   opts = opts or {}
   opts.align = align
-  return M.text(str:upper(), theme.T.label(), x, y, col or C.pale, opts)
+  return M.text(str:upper(), theme.T.label(), x, y, col or C.muted, opts)
 end
 
+-- A chip: a small rounded tag. kind: "strength" (red), "weakness" (green), "gold", "info" (blue)
+-- or nothing (ink).
 M.CHIP_H = 13
 function M.chip(str, x, y, kind)
+  plates = plates or require("src.ui.plates")
   local font = theme.T.small()
   local w = math.ceil(font:getWidth(str)) + 8
   local bg
   if kind == "strength" then bg = C.redDark
   elseif kind == "weakness" then bg = theme.hex("#1f6b45")
   elseif kind == "gold" then bg = C.goldDark
+  elseif kind == "info" then bg = C.blueDark
   else bg = C.ink2 end
-  M.box(x, y, w, M.CHIP_H, C.black)
-  M.box(x + 1, y + 1, w - 2, M.CHIP_H - 2, bg)
+  plates.draw(plates.plate(w, M.CHIP_H, bg, { radius = 1, hi = false }), x, y)
   M.text(str, font, x + 4, y + 1.5, C.paper, { bg = bg })
   return w
 end

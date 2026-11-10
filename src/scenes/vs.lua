@@ -35,7 +35,7 @@ function S:enter()
   end
   self.me = art.player(save.playerName, 48)
   self.them = art.entrant(save, self.opp, 160, true)
-  self.smear = plates.smearImage(self.them, 160, self.n and 1.0 or 0.43)
+  self.smear = nil
   self.slammed = false
   self.shown = 0
   audio.play("whoosh")

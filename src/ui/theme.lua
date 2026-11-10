@@ -1,10 +1,11 @@
--- One palette, two type families, one virtual resolution.
+-- The design system's tokens: one palette, one type scale, one virtual resolution.
 --
--- Art is pixel art on a 640x360 virtual grid. Text is not: fonts are rasterised at the screen's
--- real resolution (see main.lua), so it stays sharp at any window size and on Retina displays.
--- Titles use Ancizar Serif (the Figma font); everything you read uses Atkinson Hyperlegible,
--- a typeface designed for low-vision readability. Every text colour is checked against its
--- background for WCAG AA contrast (4.5:1) before it is drawn.
+-- Draft looks like a deck printed on the Overseer's press and seen through a CRT: dark ink-green
+-- paper, halftone light, a mustard table, flat red and blue plates, cream card stock. Art is
+-- pixel art on a 640x360 virtual grid and never scaled by fractions. Text is not pixel art by
+-- default: fonts are rasterised at the screen's real resolution (see main.lua). Headings use
+-- Ancizar Serif (the logo's family); everything else uses Atkinson Hyperlegible. Every text
+-- colour is checked against its ground for WCAG AA contrast (4.5:1) before it is drawn.
 local M = {}
 
 local function hex(h, a)
@@ -13,18 +14,37 @@ end
 M.hex = hex
 
 M.c = {
-  -- grounds (dark ink greens) and plates
-  deep = hex("#08140f"), ink = hex("#0e2119"), ink2 = hex("#16352a"), ink3 = hex("#24503c"), ink4 = hex("#2f6a4f"),
-  night = hex("#020403"), black = hex("#050807"),
-  -- plate colours: each passes 4.5:1 with white text (gold takes black text)
-  red = hex("#b8352a"), redDark = hex("#7e2018"), blue = hex("#1f5fd0"), blueDark = hex("#143f8c"),
+  -- grounds: the ink greens, darkest first. Panels are `ink`, wells and rows `ink2`,
+  -- secondary buttons `ink3`, borders and highlights `ink4`.
+  deep = hex("#07130d"), ink = hex("#0c1d15"), ink2 = hex("#143225"), ink3 = hex("#1f4a36"), ink4 = hex("#2e6b4d"),
+  night = hex("#030605"), black = hex("#050807"),
+  -- plates: each passes 4.5:1 with white text (gold takes black text)
+  red = hex("#c7392c"), redDark = hex("#7e2018"), blue = hex("#1f66e8"), blueDark = hex("#143f8c"),
   gold = hex("#d3a200"), goldDark = hex("#7a5e00"), slate = hex("#3b4a5e"),
-  -- text colours: each passes 4.5:1 on every dark ground, ink3 included
+  -- text: each passes 4.5:1 on every ground above
   paper = hex("#f4f1e8"), white = hex("#ffffff"), paper2 = hex("#e2dccb"), muted = hex("#b8cbc0"),
   goldText = hex("#f2c84b"), redText = hex("#ffa094"), blueText = hex("#8cb8ff"), cyan = hex("#6fefff"),
   green = hex("#7ee0a4"), pale = hex("#b4c8ec"), steel = hex("#b4bfcd"),
+  -- card stock and the ledger's pages: dark ink on cream
+  cream = hex("#efe6cc"), cream2 = hex("#ddd1ae"), cream3 = hex("#bfae84"), inkText = hex("#2b2118"),
+  inkMuted = hex("#5c4c38"), stamp = hex("#b3261a"), stampBlue = hex("#1d4fb0"),
+  -- the print's highlights (the Overseer's fire, the teaser's fringe)
+  pink = hex("#ff9fb4"), flame = hex("#ff6a2a"),
 }
 local C = M.c
+
+-- What each colour is for. Scenes ask for roles, so a button is the same red everywhere.
+M.role = {
+  primary = C.red,        -- the one action that moves the game on
+  secondary = C.ink3,     -- every other button
+  info = C.blue,          -- your side, information
+  reward = C.goldDark,    -- Renown, fish, prizes
+  danger = C.redDark,     -- destructive choices
+  panel = C.ink, well = C.ink2,
+}
+
+-- The coats, as plate colours (see cards.COATS for the rules).
+M.COAT = { ember = C.red, tide = C.blue, gilt = C.gold, shadow = C.slate, none = C.ink3 }
 
 -- Cushion upholstery: colour and badge icon (the rules are in match.CUSHION_KINDS).
 M.CUSHION = {
@@ -32,6 +52,9 @@ M.CUSHION = {
   thistle = { col = hex("#3f7a3a"), icon = "leaf" },
   silk = { col = hex("#b9a878"), icon = "diamond" },
 }
+
+-- Spacing: everything sits on a 4px grid; panels pad 8, the screen's gutter is 8.
+M.PAD, M.GUTTER = 8, 8
 
 -- virtual pixel resolution of the safe area (the window can show more around it)
 M.W, M.H = 640, 360
@@ -231,14 +254,34 @@ function M.setTextStyle(style)
   end
 end
 
--- Type scale, in virtual pixels (a body line is 20px tall at 720p, 30px at 1080p).
+-- The type scale, in virtual pixels. Nothing else is allowed: sizes asked for in between snap to
+-- the nearest step, so every screen shares the same six sizes of each family.
+local SERIF_STEPS = { 12, 14, 16, 20, 24, 30 }
+local SANS_STEPS = { 5.5, 7.5, 8.5, 10, 12, 13, 18, 22, 27 }
+local function snapTo(steps, size)
+  local best, bd = steps[1], math.huge
+  for _, v in ipairs(steps) do
+    local d = math.abs(v - size)
+    if d < bd then best, bd = v, d end
+  end
+  return best
+end
+local rawFont = M.font
+function M.font(style, size)
+  local serif = style == "serif" or style == "serifItalic"
+  return rawFont(style, snapTo(serif and SERIF_STEPS or SANS_STEPS, size))
+end
+
 M.T = {
-  label = function() return M.font("bold", 7.5) end, -- short capital labels
-  small = function() return M.font("body", 8.5) end, -- names on cards, chips
-  body = function() return M.font("body", 10) end, -- anything you need to read
-  bold = function() return M.font("bold", 10) end,
-  big = function() return M.font("bold", 13) end, -- numbers, plaque names
-  huge = function() return M.font("bold", 18) end, -- headline numbers
+  label = function() return M.font("bold", 7.5) end,   -- short capital labels
+  small = function() return M.font("body", 8.5) end,   -- secondary lines, names on cards
+  body = function() return M.font("body", 10) end,     -- anything you read
+  bold = function() return M.font("bold", 10) end,     -- buttons, emphasis
+  big = function() return M.font("bold", 13) end,      -- numbers, large buttons
+  huge = function() return M.font("bold", 18) end,     -- headline numbers
+  heading = function() return M.font("serif", 14) end, -- names, panel titles
+  title = function() return M.font("serif", 20) end,   -- screen titles
+  display = function() return M.font("serif", 30) end, -- banners
 }
 function M.serif(size, italic) return M.font(italic and "serifItalic" or "serif", size) end
 

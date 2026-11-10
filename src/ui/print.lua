@@ -1,21 +1,26 @@
--- Print backdrops, after the Overseer's poster: dark green (or blood red) paper with film grain,
--- one pool of light screened in halftone dots, darker corners, and for matches a mustard table
--- in perspective, screened the same way. Baked once per backdrop, colour ramp and window shape,
--- at twice the virtual resolution so the dots and grain stay fine, then drawn smoothly scaled.
--- No shader needed, so the Switch gets the same backdrops.
+-- The backdrop: a halftone print on the art's own pixel grid.
+--
+-- Dark ink-green paper (blood red for the Hands and the Overseer), one pool of light screened in
+-- halftone dots, darker corners, film grain, and for matches a mustard table in perspective,
+-- screened the same way. The dots sit on a 45 degree lattice of virtual pixels and never move:
+-- only their size changes, so the light can drift slowly and swell where something hits the
+-- table without the print ever shimmering.
+--
+-- With shaders it is drawn live (shaders.paper). Without them (LÖVE Potion) the same picture is
+-- baked once per backdrop and window shape from the same maths in Lua, and stands still.
 local bakes = require("src.ui.bakes")
 local theme = require("src.ui.theme")
 local lg = love.graphics
 
 local M = {}
 local hex = theme.hex
-M.SCALE = 2 -- baked pixels per virtual pixel
 
-local PAPER = {
-  felt = { dark = hex("#0c2417"), mid = hex("#1b4a2f"), dot = hex("#2c6a45") },
-  blood = { dark = hex("#1f0a08"), mid = hex("#471611"), dot = hex("#6e231a") },
+M.PAPER = {
+  felt = { dark = hex("#0a2016"), mid = hex("#174a30"), dot = hex("#27663f") },
+  blood = { dark = hex("#1c0908"), mid = hex("#4a1611"), dot = hex("#742419") },
 }
-local TABLE = { base = hex("#c9a43a"), dark = hex("#8c6b1c"), light = hex("#f2d877"), edge = hex("#5e4410") }
+M.TABLE = { base = hex("#c9a43a"), dark = hex("#96741f"), light = hex("#edd277"), edge = hex("#5e4410") }
+M.CELL = 6 -- the screen's period along its diagonals; dots are about 4 pixels apart
 
 local function smooth(a, b, x)
   local t = math.max(0, math.min(1, (x - a) / (b - a)))
@@ -27,81 +32,64 @@ local function hash(x, y)
   return n - math.floor(n)
 end
 
--- Is (x, y) inside a halftone dot of the given amount (0..1)? cell in baked pixels.
-local cos45, sin45 = math.cos(math.rad(45)), math.sin(math.rad(45))
-local cos15, sin15 = math.cos(math.rad(15)), math.sin(math.rad(15))
-local function dot(x, y, amount, cell, c, s)
+-- Is virtual pixel (x, y) inside a dot of this amount (0..1)? phase shifts the lattice.
+local function dot(x, y, amount, phase)
   if amount <= 0 then return false end
-  local u = (x * c + y * s) / cell
-  local v = (-x * s + y * c) / cell
-  local du, dv = u - math.floor(u + 0.5), v - math.floor(v + 0.5)
-  local r = math.sqrt(math.min(1, amount)) * 0.62
-  return du * du + dv * dv < r * r
+  local P = M.CELL
+  local u, v = (x + y + phase) % P - P / 2, (x - y) % P - P / 2
+  local r = 0.72 * P * math.sqrt(math.min(1, amount))
+  return u * u + v * v < r * r
 end
 
-local function mixc(a, b, t) return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t end
-
--- The colour of one baked pixel. Returns r, g, b, a.
-local function painter(preset, rampName, ox, oy, layer)
-  local P = PAPER[rampName] or PAPER.felt
+-- The colour of one virtual pixel at time 0 (the shader's maths, in Lua). layer "table" paints
+-- only the table and leaves the rest clear.
+local function painter(preset, rampName, layer)
+  local P = M.PAPER[rampName] or M.PAPER.felt
+  local T = M.TABLE
   local light, radius, power = preset.light, preset.radius, preset.power
   local horizon = preset.horizon or 0
-  local S = M.SCALE
-  return function(bx, by)
-    local vx, vy = bx / S - ox, by / S - oy
-    local ux, uy = vx / 640, vy / 360
+  return function(vx, vy)
+    local ux, uy = (vx + 0.5) / 640, (vy + 0.5) / 360
     local dx, dy = (ux - light[1]) * (640 / 360), uy - light[2]
     local L = math.max(0, math.min(1, power * (1 - smooth(0, radius, math.sqrt(dx * dx + dy * dy)))))
     local ex = math.min(ux, 1 - ux) * 640 / 360
     local vig = smooth(-0.2, 0.25, math.min(ex, math.min(uy, 1 - uy)))
-    local grain = (hash(bx, by) - 0.5) * 0.07
-    local r, g, b, a
-    local onTable = false
+    local grain = (hash(vx, vy) - 0.5) * 0.03
+    local c
     if horizon > 0 and uy >= horizon then
       local t = (uy - horizon) / (1 - horizon)
       local halfw = 0.36 + (0.8 - 0.36) * t
       local u = (ux - 0.5) / halfw
       if math.abs(u) <= 1 then
-        onTable = true
         local depth = (uy - horizon) * 360
-        local edge = depth < 2 or math.abs(u) > 1 - 2 / (halfw * 640)
-        if edge then
-          r, g, b = TABLE.edge[1], TABLE.edge[2], TABLE.edge[3]
-        else
-          r, g, b = TABLE.base[1], TABLE.base[2], TABLE.base[3]
-          local shade = (1 - L) * 0.55 + (1 - t) * 0.25
-          if dot(bx, by, shade, 3, cos45, sin45) then r, g, b = TABLE.dark[1], TABLE.dark[2], TABLE.dark[3] end
-          if dot(bx + 1, by, L * 0.45, 3, cos15, sin15) then r, g, b = TABLE.light[1], TABLE.light[2], TABLE.light[3] end
-        end
+        if depth < 2 or math.abs(u) > 1 - 2 / (halfw * 640) then c = T.edge
+        elseif dot(vx, vy, L * 0.42, 3) then c = T.light
+        elseif dot(vx, vy, (1 - L) * 0.5 + (1 - t) * 0.2, 0) then c = T.dark
+        else c = T.base end
       end
     end
-    if not onTable then
+    if not c then
       if layer == "table" then return 0, 0, 0, 0 end
-      local t = math.max(0, math.min(1, 0.25 + 0.75 * L * vig))
-      r, g, b = mixc(P.dark, P.mid, t)
-      if dot(bx, by, L * vig * 0.5, 3, cos45, sin45) then r, g, b = P.dot[1], P.dot[2], P.dot[3] end
-      if vig < 1 then r, g, b = r * (0.55 + 0.45 * vig), g * (0.55 + 0.45 * vig), b * (0.55 + 0.45 * vig) end
+      local tone = L * vig
+      if dot(vx, vy, smooth(0.55, 1.25, tone), 3) then c = P.dot
+      elseif dot(vx, vy, smooth(0.0, 0.8, tone), 0) then c = P.mid
+      else c = P.dark end
     end
-    a = 1
-    return math.max(0, math.min(1, r + grain)), math.max(0, math.min(1, g + grain)), math.max(0, math.min(1, b + grain)), a
+    return math.max(0, math.min(1, c[1] + grain)), math.max(0, math.min(1, c[2] + grain)), math.max(0, math.min(1, c[3] + grain)), 1
   end
 end
+M.painter = painter
 
 local cache, order = {}, {}
-
-local function bake(key, w, h, paint)
+local function bake(key, w, h, ox, oy, paint)
   if cache[key] ~= nil then return cache[key] or nil end
   local ok, img = pcall(function()
     local data = love.image.newImageData(w, h)
-    if data.mapPixel then
-      data:mapPixel(function(x, y) return paint(x, y) end)
-    else
-      for y = 0, h - 1 do
-        for x = 0, w - 1 do data:setPixel(x, y, paint(x, y)) end
-      end
+    for y = 0, h - 1 do
+      for x = 0, w - 1 do data:setPixel(x, y, paint(x - ox, y - oy)) end
     end
     local im = lg.newImage(data)
-    im:setFilter("linear", "linear")
+    im:setFilter("nearest", "nearest")
     return im
   end)
   cache[key] = ok and img or false
@@ -114,23 +102,80 @@ local function bake(key, w, h, paint)
   return ok and img or nil
 end
 
--- The backdrop image for a scene's bg, covering the visible area (vw x vh virtual pixels), or nil
--- where images can't be built from pixels (the caller then uses the baked PNGs).
-function M.image(bg, vw, vh, ox, oy)
-  local presetName = bakes.STAGES[bg.preset or "menu"] and (bg.preset or "menu") or "menu"
-  local rampName = PAPER[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
-  local w, h = math.ceil(vw * M.SCALE), math.ceil(vh * M.SCALE)
-  local key = ("%s:%s:%d:%d:%d:%d"):format(presetName, rampName, w, h, ox, oy)
-  return bake(key, w, h, painter(bakes.STAGES[presetName], rampName, ox, oy))
+local function presetOf(bg)
+  local name = bakes.STAGES[bg.preset or "menu"] and (bg.preset or "menu") or "menu"
+  local ramp = M.PAPER[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
+  return name, ramp
 end
 
--- Just a table, on a transparent ground: for scenes that put something behind it (the menu's
--- Overseer). horizon is in virtual pixels from the top of the safe area.
-function M.tableLayer(horizon, vw, vh, ox, oy)
-  local w, h = math.ceil(vw * M.SCALE), math.ceil(vh * M.SCALE)
+-- The still backdrop for a scene's bg, one image pixel per virtual pixel, covering the visible
+-- area. nil where images can't be built from pixels (the caller then uses the baked PNGs).
+function M.image(bg, vw, vh, ox, oy)
+  local name, ramp = presetOf(bg)
+  local w, h = math.ceil(vw), math.ceil(vh)
+  return bake(("%s:%s:%d:%d:%d:%d"):format(name, ramp, w, h, ox, oy), w, h, ox, oy, painter(bakes.STAGES[name], ramp))
+end
+
+local function send(sh, name, value) pcall(sh.send, sh, name, value) end
+
+-- Point the live shader at a backdrop. view: { k = canvas pixels per virtual pixel }.
+-- pulse: { x, y, radius, strength } in virtual pixels, or nil.
+local function aim(sh, preset, ramp, k, ox, oy, time, flow, pulse, layer)
+  local P = M.PAPER[ramp]
+  send(sh, "pix", k)
+  send(sh, "origin", { ox, oy })
+  send(sh, "horizon", preset.horizon or 0)
+  send(sh, "light", preset.light)
+  send(sh, "radius", preset.radius)
+  send(sh, "power", preset.power)
+  send(sh, "dark", { P.dark[1], P.dark[2], P.dark[3] })
+  send(sh, "mid", { P.mid[1], P.mid[2], P.mid[3] })
+  send(sh, "dotc", { P.dot[1], P.dot[2], P.dot[3] })
+  send(sh, "time", time)
+  send(sh, "flow", flow)
+  send(sh, "pulse", pulse or { 0, 0, 0, 0 })
+  send(sh, "layer", layer or 0)
+end
+
+-- Draw the backdrop over the whole canvas (cw x ch canvas pixels). Returns false if it couldn't.
+-- opts: k, ox, oy, vw, vh, time, flow (0..1), pulse, shader (shaders.paper or nil)
+function M.draw(bg, cw, ch, o)
+  local name, ramp = presetOf(bg)
+  local preset = bakes.STAGES[name]
+  if o.shader then
+    aim(o.shader, preset, ramp, o.k, o.ox, o.oy, o.time, o.flow, o.pulse, 0)
+    lg.setShader(o.shader)
+    lg.setColor(1, 1, 1)
+    lg.rectangle("fill", 0, 0, cw, ch)
+    lg.setShader()
+    return true
+  end
+  local img = M.image(bg, o.vw, o.vh, o.ox, o.oy)
+  if not img then return false end
+  lg.setColor(1, 1, 1)
+  lg.draw(img, 0, 0, 0, o.k, o.k)
+  return true
+end
+
+-- Just a table, from `horizon` (virtual pixels from the top of the safe area) down, over
+-- whatever is already drawn: the menu puts the Overseer behind it. Call from a scene's draw.
+function M.tableFront(horizon)
   local preset = { light = { 0.5, 0.85 }, radius = 0.9, power = 1.0, horizon = horizon / 360 }
-  local key = ("table:%d:%d:%d:%d:%d"):format(horizon, w, h, ox, oy)
-  return bake(key, w, h, painter(preset, "felt", ox, oy, "table"))
+  local sh = G.paperShader and G.paperShader()
+  if sh then
+    aim(sh, preset, "felt", G.K, G.OX, G.OY, G.time % 3600, 0, nil, 1)
+    lg.setShader(sh)
+    lg.setColor(1, 1, 1)
+    lg.rectangle("fill", -G.OX, horizon, G.VW, G.VH - horizon - G.OY + 1)
+    lg.setShader()
+    return
+  end
+  local w, h = math.ceil(G.VW), math.ceil(G.VH)
+  local img = bake(("table:%d:%d:%d:%d:%d"):format(horizon, w, h, G.OX, G.OY), w, h, G.OX, G.OY, painter(preset, "felt", "table"))
+  if img then
+    lg.setColor(1, 1, 1)
+    lg.draw(img, -G.OX, -G.OY)
+  end
 end
 
 return M
