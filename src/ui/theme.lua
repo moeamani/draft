@@ -112,7 +112,8 @@ local function pixelFace(style, size)
     if size < 26 then return "jersey", 1 end
     return "jersey", 2
   end
-  -- serif, serifItalic: titles and headings
+  -- serif, serifItalic: titles and headings (a fitting loop can step down to the small bold)
+  if size < 11 then return "pix10", 1, true end
   if size < 16 then return "coral", 1 end
   if size < 30 then return "jacquard", 1 end
   return "jacquard", 2

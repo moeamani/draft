@@ -61,12 +61,14 @@ end
 
 function M.nemesisCard(n, rank, x, y, w, h)
   gfx.panel(x, y, w, h, C.deep)
-  plates.header(x, y, w, 16, C.night, rank > 0 and nemesis.RANK_TITLES[rank] or n.status, { size = 11, streak = 1.0, pad = 5 })
+  local title = rank > 0 and nemesis.RANK_TITLES[rank] or n.status
+  -- leave room on the right for the record (skulls and swords)
+  plates.header(x, y, w, 16, C.night, title, { size = plates.fit(title, 11, w - 56), streak = 1.0, pad = 5 })
   local p = art.nemesis(n, rank, 48)
   gfx.box(x + 5, y + 19, 50, 50, C.black)
   lg.setColor(1, 1, 1)
   lg.draw(p, x + 6, y + 20)
-  local size = plates.textWidth(n.name, 20) <= w - 64 and 20 or 16
+  local size = plates.fit(n.name, 20, w - 64)
   plates.print(n.name, size, x + 60, y + 18, C.white)
   gfx.textf(n.epithet, T.body(), x + 60, y + 40, w - 64, "left", C.muted)
   local coat = cards.COATS[n.coat]

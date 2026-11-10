@@ -2,9 +2,8 @@
 --
 -- A plate is clean pixel art: a flat palette fill, a 1px dark outline with notched corners and a
 -- 1px bevel (light along the top, dark along the bottom). No dither, no gradients.
--- Title cards (the Figma "Card Name / Ability / Power" plates) add the mascot's chromatic smear
--- along one end as an accent. Their labels are live serif text, drawn sharp at screen resolution.
-local bakes = require("src.ui.bakes")
+-- Title cards (the "Card Name / Ability / Power" plates) are engraved signs: a ruled frame inset
+-- two pixels and a stud at each end. Their labels are live text (pixel or smooth, per Settings).
 local gfx = require("src.ui.gfx")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -74,26 +73,6 @@ function M.plate(w, h, color, opts)
   return cv
 end
 
--- ---------------------------------------------------------------- the smear accent
-
-local smearImages = {}
-local function smearFor(tint, aberration)
-  local best, bestD
-  for _, sm in ipairs(bakes.SMEARS) do
-    local c = theme.hex(sm.tint)
-    local d = (c[1] - tint[1]) ^ 2 + (c[2] - tint[2]) ^ 2 + (c[3] - tint[3]) ^ 2
-    if ((aberration or 0) >= 0.9) == (sm.aberration >= 0.9) then d = d * 0.5 end
-    if not bestD or d < bestD then best, bestD = sm, d end
-  end
-  local file = bakes.smearFile(best.name)
-  if smearImages[file] == nil then
-    local ok, img = pcall(lg.newImage, file)
-    smearImages[file] = ok and img or false
-    if ok then img:setFilter("linear", "linear") end
-  end
-  return smearImages[file] or nil
-end
-
 -- ---------------------------------------------------------------- title cards
 
 local Card = {}
@@ -102,8 +81,8 @@ function Card:getDimensions() return self.w, self.h end
 function Card:getWidth() return self.w end
 function Card:getHeight() return self.h end
 
--- A title card: plate, smear accent (opts.streak: 0.43 for the colour plates, 1.0 for the
--- black "Power" plate) and an optional live serif label.
+-- A title card: plate, engraved frame (opts.streak: any value turns it on; 1.0 rules the black
+-- "Power" plate in gold) and an optional live label.
 -- opts: label, size, align ("center" | "left"), pad, labelColor, italic, streak, outline
 function M.titleCard(w, h, color, opts)
   w, h = math.floor(w), math.floor(h)

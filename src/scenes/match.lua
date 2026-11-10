@@ -909,17 +909,26 @@ function S:drawPanel()
     local first = table.remove(lines, 1)
     local tsize = plates.textWidth(first.text, 18) <= PW - 16 and 18 or 14
     plates.header(PX, PY, PW, 24, C.ink3, first.text, { size = tsize })
+    -- the big illustration, unless the text needs the room (then the small one)
+    local textH = 0
+    for _, l in ipairs(lines) do textH = textH + gfx.wrapHeight(l.text, l.font or T.body(), w) + (l.gap or 3) end
     if def then
       local pic = art.illustration(def)
       local iw, ih = pic:getDimensions()
+      if y + ih + 2 + textH > PY + PH - 3 then
+        pic = art.card(def)
+        iw, ih = pic:getDimensions()
+      end
       local ix = math.floor(PX + (PW - iw) / 2)
       gfx.box(ix - 1, y - 2, iw + 2, ih + 2, C.black)
       plates.draw(pic, ix, y - 1)
       y = y + ih + 2
     end
+    lg.setScissor(G.scissor(PX, PY, PW, PH - 2))
     for _, l in ipairs(lines) do
       y = y + gfx.textf(l.text, l.font or T.body(), x, y, w, "left", l.color or C.paper) + (l.gap or 3)
     end
+    lg.setScissor()
     return
   end
   local blue = theme.hex("#2471fc")

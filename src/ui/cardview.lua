@@ -1,5 +1,5 @@
--- Pixel cards in the Figma title-card style: a 56x78 face built from dithered palette plates,
--- baked once. At rest a card is drawn 1:1 on whole pixels (no wobble, no tilt, no resampling),
+-- Pixel playing cards: a 56x78 face printed on worn cream paper, with a rarity-framed
+-- illustration and coat-coloured plates, baked once. At rest a card is drawn 1:1 on whole pixels (no wobble, no tilt, no resampling),
 -- so its pixels never shimmer. Only transient motion (dealing, flipping, a lean while moving)
 -- is drawn scaled and rotated.
 local art = require("src.ui.art")
@@ -18,7 +18,6 @@ local warmthBadge
 local C = theme.c
 local faceCache = {}
 
-local function rarityCol(d) return cards.RARITY_COLOR[d.rarity] end
 
 M.SHORT = {
   none = "STEADY", smite = "HAMMER", inspire = "ORB", hex = "HEX", litter = "LITTER", pounce = "POUNCE",
@@ -40,9 +39,9 @@ local function begin(cv)
   lg.clear(0, 0, 0, 0)
 end
 
--- Face layout: the rarity frame, a 50x48 pixel-art illustration, then two plates: the name on
--- its coat's colour (so the coat reads at a glance) and the ability. The text on a card (name,
--- ability, Paws, lives) is drawn live at screen resolution by View:draw, never baked.
+-- Face layout: a paper margin, the illustration in a rarity-coloured window, then two plates:
+-- the name on its coat's colour (so the coat reads at a glance) and the ability. The text on a
+-- card (name, ability, Paws, lives) is drawn live by View:draw, never baked.
 M.NAME_PLATE = { 3, 52, 50, 12 }
 M.ABIL_PLATE = { 3, 65, 50, 11 }
 local function nameColor(def)
