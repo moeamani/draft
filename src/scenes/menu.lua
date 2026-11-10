@@ -175,11 +175,16 @@ function S.settings()
     gfx.rule(lx, y + 2, w - 28, C.ink3)
     y = y + 10
     local half = math.floor((w - 28 - 4) / 2)
-    if widgets.button("opt_wipe_s", lx, y, half, 22, "Reset story", { kind = "danger", disabled = not G.saves.story }) then
-      overlays.confirm("Reset the story?", "Your story save is deleted. The Four Hands forget you. Your Renown stays.", "Delete", function() G.wipeSave("story") end)
-    end
-    if widgets.button("opt_wipe_f", lx + half + 4, y, half, 22, "Reset festivals", { kind = "danger", disabled = not G.saves.free }) then
-      overlays.confirm("Reset festivals?", "Your free-festival save is deleted. The Four Hands forget you. Your Renown stays.", "Delete", function() G.wipeSave("free") end)
+    if G.sceneName == "menu" then
+      if widgets.button("opt_wipe_s", lx, y, half, 22, "Reset story", { kind = "danger", disabled = not G.saves.story }) then
+        overlays.confirm("Reset the story?", "Your story save is deleted. The Four Hands forget you. Your Renown stays.", "Delete", function() G.wipeSave("story") end)
+      end
+      if widgets.button("opt_wipe_f", lx + half + 4, y, half, 22, "Reset festivals", { kind = "danger", disabled = not G.saves.free }) then
+        overlays.confirm("Reset festivals?", "Your free-festival save is deleted. The Four Hands forget you. Your Renown stays.", "Delete", function() G.wipeSave("free") end)
+      end
+    else
+      -- mid-run, saves can't be reset out from under the screen you're on
+      gfx.text("Saves can be reset from the title screen.", T.small(), lx, y + 5, C.muted, { bg = C.ink })
     end
     y = y + 30
     if desktop then

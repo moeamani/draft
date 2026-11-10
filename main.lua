@@ -61,7 +61,14 @@ function G.wipeSave(mode)
   mode = mode or G.mode
   love.filesystem.remove(SAVE_FILES[mode])
   G.saves[mode] = nil
-  if G.mode == mode then G.save = nil end
+  if G.mode == mode then
+    G.save = nil
+    -- the save on screen is gone: nothing but the title can still be shown
+    if G.sceneName ~= "menu" and G.scenes.menu then
+      G.trans = nil
+      G.go("menu", {}, true)
+    end
+  end
 end
 
 local function loadSave(mode)
