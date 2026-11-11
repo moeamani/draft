@@ -7,7 +7,8 @@
 -- table without the print ever shimmering.
 --
 -- With shaders it is drawn live (shaders.paper). Without them (LÖVE Potion) the same picture is
--- baked once per backdrop and window shape from the same maths in Lua, and stands still.
+-- baked once per backdrop and window shape from the same maths in Lua (src/ui/bakes.lua), and
+-- stands still.
 local bakes = require("src.ui.bakes")
 local theme = require("src.ui.theme")
 local lg = love.graphics
@@ -15,69 +16,14 @@ local lg = love.graphics
 local M = {}
 local hex = theme.hex
 
-M.PAPER = {
-  felt = { dark = hex("#0b2218"), mid = hex("#123a28"), dot = hex("#1a4d35") },
-  blood = { dark = hex("#1e0a09"), mid = hex("#3a1210"), dot = hex("#571a15") },
-}
-M.TABLE = { base = hex("#c9a43a"), dark = hex("#b08a29"), light = hex("#dcbd58"), edge = hex("#5e4410") }
-M.CELL = 6 -- the screen's period along its diagonals; dots are about 4 pixels apart
-
-local function smooth(a, b, x)
-  local t = math.max(0, math.min(1, (x - a) / (b - a)))
-  return t * t * (3 - 2 * t)
+-- Colours and maths live in src/ui/bakes.lua, so the Switch baker prints the same picture.
+M.PAPER = {}
+for name, stock in pairs(bakes.PAPER) do
+  M.PAPER[name] = { dark = hex(stock.dark), mid = hex(stock.mid), dot = hex(stock.dot) }
 end
-
-local function hash(x, y)
-  local n = math.sin(x * 12.9898 + y * 78.233) * 43758.5453
-  return n - math.floor(n)
-end
-
--- Is virtual pixel (x, y) inside a dot of this amount (0..1)? phase shifts the lattice.
-local function dot(x, y, amount, phase)
-  if amount <= 0 then return false end
-  local P = M.CELL
-  local u, v = (x + y + phase) % P - P / 2, (x - y) % P - P / 2
-  local r = 0.72 * P * math.sqrt(math.min(1, amount))
-  return u * u + v * v < r * r
-end
-
--- The colour of one virtual pixel at time 0 (the shader's maths, in Lua). layer "table" paints
--- only the table and leaves the rest clear.
-local function painter(preset, rampName, layer)
-  local P = M.PAPER[rampName] or M.PAPER.felt
-  local T = M.TABLE
-  local light, radius, power = preset.light, preset.radius, preset.power
-  local horizon = preset.horizon or 0
-  return function(vx, vy)
-    local ux, uy = (vx + 0.5) / 640, (vy + 0.5) / 360
-    local dx, dy = (ux - light[1]) * (640 / 360), uy - light[2]
-    local L = math.max(0, math.min(1, power * (1 - smooth(0, radius, math.sqrt(dx * dx + dy * dy)))))
-    local ex = math.min(ux, 1 - ux) * 640 / 360
-    local vig = smooth(-0.2, 0.25, math.min(ex, math.min(uy, 1 - uy)))
-    local grain = (hash(vx, vy) - 0.5) * 0.03
-    local c
-    if horizon > 0 and uy >= horizon then
-      local t = (uy - horizon) / (1 - horizon)
-      local halfw = 0.36 + (0.8 - 0.36) * t
-      local u = (ux - 0.5) / halfw
-      if math.abs(u) <= 1 then
-        local depth = (uy - horizon) * 360
-        if depth < 2 or math.abs(u) > 1 - 2 / (halfw * 640) then c = T.edge
-        elseif dot(vx, vy, L * 0.42, 3) then c = T.light
-        elseif dot(vx, vy, (1 - L) * 0.5 + (1 - t) * 0.2, 0) then c = T.dark
-        else c = T.base end
-      end
-    end
-    if not c then
-      if layer == "table" then return 0, 0, 0, 0 end
-      local tone = L * vig
-      if dot(vx, vy, smooth(0.55, 1.25, tone), 3) then c = P.dot
-      elseif dot(vx, vy, smooth(0.0, 0.8, tone), 0) then c = P.mid
-      else c = P.dark end
-    end
-    return math.max(0, math.min(1, c[1] + grain)), math.max(0, math.min(1, c[2] + grain)), math.max(0, math.min(1, c[3] + grain)), 1
-  end
-end
+M.TABLE = { base = hex(bakes.TABLE.base), dark = hex(bakes.TABLE.dark), light = hex(bakes.TABLE.light), edge = hex(bakes.TABLE.edge) }
+M.CELL = bakes.CELL
+local painter = bakes.painter
 M.painter = painter
 
 local cache, order = {}, {}

@@ -1,114 +1,136 @@
 # Draft: design notes
 
-## Art direction
+## The design system
 
-A printed poster, after the Overseer's art in the Figma file: film-grain dark green paper, halftone
-dots for light and shade, a mustard table, flat red buttons, serif headings over sans text, and
-the flaming shadow cat looming over it all. The cats and cards stay clean pixel art: crisp
-clusters, bold dark outlines, limited hue-shifted palettes.
+Version 1.0 was rebuilt around one idea: **Draft is a deck printed on the Overseer's press and seen
+through a CRT.** Every screen is made from the same few parts, so nothing looks like it came from
+a different game.
 
-- **Pixel art at its real size.** Cats, cards, plates and icons are drawn at their true pixel size
-  on a 640x360 grid, with no anti-aliasing, dither or blur. Bigger views (the inspect panel, the
-  Cattery, portraits) are exact 2x or 3x enlargements, so pixels stay square and crisp.
-- **Backdrops** (`src/ui/print.lua`) are halftone prints, baked once per scene, colour and window
-  shape at twice the virtual resolution and drawn smoothly scaled:
-  - dark green paper (blood red for Hand matches, the High Table and defeats) with film grain;
-  - one pool of light screened in halftone dots (45°), and corners falling into shadow;
-  - under every match, a mustard table in perspective, screened darker away from the light and
-    lighter near it (15°), with a dark rail; goblet rows sit on dark trays so they read on it.
-- **The Overseer** (`assets/img/overseer-*.png`, baked by `tools/art/bake_overseer.py` from the
-  Figma file's flat flame cat): red flames screened with orange, pink and white dots that
-  brighten towards the cat, a cyan glow with white and blue dots, a blue rim, a black cat whose
-  red eyes glow through a halftone halo, a pixel of red/blue misregistration and paper grain.
-  Four frames with the outer flames warped differently make them flicker, and it blinks
-  (`src/ui/overseer.lua`). It looms over the menu's table, the High Table, the defeat screen, its
-  cutscene lines and the Renown ledger, and its face signs every feat note.
-- **Plates** (`src/ui/plates.lua`) are flat palette fills with notched corners and an edge a shade
-  darker than themselves, like the poster's flat red buttons. Buttons add only a soft shadow.
-- **Title cards** (the "Card Name / Ability / Power" plates) are the same flat plates with a live
-  serif label.
-- **Cat illustrations** (`src/ui/art.lua`) are bust portraits in three layers:
-  - **Backdrop** by coat, in three flat bands: an Ember hall with pennants and embers, a rainy
-    Tide shore, a Gilt sunburst over a castle, a Shadow night with the moon. The Hands get blood red
-    and flames.
-  - **Figure**: outfit (plate, mail, tunic, robe, rags, apron, cape with ermine), ears, a two-tone
-    head, a fur pattern (tabby, tuxedo, points, patches, smoke, fluff), headwear and props. Stray
-    single pixels are cleaned up, then the face is stamped in pixel by pixel (eyes per expression:
-    calm, wide, smug, fierce, happy, menace; nose, mouth, fangs, tongue), and the figure gets a 1px
-    outline. Shadow cats and the Hands get a coloured rim outside it, like moonlight.
-  - **Glow**: whiskers, orbs, flames, sparkles, notes and runes, with no outline.
-  - `SPEC` gives the named cats their signature looks: Artheline's crown and Sword Hammer,
-    Merline's hat and orb, the Alley Stray's eyepatch and fishbone. The rest are dressed by type,
-    ability, rarity and seed.
-  - Tricks are small scenes: the storm, the fog with eyes, the cat asleep in the sunbeam, the box
-    with ears.
-- **Card faces** are printed on worn cream paper (grime specks, a darker edge, rounded corners):
-  the illustration in a window framed in the rarity's colour (brown, blue, red, gold; legendaries
-  get gilt corners), the name on its coat's colour, the ability, a type badge and the cat's hearts.
-  Names, abilities and Paws are live text.
-- **Card backs**: the same paper, then a field in the coat's colour printed in halftone (dots
-  grow towards the edges, a ruled frame) with the Overseer's mark in the middle, a black cat's
-  head with two red eyes. Shadow cats and tricks share the dark navy back.
-- **The menu** is staged like the poster: links along the top, the logo in the middle, a red
-  Renown button, a serif headline, red calls to action, and the Overseer looming over the table
-  with a hand dealt face down.
+### One pixel grid
 
-### The CRT screen
+- Everything drawn (cats, cards, icons, plates, the Overseer, the backdrop) sits on a 640x360
+  virtual grid and is only ever enlarged by whole numbers, so every pixel on screen is the same
+  size. The Overseer is 320 pixels wide and is shown 1:1 (menu, High Table, credits) or doubled
+  (cutscenes, the defeat screen); bigger cat portraits are exact 2x or 3x enlargements.
+- Shading is flat fills and **halftone**: dots on a 45 degree lattice of pixels. The backdrop,
+  the table, the card backs and the Overseer all use it, which is what ties the pixel art to the
+  poster the Overseer came from.
+- Text is the one thing not on the grid (by default): it is rasterised at the screen's real
+  resolution, crisp type over chunky print, as on the poster.
 
-The finished frame goes to the window through a CRT pass (`crt` in `src/ui/shaders.lua`), on by
-default and switched off in Settings or with F2:
+### The backdrop (`src/ui/print.lua`, `shaders.paper`)
 
-- barrel curvature (`CRT_CURVE` in `main.lua`, 0.07), with the mouse warped through the same curve
-  (`shaders.warp`) so clicks land where the pointer looks;
-- one scanline per virtual pixel row, so the scanlines line up with the pixel art at any size;
-- a soft bloom on bright pixels, a chromatic fringe that grows towards the edges, a vignette and a
-  little grain.
+Dark ink-green paper (blood red for the Hands, the Overseer and defeats), one pool of light, darker
+corners and film grain. For each virtual pixel the shader works out how much light falls on it and
+then whether it lies inside a halftone dot of that size. The dots never move, only grow and shrink,
+so the light can drift in a slow swirl (and swell in a ring where a goblet falls or a cat is
+captured: `fx.addPulse`) without the print shimmering. Matches add a mustard table in perspective,
+screened the same way. Without shaders the same maths is baked once in Lua and stands still.
 
-Without shaders (LÖVE Potion) there's no CRT and no swirl.
+### Plates (`src/ui/plates.lua`)
 
-### Juice
+One shape for the whole interface: a flat fill with two pixels cut from each corner, an edge a
+shade darker than the fill, a one-pixel highlight along the top, and optionally a **lip** (a darker
+band along the bottom).
 
-- **Feat medals** slide in at the top right, one at a time, with a shine sweep (`fx.medal`). They
-  survive scene changes, so a feat earned on the last swat still shows on the result screen.
-- **Hit-stop**: a capture freezes the table for 0.14s, a crushing win for 0.08s (`G.hitstop`), with
-  a screen shake.
-- **Number pops**: floating numbers punch in two sizes larger and settle in 0.14s.
-- **Card shine**: a slanted band of light sweeps across a card the moment you point at it.
-- The Hot Seat burns: a flickering ring of fire around the card and a flame Warmth badge.
+| Part | Made of |
+| --- | --- |
+| Panel | a plate in `ink` with a hard two-pixel shadow (`gfx.panel`) |
+| Sign (names, stalls, banners, overlay titles) | a coloured plate with a two-pixel lip and a serif label (`plates.header`) |
+| Button | a plate with a three-pixel lip; pressed, the face sinks into the lip (`widgets.button`) |
+| Tab, chip, tag, slider knob, cushion, card plate | smaller plates |
+| Ledger page, feat slip | a plate in cream stock, ruled, with ink text and rubber stamps |
 
-### Type
+Colours are roles (`theme.role`): `primary` red moves the game on and lives bottom-right; `secondary`
+green is every other button; `info` blue is your side and overlay titles; `reward` gold is Renown
+and fish; `danger` dark red is destructive. Spacing is on a 4-pixel grid with 8-pixel gutters.
 
-Two text styles, chosen in Settings (`theme.setTextStyle`):
+### Type (`src/ui/theme.lua`)
 
-- **Smooth** (the default, like the poster): Ancizar Serif headings and Atkinson Hyperlegible for
-  everything else, rasterised at the screen's real resolution. A body line is 20px tall at 720p.
-- **Pixel**: pixel fonts drawn on the art's own grid, one font pixel per virtual pixel, with no
-  anti-aliasing. Every face sits on a whole-pixel grid and is rasterised at exactly its design
-  size times K, so glyphs are as crisp as the cats. Baselines land on whole pixels and capitals
-  sit centred in their line box. Small bold is the classic pixel bold: a second pass one pixel to
-  the right. (Settings files from the pixel-default build are moved back to smooth once.)
+Two families and nine sizes, and nothing else: asking for a size in between snaps to the nearest
+step.
 
-Every text call asks for a style and a size (`theme.font(style, size)`); pixel mode maps it to a
-face:
+| Role | Face | Size |
+| --- | --- | --- |
+| display, title, heading | Ancizar Serif (the logo's family) | 30, 20, 14 (plus 12, 16, 24 for fitting) |
+| body, small | Atkinson Hyperlegible | 10, 8.5 |
+| bold, big, huge, label | Atkinson Hyperlegible Bold | 10, 13, 18, 7.5 caps |
 
-| Role | Pixel face | Cap height | Smooth face |
-| --- | --- | --- | --- |
-| Body text: rules, card text, dialogue | Draft Pixel 10 / 12 (Fusion Pixel, subset) | 7 / 9 px | Atkinson Hyperlegible |
-| Small bold: buttons, names | Draft Pixel 10 + one-pixel bold | 7 px | Atkinson Hyperlegible Bold |
-| Bold: big buttons, numbers, plaques | Coral Pixels | 9 px | Atkinson Hyperlegible Bold |
-| Titles, signs, names on plates | Jacquard 12 (blackletter) | 12 px (24 at 2x) | Ancizar Serif |
-| Headline numbers | Jersey 15 | 15 px | Atkinson Hyperlegible Bold |
-| Tiny labels: card names, abilities | Micro 5 | 5 px | Atkinson Hyperlegible |
+Settings > Text switches to **pixel fonts** drawn on the art's grid instead (Fusion Pixel body
+text, Coral Pixels bold, Jacquard 12 titles, Jersey 15 numbers, Micro 5 labels), each rasterised
+at exactly its design size times the pixel scale, with baselines on whole pixels. The fonts and
+their licences are in `assets/fonts` (see `CREDITS.txt`).
 
-In pixel mode a body line is 12 virtual pixels: 24px tall at 720p and 36px at 1080p. The fonts
-and their licences are in `assets/fonts` (see `CREDITS.txt`).
+### Motion and feedback (`src/ui/fx.lua`, `main.lua`)
+
+- **Iris**: scenes change through a closing and opening circle of ink with a thin fringe of cyan,
+  white and pink on its edge, the teaser's orb in reverse.
+- **Tags**: what happens to a card pops above it as a small tilted plate ("+3 Coat edge").
+- **The scoring ladder**: when a bout is revealed, each modifier pops on its own beat, the Paws
+  badge counts along, and a bell climbs the scale one step per event (`audio.note`). Goblets fall
+  one after another, each with its own clink.
+- **Hit-stop, shake, punch, pulse**: a capture freezes the table for 0.14s, shakes it, bursts the
+  CRT's colour fringe (`fx.addPunch`) and sends a ring through the backdrop's dots.
+- **Stamps**: a feat arrives as a slip torn from the ledger; a moment later a red rubber stamp
+  slams onto it. Renown levels are stamped in blue.
+- **Cards** float in your hand on their own phase (in whole screen pixels, so the art stays
+  crisp), wobble and shine when picked out, lean when dragged, and bounce when they land.
+- **Game speed** (1x, 1.5x, 2x) scales everything at the table; "Shake and motion" off stills the
+  backdrop, the shake and the punch.
+
+### The CRT screen (`shaders.crt`)
+
+On by default (Options or F2): barrel curvature with the mouse warped through the same curve, one
+scanline per virtual pixel row, a soft bloom, a chromatic fringe that grows towards the edges, a
+vignette and a little grain.
+
+### The intro (`src/scenes/intro.lua`)
+
+The teaser, replayed by the game over the teaser's own music: a point of white light opens in the
+dark green and grows, ringed in cyan, blue, magenta and orange (thirty thin translucent discs, so
+no shader is needed), until the screen is white; the "Draft" lockup resolves out of a red and
+cyan fringe on the music's chime at about 8.3 seconds, the tagline follows, and the iris closes
+on the title. Any key, click or button skips it; `--skip-intro` starts at the title.
+
+### Sound (`src/audio.lua`, `tools/audio/make_audio.py`)
+
+The teaser's music is a G sharp drone with an open fifth, a high tremolo shimmer and a chime motif
+on five notes (G#, A#, C#, D#, F#). Everything else is tuned to it:
+
+- `teaser.ogg` is cut from the teaser and plays over the intro.
+- Three seamless loops are rendered with numpy on that scale: `menu` (the drone, the shimmer and
+  the teaser's motif played slowly), `table` (a thumb-piano figure over a slow pulse) and `high`
+  (the same scale turned minor, for the Hands and the Overseer). Their reverb tails are folded
+  back onto their starts, so they loop without a seam. Scenes name their track (`S.music`) and
+  the manager crossfades.
+- 31 effects, the pitched ones on the same scale. The scoring bell is one sample replayed at the
+  scale's ratios, so a run of them is always an arpeggio in key.
+- Music and effects have separate volumes; F3 mutes.
+
+The loops and effects were designed from the teaser's measured pitches and balance, not by ear:
+nobody has listened to them yet, so their levels may want adjusting (`make_audio.py` re-renders
+everything in a few seconds).
+
+### Cards (`src/ui/cardview.lua`, `src/ui/art.lua`)
+
+- **Faces** are printed on worn cream paper: the illustration in a window framed in the rarity's
+  colour, the Paws badge top-left, a **coat badge** top-right (flame, drop, crown or moon in the
+  coat's colour, so coats read by shape as well as colour), the name on the coat's colour, the
+  ability with the cat's type (sword or orb) at its end, and the cat's hearts.
+- **Backs** are a halftone field in the coat's colour with the coat's shape large in the middle
+  and the Overseer's mark (a black cat's head with two red eyes) below it. Shadow cats and tricks
+  share the dark back with a moon.
+- **Printings** are drawn into the copy: a Proof has blue registration corners on its art, Gold
+  Leaf has a gilt paper edge, and a Misprint's art is printed out of register in red and cyan.
+- **Cat illustrations** are bust portraits in three layers (backdrop by coat, figure, glow), with
+  signature looks for the named cats (`SPEC` in `art.lua`); tricks are small scenes.
 
 ### Contrast (WCAG 2.x AA)
 
-- Every text colour token passes 4.5:1 on every dark ground (deep, ink, ink2, ink3, night). Plate
-  colours pass 4.5:1 with white labels (gold takes black). `tests/run.lua` checks all of it.
+- Every text colour token passes 4.5:1 on every dark ground. Plate colours pass 4.5:1 with white
+  labels (gold takes black). Ink on cream passes too. `tests/run.lua` checks the tokens.
 - `gfx.text` runs every colour through `theme.readable(fg, bg)`, which lightens (or darkens) a
-  colour that misses 4.5:1 against its ground, so a stray red or blue label can't fail.
+  colour that misses 4.5:1 against its ground.
 
 ### The window
 
@@ -116,16 +138,14 @@ and their licences are in `assets/fonts` (see `CREDITS.txt`).
   the backdrop covers the margin, so there are no black bars (on a 16:10 Mac it's 640x400).
 - Everything is drawn into one canvas at K = ceil(scale) canvas pixels per virtual pixel, then shown
   at exactly the window's size. At whole scales (720p, 1080p, 1440p) it's pixel-perfect.
-- Fullscreen is the desktop kind (F11, Alt+Enter, Ctrl+Cmd+F, or Settings) and is remembered.
-- The old bug: the scale was snapped down to multiples of 0.5, so a 1440x900 screen showed the
-  1280x720 game in the middle with black all round. The new layout has no snapping.
+- Fullscreen is the desktop kind (F11, Alt+Enter, Ctrl+Cmd+F, or Options) and is remembered.
 
 ### Without shaders (Switch)
 
-LÖVE Potion can't compile GLSL, and no longer needs to for anything but the CRT: the backdrops
-and table are baked from pixels (`src/ui/print.lua`) and the Overseer is a set of PNGs. Where
-ImageData isn't available the backdrops fall back to PNGs baked by `tools/switch/bake_assets.py`.
-The pixel cleanup pass reads canvases back; where that isn't possible it is skipped.
+LÖVE Potion can't compile GLSL. Only two things need it: the backdrop's motion (it is baked still
+from the same maths) and the CRT. Everything else, the intro included, is drawn without shaders.
+Where ImageData isn't available either, the backdrop falls back to the PNGs printed by
+`tools/switch/bake_assets.py`, which runs the same Lua (`src/ui/bakes.lua`).
 
 ## The match: three cushions
 
@@ -256,6 +276,24 @@ The rule that makes every bout matter twice:
 - In the simulation you have about 1.5 cats seated per bout (the rival 1.2), a Hot Seat about
   every six bouts, and you pull back about one cat every two bouts.
 
+### Printings
+
+How one particular copy of a cat came off the Overseer's press (`cards.PRINTS`; the printing
+belongs to the copy, `inst.print`, and only cats have them):
+
+| Printing | Effect | On the card |
+| --- | --- | --- |
+| Proof | 1 more life | blue registration corners on the art |
+| Gold Leaf | 4 fish in every match where it wins a duel | a gilt paper edge |
+| Misprint | +2 Paws, and its back shows the wrong coat | art printed out of register |
+
+- About one offered cat in eight carries one (`game.rollPrint`): reward offers (never the spoils)
+  and market cats, which cost 8 fish more.
+- A **Misprint's back lies** (`match.backOf`): the rival reads the wrong coat when it answers your
+  lead, so it aims the wrong edge at it. The Overseer's eye isn't fooled.
+- Printings stay with the copy: a captured Misprint comes back at you from a Hand's deck with its
+  lying back, and comes home with it.
+
 ### The AI
 
 - **Leading**, it scores every placement of its hand against unknown "phantom" cards built from your deck's average Paws. It slightly prefers dark backs, which give nothing away.
@@ -319,12 +357,12 @@ The progression that outlives every festival (`src/core/renown.lua`, saved on it
   result screen fills a Renown bar.
 - **Levels** need 15·(L−1)·(L+2) Renown in total (60, 150, 270, 420, 600...). Each level gives a
   title, from Nameless Stray to Lord of Cushions.
-- **26 Feats**, each earned once and worth 10–150 Renown, are noted by the Overseer (a note with
-  its face slides in): at the table (Hot Seat,
+- **27 Feats**, each earned once and worth 10–150 Renown, are stamped into the ledger by the
+  Overseer (a slip with its eyes slides in, and a red stamp lands on it): at the table (Hot Seat,
   Throne Warmer, Clean Sweep, Flattened, Legend Napper, Cat Burglar, Untouchable, Last Goblet
   Standing, Blitz, Homecoming), at the festival (First Lesson, Hand Slayer, Kingslayer, Oathkeeper,
   Mercy, No Quarter, Fat Cat, Through the Gate, Finalist, Champion) and over a life (Collector,
-  Dynasty, Colours, Stray No More, Over the Overseer, Living Legend).
+  Dynasty, Colours, Stray No More, Over the Overseer, Signed in Red, Living Legend).
 - **Crests** unlock with levels and are picked when a Free Festival starts:
 
 | Crest | Level | Start with |
@@ -339,8 +377,27 @@ The progression that outlives every festival (`src/core/renown.lua`, saved on it
 
 - Pacing in the simulation: level 3 after the first festival, 4.3 after the second, 5.5 after the
   third. The Royal Crest takes about 14 festivals.
-- The Renown screen (main menu) is the Overseer's ledger: the level, lifetime stats, every feat
-  and every crest.
+- The Renown screen (title menu, pause menu) is the Overseer's ledger, a cream page: the level,
+  lifetime stats, every feat (the earned ones stamped in red ink) and every crest.
+
+### Stakes
+
+The Overseer's wager on a Free Festival (`renown.STAKES`). Each stake adds its rule to the ones
+below it and multiplies the Renown from every match and from the festival's placing:
+
+| Stake | Adds | Renown |
+| --- | --- | --- |
+| Paper | nothing | x1 |
+| Ink | knockout rivals bring 1 more goblet | x1.2 |
+| Red Ink | the Four Hands' prides are a level higher | x1.4 |
+| Gold Ink | strays stop going easy in the groups (full hand, full goblets) | x1.6 |
+| Overseer's Ink | every rival cat has 1 more life | x2 |
+
+Winning a festival at your highest open stake opens the next (`renown.noteStake`), and each Crest
+remembers the highest stake it has won at ("Won at Red Ink" on its card). The new-festival panel
+picks the Crest and the stake together; the top bar shows the stake during the festival. Story
+chapters are always played at Paper. The balance simulation runs at Paper; the higher stakes are
+tested for their rules but not yet tuned by simulation.
 
 ## Crash safety
 
@@ -391,8 +448,9 @@ you. Each player earns Renown and starts each festival with their best unlocked 
 first reward (spoils first) and never shops, so it never upholsters a cushion or buys back a pawned
 cat:
 
-- About 67% of matches won, about 57% against Hands, and about 3.9 bouts per match.
+- About 69% of matches won, about 63% against Hands, and about 3.9 bouts per match.
 - About 20% of festivals won; a quarter end in the groups.
+- Against the Overseer the same AI wins about 3 times in 10 with a late-story pride.
 - The sim is chaotic: any change moves single-seed numbers by about ±5%.
 
 Tuning knobs:
@@ -412,8 +470,8 @@ Tuning knobs:
 | Title frame: two-tone "Draft" lockup and tagline | main menu, victory summary (`assets/img/logo.png`) |
 | Title cards: Card Name, Type, Ability, Power, Rarity | `plates.titleCard`, used for every heading, banner, plaque and stall (now engraved signs) |
 | Dither effect (Bayer 16x16, 8 levels, 2px) | became the halftone and grain of the print backdrops (`src/ui/print.lua`) |
-| Lens distortion effect (anamorphic, chromatic) | no longer drawn (the Switch baker still writes the smear PNGs) |
-| Red/blue cat mascot | window icon |
+| Lens distortion effect (anamorphic, chromatic) | no longer drawn; its red and cyan split lives on in the intro's logo, the iris, misprinted cards and the CRT's punch |
+| Red/blue cat mascot | window icon and the Switch Homebrew Menu icon |
 | Shadow creature with flames | the Overseer, printed in halftone by `tools/art/bake_overseer.py` |
 | Card sheet (Artheline, Merline, the Black Cats) | the first entries in `src/core/cards.lua`, with signature looks in `art.lua` |
 
@@ -422,6 +480,7 @@ Tuning knobs:
 - Trick cards that move between cushions after the reveal.
 - Bond quests: a market or event that offers the missing partner of a cat you own.
 - Cattery rewards: a Crest or a cosmetic backdrop for finding every bond.
-- Stakes: harder festivals (the Hands start with more goblets) unlocked by winning, for more Renown.
 - A ransom: pay fish to a Hand to buy back one captive between festivals.
-- Music beyond the generated ambient loop.
+- More printings (a Foil that keeps its Warmth when pulled back), and a press at the market that
+  reprints a cat for fish.
+- Tuning the higher stakes with the simulation, and a daily festival on a shared seed.

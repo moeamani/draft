@@ -29,5 +29,5 @@ AtkinsonHyperlegible-Italic.ttf   (narration)
 OFL-AtkinsonHyperlegible.txt      Atkinson Hyperlegible's licence (Copyright 2020 Braille Institute of America, Inc.)
 
 The logo, mascot and shadow-creature artwork (assets/img) comes from the project's Figma file.
-logo.png is the two-tone "Draft" lockup from the Figma title frame; mascot-silhouette.png is the
-mascot's alpha mask, used for the chromatic smear on title cards.
+logo.png is the two-tone "Draft" lockup from the Figma title frame; mascot.png is the window and
+Homebrew Menu icon; shadow.png is the source of the Overseer (tools/art/bake_overseer.py).

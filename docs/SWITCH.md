@@ -11,22 +11,24 @@ the Home menu.
 
 ## What's different on the console
 
-LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. The game only
-needs a shader for the CRT screen now. The halftone backdrops and the match table are baked from
-pixels the first time they're shown (`src/ui/print.lua`), and the Overseer is a set of PNGs:
+LÖVE Potion has no runtime GLSL: Switch shaders are precompiled deko3d binaries. Only two things
+in the game need a shader, and both have a stand-in:
 
 | Effect | Desktop | Switch |
 | --- | --- | --- |
-| Backdrops and the match table | baked from pixels (`src/ui/print.lua`) | the same (falls back to the PNGs in `assets/switch/stage-*.png` if ImageData is missing) |
-| The Overseer | four halftone PNG frames | the same |
-| CRT screen | on by default (Settings or F2) | not available (needs a shader) |
+| The halftone backdrop and table | live shader: the dots swell and drift | baked once from the same maths (`src/ui/print.lua`), standing still |
+| CRT screen | on by default (Options or F2) | not available |
+| The intro, the Overseer, cards, plates, text, the iris | no shader | the same |
+| Music and effects | OGG and WAV files in `assets/audio` | the same |
 | Cat art cleanup pass (stray pixels) | canvas read-back | skipped if read-back isn't available |
-| Everything else (plates, cards, cats, text) | no shader | no shader |
 
-The fallback PNGs come from `tools/switch/bake_assets.py`, which bakes a plainer dithered
-backdrop with numpy from the presets and colour ramps in `src/ui/bakes.lua`, the same table the
-game uses. If you change that file, re-run the baker. The Overseer's frames come from
-`tools/art/bake_overseer.py`:
+If ImageData isn't available either, the backdrop falls back to the PNGs in
+`assets/switch/stage-*.png`.
+
+The fallback PNGs and the Homebrew Menu icon come from `tools/switch/bake_assets.py`. It doesn't
+port any maths: it runs `src/ui/bakes.lua`, the file the game itself paints from, so the PNGs
+are the game's own halftone print, pixel for pixel. If you change that file, re-run the baker.
+The Overseer's frames come from `tools/art/bake_overseer.py`:
 
 ```bash
 python3 tools/switch/bake_assets.py
@@ -36,7 +38,8 @@ python3 tools/switch/bake_assets.py
 python3 tools/art/bake_overseer.py
 ```
 
-The sound effects are synthesised at load as on desktop, at 11 kHz to keep start-up short.
+Sound is files now (`assets/audio`): the music streams as OGG and the effects are small WAVs, so
+nothing is synthesised at start-up.
 
 You can try the console paths on a desktop with `love . --console`: no shaders (so no CRT), the
 baked backdrop and the controller cursor. Text is drawn at the screen's resolution on the Switch too (1280x720
@@ -134,5 +137,5 @@ mouse, a fake gamepad and touchscreen), not on hardware.
   pixel-perfect.
 - `conf.lua` asks for LÖVE 11.4. LÖVE Potion 3 follows the LÖVE 12 API. Everything the game
   calls exists in both, but LÖVE Potion may print a version notice.
-- If LÖVE Potion can't create sound data on your version, the game runs silently rather than
+- If LÖVE Potion can't open an audio file on your version, the game runs silently rather than
   failing.

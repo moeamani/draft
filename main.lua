@@ -238,7 +238,7 @@ function love.load(args)
   love.keyboard.setKeyRepeat(true)
   if platform.shaders() then shaders.load() end
   audio.load()
-  for _, n in ipairs({ "logo", "mascot", "mascot-silhouette" }) do
+  for _, n in ipairs({ "logo", "mascot" }) do
     G.images[n] = platform.image("assets/img/" .. n .. ".png", true)
     G.images[n]:setFilter("linear", "linear")
   end
@@ -361,13 +361,13 @@ end
 local hex = theme.hex
 local stageImages = {}
 
--- Every scene sits on one of the backdrop presets in src/ui/bakes.lua ("menu", "vs", "match"),
--- in ink green or blood red: the only dithered surface in the game. It fills the whole window.
+-- Every scene sits on one of the backdrop presets in src/ui/bakes.lua ("menu", "vs", "match",
+-- "table"), in ink green or blood red: one halftone print that fills the whole window.
 function G.paperShader() return shaders.paper end
 
 local function drawBackground(cw, ch)
   local bg = (G.scene and G.scene.bg) or {}
-  local rampName = bakes.RAMPS[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
+  local rampName = bakes.PAPER[bg.ramp or "felt"] and (bg.ramp or "felt") or "felt"
   -- the living halftone (or its still bake where there are no shaders)
   local ok = printer.draw(bg, cw, ch, {
     shader = shaders.paper, k = view.k, ox = G.OX, oy = G.OY, vw = G.VW, vh = G.VH,
@@ -386,7 +386,7 @@ local function drawBackground(cw, ch)
     lg.setColor(1, 1, 1)
     lg.draw(im, 0, 0, 0, cw / im:getWidth(), ch / im:getHeight())
   else
-    theme.set(hex(bakes.RAMPS[rampName].baseA))
+    theme.set(hex(bakes.PAPER[rampName].mid))
     lg.rectangle("fill", 0, 0, cw, ch)
   end
 end

@@ -1,34 +1,41 @@
 # Draft: Four Hands. One Arena.
 
-A pixel-art roguelike card game about cat knights, with a nemesis system and the feel of an arena festival. Built in **LÖVE 11 (Lua)**.
+A roguelike card game about cat knights, with a nemesis system and the feel of an arena festival. Version 1.0, built in **LÖVE 11 (Lua)**.
 
-- **Story mode, "Stray to Champion".** A nameless stray learns the cushion duel from Old Bedimew (the prologue is the tutorial), then fights through five Arena festivals to dethrone the First Hand. Each chapter is a full festival with a goal and cutscenes. Above them all sits **the Overseer**, a flaming shadow cat who keeps the Arena's ledger; the last chapter is one match at its High Table, where it sees through every card back.
-- **Free Festival.** The roguelike: a random pride, 16 cats, four groups, a live points table, then an 8-cat knockout bracket.
-- **The cushion duel.** Both sides have three cushions; the cats on facing cushions duel, and a winner swats a goblet off the loser's side. Each bout one side **leads** face-down and the other **answers**, seeing only the card backs. A back shows the cat's coat, but Shadow cats and tricks share the same dark back.
-- **Hold the Cushion.** A cat that wins its duel stays seated, face-up, and warms up: +1 Paw for every bout it holds on. At 3 Warmth it's a **Hot Seat** and every swat knocks off an extra goblet. Keep a streak going, or pull a cat back before the rival aims at it.
-- **Stolen Lives.** Every cat brings 2 or 3 lives (hearts) into a match. A lost duel costs one; a crushing loss (by 5+ Paws) costs two. Out of lives, the rival **captures** the cat. The Four Hands keep your captured cats across festivals and send them back at you, marked as yours; beat your captive, or beat the Hand, and they come home. Strays pawn theirs at the market. The rival cats you capture are your spoils.
+- **Story mode, "Stray to Champion".** A nameless stray learns the cushion duel from Old Bedimew (the prologue is the tutorial), then fights through five Arena festivals to dethrone the First Hand. Above them all sits **the Overseer**, a flaming shadow cat who keeps the Arena's ledger; the last chapter is one match at its High Table, where it sees through every card back.
+- **Free Festival.** The roguelike: a random pride, 16 cats, four groups, a live points table, then an 8-cat knockout bracket. Pick a **Crest** (a starting loadout) and one of the Overseer's five **Stakes**; winning at your highest stake opens the next.
+- **The cushion duel.** Both sides have three cushions; the cats on facing cushions duel, and a winner swats a goblet off the loser's side. Each bout one side **leads** face-down and the other **answers**, seeing only the card backs. A back shows the cat's coat (a flame, a drop, a crown), but Shadow cats and tricks share the same dark back.
+- **Hold the Cushion.** A cat that wins its duel stays seated, face-up, and warms up: +1 Paw for every bout it holds on. At 3 Warmth it's a **Hot Seat** and every swat knocks off an extra goblet.
+- **Stolen Lives.** Every cat brings 2 or 3 lives into a match. A lost duel costs one; a crushing loss costs two. Out of lives, the rival **captures** the cat. The Four Hands keep your cats across festivals and send them back at you; beat your captive, or beat the Hand, and they come home.
+- **Printings.** About one cat in eight comes off the Overseer's press differently: a **Proof** has a life more, **Gold Leaf** earns fish, and a **Misprint** hits harder and shows the wrong coat on its back, so the rival reads it wrong.
 - **The Four Hands** are persistent nemesis Warlords. They remember you, hide strengths and weaknesses, scheme between festivals, and build their prides from what they take from you.
-- **Renown and Feats.** Every match in either mode earns Renown, and 26 Feats (a Hot Seat, a Clean Sweep, a Legend Napper, a Kingslayer...) are noted by the Overseer the moment you earn them. Renown levels give you a title and unlock **Crests**, starting loadouts for a Free Festival.
+- **Renown and Feats.** Every match earns Renown. 27 Feats are stamped into the Overseer's ledger in red ink the moment you earn them. Renown levels give you a title and unlock Crests.
 - **Bonds** between legendary pairs, upholstered **cushions**, a rule-bending **omen** for every festival, and **the Cattery**, a collection of every cat you've met.
-- **A printed poster look.** Film-grain dark green with halftone light, a mustard halftone table under every match, flat red buttons, serif headings and sans text. The Overseer is a halftone print with flickering flames, looming over the menu's table. Cards are printed on worn cream paper, and every card back carries the Overseer's mark. Every cat is a hand-composed pixel bust.
-- **A CRT screen** (on by default; Settings or F2 turns it off): gentle curvature, scanlines, bloom and a colour fringe.
-- **Readable.** Ancizar Serif headings and Atkinson Hyperlegible text at your screen's real resolution (Settings > Text switches to pixel fonts on the art's grid). Every text colour is checked for WCAG AA contrast (4.5:1). Fullscreen fills any screen shape, Macs included, with no black bars.
 
-![The main menu: the Overseer looms over the table](docs/screenshots/00_menu.png)
+One look, one sound:
 
-![The rival leads; you answer (with the CRT screen on)](docs/screenshots/04_match_place.png)
+- **A deck printed on the Overseer's press, seen through a CRT.** Everything is drawn on one 640x360 pixel grid: the cats, the cards, the Overseer and a halftone backdrop whose dots swell and shrink in place. Panels, signs and buttons are all cut from the same plate shape; buttons press like keys. Scenes change through an iris with a colour fringe.
+- **The teaser opens the game.** The intro replays the teaser in-engine (a lens-ringed orb opening to white, then the red and blue lockup) over the teaser's own music. The soundtrack and every effect are tuned to that music's key, so the bell that climbs as a bout is scored always harmonises with it.
+- **Options that a finished game has:** separate music and effect volumes, game speed (1x, 1.5x, 2x), CRT, shake, smooth or pixel text, fullscreen. Pause anywhere. Credits. A crash never closes the game.
+- **Readable.** Ancizar Serif headings and Atkinson Hyperlegible text at your screen's real resolution. Every text colour is checked for WCAG AA contrast (4.5:1). Coats read by shape as well as colour.
+
+![The title: the Overseer looms over the table](docs/screenshots/00_menu.png)
+
+![The intro replays the teaser](docs/screenshots/27_intro.png)
+
+![The rival leads; you answer by reading the backs](docs/screenshots/04_match_place.png)
+
+![A bout is scored: modifiers pop one at a time](docs/screenshots/05_match_duel.png)
+
+![The Overseer's ledger: feats are stamped in red ink](docs/screenshots/23_renown.png)
+
+![A new festival: choose a Crest and a stake](docs/screenshots/24_crests.png)
 
 ![The High Table: the story's last match, against the Overseer](docs/screenshots/26_high_table.png)
 
-![Winners hold their cushions and warm up; a feat medal slides in](docs/screenshots/25_match_seated.png)
-
-![The Overseer's ledger: titles, feats and the crests they unlock](docs/screenshots/23_renown.png)
-
-![Some of the cats](docs/screenshots/cats.png)
-
 ![Story mode: from the bins to the High Table](docs/screenshots/20_story.png)
 
-![The Overseer speaks](docs/screenshots/22_cutscene.png)
+![Some of the cats](docs/screenshots/cats.png)
 
 ## Run it
 
@@ -39,7 +46,13 @@ A pixel-art roguelike card game about cat knights, with a nemesis system and the
 love .
 ```
 
-On Windows you can also drag the folder onto `love.exe`. To package a `.love` file:
+On Windows you can also drag the folder onto `love.exe`. The teaser plays first; any key skips it, and this starts at the title:
+
+```bash
+love . --skip-intro
+```
+
+To package a `.love` file:
 
 ```bash
 tools/build-love.sh
@@ -52,11 +65,11 @@ tools/build-love.sh
 | 1 / 2 / 3 | put the card under the mouse on that cushion |
 | Enter / Space | Charge! (reveal and duel); continue dialogue |
 | Backspace | clear your cushions |
-| Arrow keys / W S | move through the main menu |
+| Arrow keys / W A S D | move through the title menu |
 | F11, Alt+Enter, Ctrl+Cmd+F | fullscreen |
 | F2 | CRT screen on/off |
-| F3 | sound on/off |
-| Esc | menu |
+| F3 | mute |
+| Esc | pause (rules, Cattery, ledger, options) |
 
 A controller works too: the stick moves a paw cursor (the d-pad moves through the main menu), A clicks and drags, X charges, Y clears your cushions, B closes panels, and + opens the menu.
 
@@ -73,7 +86,7 @@ It can also build an `.nsp` forwarder on your machine with hacBrewPack and keys 
 ## How a match plays
 
 1. You hold 5 cards. The rival leads the first bout: three face-down cards slide onto their cushions.
-2. Read their backs. An **Ember**, **Tide** or **Gilt** back tells you the cat's coat. A **dark** back is either a Shadow cat or a trick.
+2. Read their backs. An **Ember** (flame), **Tide** (drop) or **Gilt** (crown) back tells you the cat's coat. A **dark** back (moon) is either a Shadow cat or a trick. A Misprint's back lies.
 3. Answer by putting up to 3 cards on your cushions, then press **Charge!**
 4. Everything flips over. Each pair of facing cards duels:
    - The higher Paws wins.
@@ -88,7 +101,7 @@ It can also build an `.nsp` forwarder on your machine with hacBrewPack and keys 
 
 ## How a festival plays
 
-1. Choose a **Crest** (once you've unlocked more than the Stray Crest), and you're dealt a random pride of 15 cats, tilted by the Crest.
+1. Choose a **Crest** and a **Stake** (once you've unlocked more than the first of each), and you're dealt a random pride of 15 cats, tilted by the Crest. Stakes add rules for the rivals and multiply your Renown.
 2. **Group stage**: 3 matches. A win is worth 3 points, and goblet difference breaks ties. The top 2 of each group go through.
 3. **Knockouts**: quarter-final, semi-final, final. Lose once and you're out.
 4. Before every match the rival sits down at the table and taunts you. Between matches you visit one stall: the **Mews Market** (cats, charms and the upholsterer), the **Fortune Teller** (random events) or the **Training Yard**.
@@ -109,27 +122,31 @@ the file to send.
 
 ```
 main.lua, conf.lua     boot; renderer (the window is filled at any shape, art on a 640x360 grid, text at screen
-                       resolution), scene manager, saves (story, free festival, renown profile), the crash safety net, the CRT pass
+                       resolution), scene manager with the iris transition, saves (story, free festival, renown
+                       profile), the crash safety net, game speed, the CRT pass
+src/audio.lua          music streams with crossfades, effects, the scoring bell on the teaser's scale, volumes
 src/platform.lua       desktop LÖVE vs LÖVE Potion (Switch): shader and mouse stand-ins
 src/input.lua          mouse, touchscreen and controller folded into one pointer
-src/core/              pure game logic, no LÖVE: match engine + AI (lives and captures), festival, nemesis,
-                       cards, traits, charms, run/meta (captives, pawnshop, spoils, crests), renown (feats, levels,
-                       crests), story, tutorial
-src/ui/                theme (palette, WCAG contrast, smooth and pixel fonts), plates (flat plates and title cards),
-                       gfx (panels, text), icons, cardview (paper faces with live text and hearts, ornate backs),
-                       print (the baked halftone backdrops and table), overseer (its frames, blinks and face),
-                       art (pixel-art cats),
-                       shaders (the CRT), widgets, fx (with the Overseer's notes), sfx, hud, picker,
-                       overlays (rules, Cattery, Renown, Crest picker...)
-src/scenes/            menu, story (chapter map), cutscene, hub, vs, match (with the tutorial), result, market,
-                       event, summary
+src/core/              pure game logic, no LÖVE: match engine + AI (lives, captures, Warmth, the Overseer's eye),
+                       festival, nemesis, cards (and their printings), traits, charms, run/meta (captives,
+                       pawnshop, spoils, crests, stakes), renown (feats, levels, crests, stakes), story, tutorial
+src/ui/                the design system: theme (colour roles, the type scale, WCAG contrast, smooth and pixel
+                       fonts), plates (the one plate shape, signs), gfx (panels, meters, text), widgets (buttons,
+                       tabs, sliders, choice cards, tooltips), print (the living halftone backdrop and table),
+                       shaders (the backdrop and the CRT), fx (tags, stamps, shake, punch, pulse), icons,
+                       cardview (paper faces, coat glyphs, printings, backs), art (pixel-art cats), overseer,
+                       hud, picker, overlays (rules, Cattery, the ledger, new-festival panel, pause...)
+src/scenes/            intro (the teaser), menu (title and options), credits, story (chapter map), cutscene,
+                       hub, vs, match (with the tutorial and the High Table), result, market, event, summary
 src/autotest.lua       scripted walkthrough that saves screenshots: love . --autotest shots
-tests/run.lua          rules, Stolen Lives, Renown, WCAG contrast and a 90-festival AI simulation: luajit tests/run.lua
-assets/                fonts (all OFL: Fusion Pixel, Coral Pixels, Jacquard 12, Jersey 15, Micro 5, Atkinson
-                       Hyperlegible, Ancizar Serif; see assets/fonts/CREDITS.txt) and images from the Figma file;
-                       assets/switch holds the baked backdrop and smear art
+tests/run.lua          rules, Stolen Lives, printings, stakes, Renown, the boss, WCAG contrast and a 90-festival
+                       AI simulation: luajit tests/run.lua
+assets/                audio (the teaser's music, three loops, 31 effects), fonts (all OFL; see
+                       assets/fonts/CREDITS.txt), images from the Figma file and the Overseer's frames;
+                       assets/switch holds fallback backdrops for platforms without ImageData
+tools/audio/           make_audio.py: renders the soundtrack and effects in the teaser's key
+tools/art/             bake_overseer.py: prints the Figma flame cat as the Overseer's pixel halftone frames
 tools/switch/          Switch build: bake_assets.py, nro.py (NRO packer), build.py, icon.jpg
-tools/art/             bake_overseer.py: prints the Figma flame cat as the Overseer's halftone frames
 ```
 
 Design notes, the story script's shape, balance numbers and tuning knobs are in [docs/DESIGN.md](docs/DESIGN.md). Switch homebrew builds are in [docs/SWITCH.md](docs/SWITCH.md).

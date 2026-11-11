@@ -1,5 +1,5 @@
--- VS screen, composed like the Figma mascot frame: the rival's portrait sits crisp over a
--- chromatic smear of itself, their name on a black "Power" title card, and a taunt.
+-- VS screen: the rival's portrait sits crisp over a red and cyan ghost of itself, with their
+-- name on a sign and a taunt.
 local art = require("src.ui.art")
 local cards = require("src.core.cards")
 local festival = require("src.core.festival")

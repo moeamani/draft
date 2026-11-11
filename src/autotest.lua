@@ -42,6 +42,7 @@ function M.start(dir)
     -- a fresh Renown profile with a few levels, so the Renown and Crest screens have something to show
     G.profile = require("src.core.renown").new()
     G.profile.renown = 640
+    G.profile.stakeWon, G.profile.stake, G.profile.seals = 2, 3, { stray = 2, ember = 1 }
     save = game.newSave("Sir Whiskers", 4242)
     G.useMode("free")
     G.setSave(save)
@@ -134,6 +135,8 @@ function M.start(dir)
   step(0.8, function() shot("23_renown") end)
   step(0.2, function() G.closeOverlay(); overlays.crests(function() end) end)
   step(0.8, function() shot("24_crests") end)
+  step(0.2, function() G.closeOverlay(); G.scenes.menu.settings() end)
+  step(0.8, function() shot("28_options") end)
   step(0.2, function()
     G.closeOverlay()
     for i = 1, 30 do game.noteSeen(save, cards.DRAFTABLE[i].id) end

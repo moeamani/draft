@@ -70,7 +70,7 @@ def make_love():
                     kind = zipfile.ZIP_STORED if f.endswith((".png", ".jpg", ".ogg")) else zipfile.ZIP_DEFLATED
                     z.write(full, rel, compress_type=kind)
                     count += 1
-    missing = [p for p in ("assets/switch/stage-menu-felt.png", "assets/switch/smear-blue.png") if not os.path.exists(os.path.join(ROOT, p))]
+    missing = [p for p in ("assets/switch/stage-menu-felt.png", "assets/switch/stage-match-blood.png") if not os.path.exists(os.path.join(ROOT, p))]
     if missing:
         sys.exit("baked Switch assets are missing (%s): run python3 tools/switch/bake_assets.py" % ", ".join(missing))
     return buf.getvalue(), count
