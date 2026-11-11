@@ -260,6 +260,12 @@ function love.load(args)
     if s then for k, v in pairs(s) do G.settings[k] = v end end
     -- round 8 made smooth type the default again; older settings files still say "pixel"
     if (G.settings.look or 0) < 8 then G.settings.text, G.settings.look = "smooth", 8 end
+    -- before 1.0, music and sfx were on/off switches; now they are volumes
+    for key, default in pairs({ music = 0.7, sfx = 0.8, speed = 1 }) do
+      local v = G.settings[key]
+      if v == false then G.settings[key] = key == "speed" and 1 or 0
+      elseif type(v) ~= "number" then G.settings[key] = default end
+    end
   end
   theme.setTextStyle(G.settings.text)
   if G.settings.fullscreen and not platform.console then pcall(love.window.setFullscreen, true, "desktop") end

@@ -118,9 +118,18 @@ function M.update(dt)
   end
 end
 
+-- Volumes are 0..1. Older settings files stored on/off switches here: true means the default
+-- level, false means silent, anything else keeps the current volume.
+local function level(v, current, default)
+  if v == true then return default end
+  if v == false then return 0 end
+  if type(v) ~= "number" or v ~= v then return current end
+  return math.max(0, math.min(1, v))
+end
+
 function M.setVolumes(music, sfx)
-  M.musicVol = math.max(0, math.min(1, music or M.musicVol))
-  M.sfxVol = math.max(0, math.min(1, sfx or M.sfxVol))
+  M.musicVol = level(music, M.musicVol, 0.7)
+  M.sfxVol = level(sfx, M.sfxVol, 0.8)
 end
 
 function M.toggleMute()
